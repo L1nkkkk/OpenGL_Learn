@@ -1,0 +1,152 @@
+newmtl m0
+map_Kd face.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 1
+d 1
+
+newmtl m1
+map_Kd BQ.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 1
+d 1
+
+newmtl m2
+map_Kd face.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 1
+d 1
+
+newmtl m3
+map_Kd face.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 1
+d 1
+
+newmtl m4
+map_Kd face.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 1
+d 1
+
+newmtl m5
+map_Kd BQ.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 1
+d 1
+
+newmtl m6
+map_Kd BQ_2.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 1
+d 0
+
+newmtl m7
+map_Kd Hair.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 1
+d 1
+
+newmtl m8
+map_Kd YF_3.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 1
+d 1
+
+newmtl m9
+map_Kd face.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 1
+d 1
+
+newmtl m10
+map_Kd MianJu.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 1
+d 1
+
+newmtl m11
+map_Kd YF_1.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 1
+d 1
+
+newmtl m12
+map_Kd YF_3.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 1
+d 1
+
+newmtl m13
+map_Kd YF_2.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 1
+d 1
+
+newmtl m14
+map_Kd YF_1.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 1
+d 1
+
+newmtl m15
+map_Kd YF_2.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 1
+d 1
+
+newmtl m16
+map_Kd YF_Tou.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 5
+d 0.5
+
+newmtl m17
+map_Kd YF_3.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 1
+d 1
+
+newmtl m18
+map_Kd YF_3.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 1
+d 1
+

@@ -1,0 +1,272 @@
+newmtl m0
+map_Kd t_r2t1qianxiamd10011eye_d.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m1
+map_Kd t_r2t1qianxiamd10011eye_seq_d.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 0
+
+newmtl m2
+map_Kd t_r2t1qianxiamd10011eye_d.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m3
+map_Kd t_r2t1qianxiamd10011face_d.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m4
+map_Kd t_r2t1qianxiamd10011face_d.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m5
+map_Kd t_r2t1qianxiamd10011face_d.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m6
+map_Kd t_r2t1qianxiamd10011face_d.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m7
+map_Kd t_r2t1qianxiamd10011face_d.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m8
+map_Kd t_r2t1qianxiamd10011face_d.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m9
+map_Kd t_r2t1qianxiamd10011face_d.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m10
+map_Kd t_r2t1qianxiamd10011face_d.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m11
+map_Kd t_r2t1qianxiamd10011face_d.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m12
+map_Kd t_r2t1qianxiamd10011face_d lip off.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 0
+
+newmtl m13
+map_Kd eye set emo.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m14
+map_Kd latex.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m15
+map_Kd t_r2t1qianxiamd10011down_l.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m16
+map_Kd t_r2t1qianxiamd10011up_x.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m17
+map_Kd t_r2t1qianxiamd10011up_x.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 100
+d 1
+
+newmtl m18
+map_Kd t_r2t1qianxiamd10011down_d.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m19
+map_Kd t_r2t1qianxiamd10011down_d.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m20
+map_Kd t_r2t1qianxiamd10011down_d.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m21
+map_Kd 5xing.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m22
+map_Kd t_r2t1qianxiamd10011up_d.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m23
+map_Kd t_r2t1qianxiamd10011up_d.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m24
+map_Kd t_r2t1qianxiamd10011up_d.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m25
+map_Kd t_r2t1qianxiamd10011up_d.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m26
+map_Kd t_r2t1qianxiamd10011up_d.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m27
+map_Kd t_r2t1qianxiamd10011up_d.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m28
+map_Kd t_r2t1qianxiamd10011alpha_d.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m29
+map_Kd t_r2t1qianxiamd10011alpha_d.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m30
+map_Kd t_r2t1qianxiamd10011bangs.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m31
+map_Kd t_r2t1qianxiamd10011hair.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m32
+map_Kd cheek_00.tga
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+
+newmtl m33
+map_Kd emo1010.png
+Ka 0.5 0.5 0.5
+Kd 1 1 1
+Ks 0 0 0
+Ns 75
+d 1
+

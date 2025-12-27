@@ -1,0 +1,9 @@
+﻿  Scene.cpp
+C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Scene.cpp(1,1): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\shaderManager.h(15,14): warning C4091: “static ”: 没有声明变量时忽略“ShaderManager::ShaderType”的左侧
+  (编译源文件“Scene.cpp”)
+  
+C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\shaderManager.h(24,14): warning C4091: “static ”: 没有声明变量时忽略“ShaderManager::UniformBufferType”的左侧
+  (编译源文件“Scene.cpp”)
+  
+  OpenGL_Learn.vcxproj -> C:\Users\Link\Dev\OpenGL_Learn\x64\Debug\OpenGL_Learn.exe

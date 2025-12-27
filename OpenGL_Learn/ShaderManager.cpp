@@ -1,0 +1,46 @@
+#include "ShaderManager.h"
+
+void ShaderManager::Init() {
+	//load Shaders
+	for (int i = 0; i < shaderNames.size(); ++i) {
+		std::string vertexPath = "shaders/" + shaderNames[i] + "Vertex.vs";
+		std::string fragmentPath = "shaders/" + shaderNames[i] + "Fragment.fs";
+		Shader* shader = new Shader(vertexPath.c_str(), fragmentPath.c_str());
+		shaderMap[shaderNames[i]] = shader;
+		shader2Idx[shader] = i;
+	}
+	//bind uniform buffer objects
+	unsigned int matricesUBO;
+	glGenBuffers(1, &matricesUBO);
+	glBindBuffer(GL_UNIFORM_BUFFER, matricesUBO);
+	glBufferData(GL_UNIFORM_BUFFER, 2 * sizeof(glm::mat4), NULL, GL_STATIC_DRAW);
+	glBindBuffer(GL_UNIFORM_BUFFER, 0);
+	glBindBufferRange(GL_UNIFORM_BUFFER, UniformBufferType::Matrices, matricesUBO, 0, 2 * sizeof(glm::mat4));
+	UBOInfos.push_back({ matricesUBO, UniformBufferType::Matrices, 2 * sizeof(glm::mat4) });
+}
+
+void ShaderManager::SetUBOData(UniformBufferType uboType, unsigned int offset, size_t size,const void* dataPtr) {
+	UBOInfo& uboInfo = UBOInfos[uboType];
+	glBindBuffer(GL_UNIFORM_BUFFER, uboInfo.UBO);
+	glBufferSubData(GL_UNIFORM_BUFFER, offset, size, dataPtr);
+	glBindBuffer(GL_UNIFORM_BUFFER, 0);
+}
+
+Shader* ShaderManager::GetShader(int index) {
+	if (index < 0 || index >= shaderNames.size()) return nullptr;
+	std::string name = shaderNames[index];
+	return shaderMap[name];
+}
+
+Shader* ShaderManager::GetShaderByName(std::string name) {
+	if (shaderMap.find(name) != shaderMap.end()) return shaderMap[name];
+	else return nullptr;
+}
+
+std::vector<std::string> ShaderManager::GetNames() {
+	return shaderNames;
+}
+
+int ShaderManager::GetShaderIndexByShader(Shader* shaderPtr) {
+	return shader2Idx[shaderPtr];
+}
