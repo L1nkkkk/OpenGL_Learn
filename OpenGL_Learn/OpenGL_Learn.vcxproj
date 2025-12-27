@@ -163,6 +163,9 @@
     <None Include="LightVertexShader.vs" />
     <None Include="shaders\defaultFragment.fs" />
     <None Include="shaders\defaultVertex.vs" />
+    <None Include="shaders\geometryFragment.fs" />
+    <None Include="shaders\geometryGeometry.gs" />
+    <None Include="shaders\geometryVertex.vs" />
     <None Include="shaders\grassFragment.fs" />
     <None Include="shaders\grassVertex.vs" />
     <None Include="shaders\mirrorFragment.fs" />

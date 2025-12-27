@@ -1,5 +1,6 @@
 #pragma once
 #define STB_IMAGE_IMPLEMENTATION
+#define USE_GEOMETRY_SHADER true
 #include "Model.h"
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -121,6 +122,25 @@ int main() {
 	shaderManager.Init();
 	Shader& screenShader = *(shaderManager.GetShader(ShaderManager::Scene));
 
+#ifdef USE_GEOMETRY_SHADER
+	GeometryShader geometryShader("shaders/geometryVertex.vs", "shaders/geometryGeometry.gs", "shaders/geometryFragment.fs");
+	float points[] = {
+	-0.5f,  0.5f, 1.0f, 0.0f, 0.0f, // 左上
+	 0.5f,  0.5f, 0.0f, 1.0f, 0.0f, // 右上
+	 0.5f, -0.5f, 0.0f, 0.0f, 1.0f, // 右下
+	-0.5f, -0.5f, 1.0f, 1.0f, 0.0f  // 左下
+	};
+	unsigned int VAO, VBO;
+	glGenVertexArrays(1, &VAO);
+	glGenBuffers(1, &VBO);
+	glBindVertexArray(VAO);
+	glBindBuffer(GL_ARRAY_BUFFER, VBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(points), points, GL_STATIC_DRAW);
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(2 * sizeof(float)));
+	glEnableVertexAttribArray(1);
+#endif
 
 	Scene scene(&camera, SCREEN_WIDTH, SCREEN_HEIGHT);
 
@@ -314,6 +334,7 @@ int main() {
 		deltaTime = currentTime - lastFrame;
 		lastFrame = currentTime;
 		ProcessInput(window);
+#ifndef USE_GEOMETRY_SHADER
 		//start the Dear ImGui frame
 		SetGui();
 		scene.SetSceneGui();
@@ -339,6 +360,11 @@ int main() {
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 		//Draw GUI
 		mygui.Render();
+#else
+		geometryShader.use();
+		glBindVertexArray(VAO);
+		glDrawArrays(GL_POINTS, 0, 4);
+#endif
 		// glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
 		glfwSwapBuffers(window);
 		glfwPollEvents();
