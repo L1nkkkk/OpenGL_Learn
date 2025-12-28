@@ -1,11 +1,9 @@
-﻿  test.cpp
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\shaderManager.h(15,14): warning C4091: “static ”: 没有声明变量时忽略“ShaderManager::ShaderType”的左侧
-  (编译源文件“test.cpp”)
+﻿  ShaderManager.cpp
+C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\ShaderManager.h(15,14): warning C4091: “static ”: 没有声明变量时忽略“ShaderManager::ShaderType”的左侧
+  (编译源文件“ShaderManager.cpp”)
   
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\shaderManager.h(24,14): warning C4091: “static ”: 没有声明变量时忽略“ShaderManager::UniformBufferType”的左侧
-  (编译源文件“test.cpp”)
+C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\ShaderManager.h(26,14): warning C4091: “static ”: 没有声明变量时忽略“ShaderManager::UniformBufferType”的左侧
+  (编译源文件“ShaderManager.cpp”)
   
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\test.cpp(77,27): warning C4244: “参数”: 从“double”转换到“float”，可能丢失数据
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\test.cpp(77,21): warning C4244: “参数”: 从“double”转换到“float”，可能丢失数据
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\test.cpp(290,31): warning C4101: “quadEBO”: 未引用的局部变量
+C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\ShaderManager.cpp(21,43): warning C4267: “=”: 从“size_t”转换到“int”，可能丢失数据
   OpenGL_Learn.vcxproj -> C:\Users\Link\Dev\OpenGL_Learn\x64\Debug\OpenGL_Learn.exe

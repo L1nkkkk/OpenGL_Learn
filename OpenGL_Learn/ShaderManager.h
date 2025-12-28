@@ -18,7 +18,9 @@ public:
 		Grass,
 		Skybox,
 		Mirror,
-		Default
+		Default,
+		//StartGeometryShaderIndex
+		Explode
 	};
 
 	static enum UniformBufferType {
@@ -51,6 +53,9 @@ private:
 		"skybox",
 		"mirror",
 		"default"
+	};
+	std::vector<std::string> geometryShaderNames = {
+		"explode"
 	};
 	ShaderManager() = default;
 };

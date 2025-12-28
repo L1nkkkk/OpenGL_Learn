@@ -1,6 +1,6 @@
 #pragma once
 #define STB_IMAGE_IMPLEMENTATION
-#define USE_GEOMETRY_SHADER true
+//#define USE_GEOMETRY_SHADER
 #include "Model.h"
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>

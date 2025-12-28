@@ -8,6 +8,18 @@ void ShaderManager::Init() {
 		Shader* shader = new Shader(vertexPath.c_str(), fragmentPath.c_str());
 		shaderMap[shaderNames[i]] = shader;
 		shader2Idx[shader] = i;
+		std::cout << "Loaded shader: " << shaderNames[i] << std::endl;
+	}
+	//load Geometry Shaders
+	for (int i = 0; i < geometryShaderNames.size(); ++i) {
+		std::string vertexPath = "shaders/" + geometryShaderNames[i] + "Vertex.vs";
+		std::string geometryPath = "shaders/" + geometryShaderNames[i] + "Geometry.gs";
+		std::string fragmentPath = "shaders/" + geometryShaderNames[i] + "Fragment.fs";
+		Shader* shader = new GeometryShader(vertexPath.c_str(), geometryPath.c_str(), fragmentPath.c_str());
+		//std::cout << shader << std::endl;
+		shaderMap[geometryShaderNames[i]] = shader;
+		shader2Idx[shader] = shaderNames.size() + i;
+		std::cout << "Loaded shader: " << geometryShaderNames[i] << std::endl;
 	}
 	//bind uniform buffer objects
 	unsigned int matricesUBO;
@@ -27,9 +39,9 @@ void ShaderManager::SetUBOData(UniformBufferType uboType, unsigned int offset, s
 }
 
 Shader* ShaderManager::GetShader(int index) {
-	if (index < 0 || index >= shaderNames.size()) return nullptr;
-	std::string name = shaderNames[index];
-	return shaderMap[name];
+	if (index < 0 || index > shaderNames.size()+geometryShaderNames.size()) return nullptr;
+	if (index < shaderNames.size()) return shaderMap[shaderNames[index]];
+	else return shaderMap[geometryShaderNames[index - shaderNames.size()]];
 }
 
 Shader* ShaderManager::GetShaderByName(std::string name) {

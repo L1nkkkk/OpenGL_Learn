@@ -47,7 +47,7 @@ void Scene::DrawOpaqueModels()
         ourShader.use();
        
         glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxSource.textureCubeMap);
-
+        ourShader.setFloat("time", glfwGetTime());
         ourShader.setVec3("viewPos", camera_ptr->cameraPos);
         SetLightUniforms(ourShader);
         for (auto& model : ourshaderPair.second) {
@@ -247,7 +247,7 @@ void Scene::SetSceneGui()
     }
 
     static int selectedOption = 0;
-	const char* options[] = {"Phong","Mirror"};
+	const char* options[] = {"Phong","Mirror","Explode"};
 	int optionCount = sizeof(options) / sizeof(options[0]);
 
     if (ImGui::CollapsingHeader("Model Settings")){
@@ -264,6 +264,7 @@ void Scene::SetSceneGui()
 						ImGui::ColorEdit3("Outline Color", &ourshaderPair.second[i]->outlineColor[0]);
                         auto modeltemp = ourshaderPair.second[i];
 						int curShaderIdx = ShaderManager::GetInstance().GetShaderIndexByShader(ourshaderPair.first);
+						//std::cout<< "curShaderIdx:"<< curShaderIdx << std::endl;
                         if (ImGui::Combo("Shader Type", &selectedOption, options, optionCount)) {
                             switch (selectedOption) {
                             case 0:
@@ -278,6 +279,11 @@ void Scene::SetSceneGui()
                                     modelSource.AddOpaqueModel(ShaderManager::GetInstance().GetShader(ShaderManager::Mirror), modeltemp);
                                 }
                                 break;
+							case 2:
+                                if (curShaderIdx != ShaderManager::Explode){
+									modelSource.DeleteOpaqueModel(modeltemp);
+									modelSource.AddOpaqueModel(ShaderManager::GetInstance().GetShader(ShaderManager::Explode), modeltemp);
+                                }
                             }
                         }
 						ImGui::TreePop();

@@ -44,6 +44,7 @@ struct ModelSource {
 	void AddOpaqueModel(Shader* shader,std::shared_ptr<Model> model) {
 		if (shader == nullptr || model == nullptr) return;
 		opaqueModelsMap[shader].push_back(model);
+		std::cout << "Added opaque model. Total models for this shader: " << opaqueModelsMap[shader].size() << std::endl;
 	}
 
 	void DeleteOpaqueModel(std::shared_ptr<Model> model) {
