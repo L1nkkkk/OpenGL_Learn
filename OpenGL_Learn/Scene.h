@@ -100,6 +100,7 @@ public:
 	void SetLightUniforms(Shader& shader);
 	void DrawSkybox();
 	void DrawOutlines();
+	void DrawNormalLines();
 
 	void SetSceneGui();
 

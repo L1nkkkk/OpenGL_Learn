@@ -11,6 +11,7 @@ void Scene::Draw()
 	//Draw scene in the following order
     DrawPointLights();
     DrawOpaqueModels();  // 先绘制所有不透明物体，记录需要outline的物体到stencil buffer
+    DrawNormalLines(); // 可选：绘制法线线段用于调试
     DrawSkybox();        // 绘制天空盒（使用深度测试优化，但不影响stencil buffer）
     DrawTransparentModels();  // 绘制透明物体
 	DrawOutlines();      // 最后绘制outline（禁用深度测试，基于stencil buffer绘制）
@@ -212,6 +213,26 @@ void Scene::DrawOutlines()
 	glEnable(GL_DEPTH_TEST);
 }
 
+void Scene::DrawNormalLines()
+{
+    //glStencilMask(0x00); // Disable writing to stencil buffer
+    for (auto& [shader,models] : modelSource.opaqueModelsMap) {
+        for (auto& model : models) {
+            if (model->IsOtherShaderUsed(OtherShaderType::normalLines)) {
+                Shader* normalLineShader;
+                if (!(normalLineShader = model->GetOtherShader(OtherShaderType::normalLines))) {
+                    std::cout << "Normal line shader is null!" << std::endl;
+                    continue;
+                }
+                normalLineShader->use();
+                normalLineShader->setFloat("MAGNITUDE", OtherShader::normalLineMagnitude);
+                normalLineShader->setMat4("model", model->getModelMatrix());
+				model->Draw(*normalLineShader);
+            }
+        }
+    }
+    //glStencilMask(0xFF); // Re-enable stencil mask
+}
 
 void Scene::SetSceneGui()
 {
@@ -271,6 +292,7 @@ void Scene::SetSceneGui()
                         }
 						ImGui::DragFloat("Outline Width", &models[i]->outlineWidth, 0.01f, 0.0f, 0.5f);
 						ImGui::ColorEdit3("Outline Color", &models[i]->outlineColor[0]);
+                        ImGui::DragFloat("NormalLine Width", &OtherShader::normalLineMagnitude, 0.01, 0.0f, 0.4f);
 						int curShaderIdx = ShaderManager::GetInstance().GetShaderIndexByShader(shader);
 						//std::cout<< "curShaderIdx:"<< curShaderIdx << std::endl;
                         if (ImGui::Combo("Shader Type", &selectedOption, options, optionCount)) {

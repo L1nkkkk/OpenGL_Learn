@@ -147,6 +147,7 @@ int main() {
 	auto object = std::make_shared<Model>("models/saki/saki.obj");
 	object->scale = glm::vec3(0.1f);
 	object->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Default));
+	object->AddOtherShader(OtherShaderType::normalLines, shaderManager.GetShader(ShaderManager::NormalLines));
 	scene.modelSource.AddOpaqueModel(shaderManager.GetShader(ShaderManager::Phong), object);
 
 	//scene.lightSource.AddPointLight(PointLight(pointLightPositions[0], glm::vec3(0.05f), glm::vec3(0.8f), glm::vec3(1.0f)));

@@ -20,7 +20,8 @@ public:
 		Mirror,
 		Default,
 		//StartGeometryShaderIndex
-		Explode
+		Explode,
+		NormalLines,
 	};
 
 	static enum UniformBufferType {
@@ -55,7 +56,8 @@ private:
 		"default"
 	};
 	std::vector<std::string> geometryShaderNames = {
-		"explode"
+		"explode",
+		"normal"
 	};
 	ShaderManager() = default;
 };

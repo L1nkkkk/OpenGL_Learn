@@ -7,6 +7,8 @@ enum class OtherShaderType {
 	normalLines
 };
 
+
+
 class OtherShader {
 public:
 	static std::string OtherShaderTypeToString(OtherShaderType type) {
@@ -19,4 +21,6 @@ public:
 			return "unknown";
 		}
 	}
+
+	inline static float normalLineMagnitude = 0.01;
 };
