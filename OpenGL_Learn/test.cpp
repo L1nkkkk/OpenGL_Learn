@@ -146,7 +146,7 @@ int main() {
 
 	auto object = std::make_shared<Model>("models/saki/saki.obj");
 	object->scale = glm::vec3(0.1f);
-	object->outlineShaderPtr = shaderManager.GetShader(ShaderManager::Default);
+	object->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Default));
 	scene.modelSource.AddOpaqueModel(shaderManager.GetShader(ShaderManager::Phong), object);
 
 	//scene.lightSource.AddPointLight(PointLight(pointLightPositions[0], glm::vec3(0.05f), glm::vec3(0.8f), glm::vec3(1.0f)));
@@ -188,7 +188,7 @@ int main() {
 		glm::mat4 model = glm::mat4(1.0f);
 		auto vegi = std::make_shared<Model>(grassMeshes);
 		vegi->position = pos;
-		vegi->outlineShaderPtr = shaderManager.GetShader(ShaderManager::Default);
+		vegi->AddOtherShader(OtherShaderType::outline,shaderManager.GetShader(ShaderManager::Default));
 		scene.modelSource.AddTransparentModel(shaderManager.GetShader(ShaderManager::Grass),vegi);
 	}
 	

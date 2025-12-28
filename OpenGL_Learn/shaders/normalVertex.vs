@@ -16,6 +16,8 @@ layout (std140) uniform Matrices{
 
 void main()
 {
-	gs_in.texCoords = aTexCoords;
+	FragPos = vec3(model * vec4(aPos, 1.0));
+	Normal = mat3(transpose(inverse(model))) * aNormal;
+	TexCoords = aTexCoords;
 	gl_Position = projection * view * model * vec4(aPos, 1.0);
 }

@@ -11,11 +11,10 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <string>
 #include <vector>
-
-
+#include <unordered_map>
+#include "Global.h"
 #include "Shader.h"
 #include "stb_image.h"
-
 
 
 struct Vertex {
@@ -159,8 +158,8 @@ public:
 		return modelMatrix;
 	}
 
-	bool hasOutline = false;
-	Shader* outlineShaderPtr = nullptr;
+	std::unordered_map<int,bool> otherShaderUse;
+	std::unordered_map<int,Shader*> otherShaderPtr;
 	glm::vec3 outlineColor = glm::vec3(0.0f);
 	float outlineWidth = 0.05f;
 
@@ -175,6 +174,20 @@ public:
 	glm::vec3 GetLoacalCenter() {
 		return localCenter;
 	}
+
+	void AddOtherShader(OtherShaderType type, Shader* shader) {
+		otherShaderUse[static_cast<int>(type)] = false;
+		otherShaderPtr[static_cast<int>(type)] = shader;
+	}
+
+	Shader* GetOtherShader(OtherShaderType type) {
+		return otherShaderPtr[static_cast<int>(type)];
+	}
+
+	bool IsOtherShaderUsed(OtherShaderType type) {
+		return otherShaderUse[static_cast<int>(type)];
+	}
+
 private:
 	std::vector<Texture> textures_loaded;
 	std::vector<Mesh> meshes;

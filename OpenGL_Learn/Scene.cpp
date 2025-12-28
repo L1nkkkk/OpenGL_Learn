@@ -51,7 +51,7 @@ void Scene::DrawOpaqueModels()
         ourShader.setVec3("viewPos", camera_ptr->cameraPos);
         SetLightUniforms(ourShader);
         for (auto& model : ourshaderPair.second) {
-            if (!model->hasOutline) {
+            if (!model->IsOtherShaderUsed(OtherShaderType::outline)) {
 				glStencilMask(0x00); // Disable writing to the stencil buffer
                 glStencilFunc(GL_ALWAYS, 0, 0xFF);
                 ourShader.setMat4("model", model->getModelMatrix());
@@ -84,7 +84,7 @@ void Scene::DrawTransparentModels()
         });
     Shader* lastShaderPtr = nullptr;
     for (const auto& modelPair : modelSource.transparentModels) {
-        if(modelPair.first->hasOutline){
+        if(modelPair.first->IsOtherShaderUsed(OtherShaderType::outline)){
             glStencilMask(0xFF);
             glStencilFunc(GL_ALWAYS, 1, 0xFF);
             glStencilOp(GL_KEEP, GL_REPLACE, GL_REPLACE);
@@ -166,42 +166,45 @@ void Scene::DrawOutlines()
 	glDisable(GL_DEPTH_TEST);
     for (const auto& ourshaderPair : modelSource.opaqueModelsMap) {
         for (auto& model : ourshaderPair.second) {
-            if (model->hasOutline) {
-                if (model->outlineShaderPtr == nullptr) {
-					std::cout << "Outline shader is null!" << std::endl;
-					continue;
-				}
-                model->outlineShaderPtr->use();
-                model->outlineShaderPtr->setVec3("Color", model->outlineColor);
+            if (model->IsOtherShaderUsed(OtherShaderType::outline)) {
+                Shader* outlineShader;
+                if (!(outlineShader = model->GetOtherShader(OtherShaderType::outline))) {
+                    std::cout << "Outline shader is null!" << std::endl;
+                    continue;
+                }
+                outlineShader->use();
+                outlineShader->setVec3("Color", model->outlineColor);
                 glm::mat4 modelMatrix = model->getModelMatrix();
 
                 glm::mat4 moveToOrigin = glm::translate(glm::mat4(1.0f), -model->GetLoacalCenter());
                 glm::mat4 scale = glm::scale(glm::mat4(1.0f), glm::vec3(1.f + model->outlineWidth));
                 glm::mat4 moveBack = glm::translate(glm::mat4(1.0f), model->GetLoacalCenter());
 
-                model->outlineShaderPtr->setMat4("model", modelMatrix*moveBack*scale*moveToOrigin);
-                model->Draw(*(model->outlineShaderPtr));
+                outlineShader->setMat4("model", modelMatrix*moveBack*scale*moveToOrigin);
+                model->Draw(*outlineShader);
             }
         }
 	}
 
     for(const auto& modelPair : modelSource.transparentModels) {
 		Model* model = modelPair.first.get();
-        if (model->hasOutline) {
-            if (model->outlineShaderPtr == nullptr) {
+        if (model->IsOtherShaderUsed(OtherShaderType::outline)) {
+            Shader* outlineShader;
+            if (!(outlineShader = model->GetOtherShader(OtherShaderType::outline))) {
 				std::cout << "Outline shader is null!" << std::endl;
 				continue;
 			}
-            model->outlineShaderPtr->use();
-			model->outlineShaderPtr->setVec3("Color", model->outlineColor);
+
+            outlineShader->use();
+            outlineShader->setVec3("Color", model->outlineColor);
             glm::mat4 modelMatrix = model->getModelMatrix();
 
             glm::mat4 moveToOrigin = glm::translate(glm::mat4(1.0f), -model->GetLoacalCenter());
             glm::mat4 scale = glm::scale(glm::mat4(1.0f), glm::vec3(1.f + model->outlineWidth));
             glm::mat4 moveBack = glm::translate(glm::mat4(1.0f), model->GetLoacalCenter());
 
-            model->outlineShaderPtr->setMat4("model", modelMatrix * moveBack * scale * moveToOrigin);
-            model->Draw(*(model->outlineShaderPtr));
+            outlineShader->setMat4("model", modelMatrix * moveBack * scale * moveToOrigin);
+            model->Draw(*outlineShader);
         }
 	}
 
@@ -252,37 +255,42 @@ void Scene::SetSceneGui()
 
     if (ImGui::CollapsingHeader("Model Settings")){
         if (ImGui::TreeNode("Opacity Models")) {
-            for (const auto& ourshaderPair : modelSource.opaqueModelsMap) {
-                for (size_t i = 0; i < ourshaderPair.second.size(); ++i) {
+            for (const auto& [shader, models] : modelSource.opaqueModelsMap) {
+                for (size_t i = 0; i < models.size(); ++i) {
                     std::string label = "Opaque Model " + std::to_string(i);
                     if (ImGui::TreeNode(label.c_str())) {
-                        ImGui::DragFloat3("Position", &ourshaderPair.second[i]->position[0], 0.1f);
-                        ImGui::DragFloat3("Rotation", &ourshaderPair.second[i]->rotation[0], 0.5f);
-                        ImGui::DragFloat3("Scale", &ourshaderPair.second[i]->scale[0], 0.01f, 0.01f, 10.0f);
-						ImGui::Checkbox("Has Outline", &ourshaderPair.second[i]->hasOutline);
-						ImGui::DragFloat("Outline Width", &ourshaderPair.second[i]->outlineWidth, 0.01f, 0.0f, 0.5f);
-						ImGui::ColorEdit3("Outline Color", &ourshaderPair.second[i]->outlineColor[0]);
-                        auto modeltemp = ourshaderPair.second[i];
-						int curShaderIdx = ShaderManager::GetInstance().GetShaderIndexByShader(ourshaderPair.first);
+                        ImGui::DragFloat3("Position", &models[i]->position[0], 0.1f);
+                        ImGui::DragFloat3("Rotation", &models[i]->rotation[0], 0.5f);
+                        ImGui::DragFloat3("Scale", &models[i]->scale[0], 0.01f, 0.01f, 10.0f);
+                        if (ImGui::TreeNode("Other Shader Use")) {
+                            for (auto& [key, value] : models[i]->otherShaderUse)
+                            {
+								ImGui::Checkbox(OtherShader::OtherShaderTypeToString(static_cast<OtherShaderType>(key)).c_str(), &value);
+                            }
+                            ImGui::TreePop();
+                        }
+						ImGui::DragFloat("Outline Width", &models[i]->outlineWidth, 0.01f, 0.0f, 0.5f);
+						ImGui::ColorEdit3("Outline Color", &models[i]->outlineColor[0]);
+						int curShaderIdx = ShaderManager::GetInstance().GetShaderIndexByShader(shader);
 						//std::cout<< "curShaderIdx:"<< curShaderIdx << std::endl;
                         if (ImGui::Combo("Shader Type", &selectedOption, options, optionCount)) {
                             switch (selectedOption) {
                             case 0:
                                 if (curShaderIdx != ShaderManager::Phong) {
-                                    modelSource.DeleteOpaqueModel(modeltemp);
-                                    modelSource.AddOpaqueModel(ShaderManager::GetInstance().GetShader(ShaderManager::Phong), modeltemp);
+                                    modelSource.DeleteOpaqueModel(models[i]);
+                                    modelSource.AddOpaqueModel(ShaderManager::GetInstance().GetShader(ShaderManager::Phong), models[i]);
                                 }
                                 break;
                             case 1:
                                 if (curShaderIdx != ShaderManager::Mirror) {
-                                    modelSource.DeleteOpaqueModel(modeltemp);
-                                    modelSource.AddOpaqueModel(ShaderManager::GetInstance().GetShader(ShaderManager::Mirror), modeltemp);
+                                    modelSource.DeleteOpaqueModel(models[i]);
+                                    modelSource.AddOpaqueModel(ShaderManager::GetInstance().GetShader(ShaderManager::Mirror), models[i]);
                                 }
                                 break;
 							case 2:
                                 if (curShaderIdx != ShaderManager::Explode){
-									modelSource.DeleteOpaqueModel(modeltemp);
-									modelSource.AddOpaqueModel(ShaderManager::GetInstance().GetShader(ShaderManager::Explode), modeltemp);
+									modelSource.DeleteOpaqueModel(models[i]);
+									modelSource.AddOpaqueModel(ShaderManager::GetInstance().GetShader(ShaderManager::Explode), models[i]);
                                 }
                             }
                         }
@@ -299,7 +307,13 @@ void Scene::SetSceneGui()
                     ImGui::DragFloat3("Position", &modelSource.transparentModels[i].first->position[0], 0.1f);
                     ImGui::DragFloat3("Rotation", &modelSource.transparentModels[i].first->rotation[0], 0.5f);
                     ImGui::DragFloat3("Scale", &modelSource.transparentModels[i].first->scale[0], 0.01f, 0.01f, 10.0f);
-                    ImGui::Checkbox("Has Outline", &modelSource.transparentModels[i].first->hasOutline);
+                    if (ImGui::TreeNode("Other Shader Use")) {
+                        for (auto& [key, value] : modelSource.transparentModels[i].first->otherShaderUse)
+                        {
+                            ImGui::Checkbox(OtherShader::OtherShaderTypeToString(static_cast<OtherShaderType>(key)).c_str(), &value);
+                        }
+                        ImGui::TreePop();
+                    }
                     ImGui::DragFloat("Outline Width", &modelSource.transparentModels[i].first->outlineWidth, 0.01f, 0.0f, 0.5f);
                     ImGui::ColorEdit3("Outline Color", &modelSource.transparentModels[i].first->outlineColor[0]);
                     ImGui::TreePop();
