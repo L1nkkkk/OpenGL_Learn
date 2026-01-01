@@ -1,32 +1,20 @@
-﻿  Model.cpp
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(25,44): warning C4305: “初始化”: 从“double”到“float”截断
-  (编译源文件“Model.cpp”)
-  
-  Scene.cpp
+﻿  Scene.cpp
 C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Scene.cpp(1,1): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(25,44): warning C4305: “初始化”: 从“double”到“float”截断
+C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(17,14): warning C4091: “static ”: 没有声明变量时忽略“FBO::FramebufferType”的左侧
+  (编译源文件“Scene.cpp”)
+  
+C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(49,14): warning C4091: “static ”: 没有声明变量时忽略“AntiAliasManager::AntiAliasType”的左侧
+  (编译源文件“Scene.cpp”)
+  
+C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(102,44): warning C4305: “初始化”: 从“double”到“float”截断
   (编译源文件“Scene.cpp”)
   
 C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\shaderManager.h(15,14): warning C4091: “static ”: 没有声明变量时忽略“ShaderManager::ShaderType”的左侧
   (编译源文件“Scene.cpp”)
   
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\shaderManager.h(27,14): warning C4091: “static ”: 没有声明变量时忽略“ShaderManager::UniformBufferType”的左侧
+C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\shaderManager.h(30,14): warning C4091: “static ”: 没有声明变量时忽略“ShaderManager::UniformBufferType”的左侧
   (编译源文件“Scene.cpp”)
   
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Scene.cpp(51,47): warning C4244: “参数”: 从“double”转换到“float”，可能丢失数据
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Scene.cpp(295,97): warning C4305: “参数”: 从“double”到“float”截断
-  test.cpp
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(25,44): warning C4305: “初始化”: 从“double”到“float”截断
-  (编译源文件“test.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\shaderManager.h(15,14): warning C4091: “static ”: 没有声明变量时忽略“ShaderManager::ShaderType”的左侧
-  (编译源文件“test.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\shaderManager.h(27,14): warning C4091: “static ”: 没有声明变量时忽略“ShaderManager::UniformBufferType”的左侧
-  (编译源文件“test.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\test.cpp(77,27): warning C4244: “参数”: 从“double”转换到“float”，可能丢失数据
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\test.cpp(77,21): warning C4244: “参数”: 从“double”转换到“float”，可能丢失数据
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\test.cpp(291,31): warning C4101: “quadEBO”: 未引用的局部变量
-  正在生成代码...
+C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Scene.cpp(45,47): warning C4244: “参数”: 从“double”转换到“float”，可能丢失数据
+C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Scene.cpp(291,97): warning C4305: “参数”: 从“double”到“float”截断
   OpenGL_Learn.vcxproj -> C:\Users\Link\Dev\OpenGL_Learn\x64\Debug\OpenGL_Learn.exe

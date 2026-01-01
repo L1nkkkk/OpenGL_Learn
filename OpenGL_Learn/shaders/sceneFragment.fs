@@ -5,6 +5,8 @@ out vec4 FragColor;
 in vec2 TexCoords;
 
 uniform sampler2D screenTexture;
+uniform float gamma;
+uniform bool useGamma;
 
 const float offset = 1.0 / 300.0;  
 
@@ -38,4 +40,7 @@ void main()
         col += sampleTex[i] * kernel[i];
 
     FragColor = vec4(col, 1.0);
+    if(useGamma){
+        FragColor.rgb = pow(FragColor.rgb,vec3(1.0/gamma));
+    }
 }

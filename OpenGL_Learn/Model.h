@@ -24,7 +24,8 @@ struct Vertex {
 };
 
 struct Texture {
-	unsigned int id;
+	unsigned int textureID;
+	unsigned int textureGammaID;
 	std::string type;
 	aiString path;
 };
@@ -56,11 +57,11 @@ struct Material {
 	}
 };
 
-struct CubeTexture {
-	unsigned int id;
+class CubeTexture {
+public:
+	unsigned int textureID;
+	unsigned int textureGammaID;
 	CubeTexture(std::string path) {
-		glGenTextures(1, &id);
-		glBindTexture(GL_TEXTURE_CUBE_MAP, id);
 		int width, height, nrChannels;
 		unsigned char* data;
 		std::string items[6] = {
@@ -72,6 +73,8 @@ struct CubeTexture {
 			"back.jpg"
 		};
 		stbi_set_flip_vertically_on_load(false);
+		glGenTextures(1, &textureID);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
 		for(int i = 0; i < 6; ++i){
 			data = stbi_load((path + '/' + items[i]).c_str(), &width, &height, &nrChannels, 0);
 			if (data) {
@@ -88,9 +91,30 @@ struct CubeTexture {
 		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+		glGenTextures(1, &textureGammaID);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, textureGammaID);
+		for (int i = 0; i < 6; ++i) {
+			data = stbi_load((path + '/' + items[i]).c_str(), &width, &height, &nrChannels, 0);
+			if (data) {
+				glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_SRGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+				stbi_image_free(data);
+			}
+			else {
+				std::cout << "Cubemap texture failed to load at path: " << items[i] << std::endl;
+				stbi_image_free(data);
+			}
+		}
+		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 		glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
 		stbi_set_flip_vertically_on_load(true);
 	}
+private:
+	CubeTexture() = default;
 };
 
 class Mesh {
@@ -103,6 +127,10 @@ public:
 		 std::vector<unsigned int> indices, 
 		 Material& material);
 	void Draw(Shader& shader);
+
+	unsigned int GetVAO() {
+		return VAO;
+	}
 private:
 	unsigned int VAO, VBO, EBO;
 	void setupMesh();
@@ -186,6 +214,14 @@ public:
 
 	bool IsOtherShaderUsed(OtherShaderType type) {
 		return otherShaderUse[static_cast<int>(type)];
+	}
+
+	std::vector<Mesh>& GetMeshes() {
+		return meshes;
+	}
+
+	unsigned int GetTextureID(int index) {
+		return GAMMA_CORRECTION?textures_loaded[index].textureGammaID: textures_loaded[index].textureID;
 	}
 
 private:

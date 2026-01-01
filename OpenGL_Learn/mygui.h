@@ -3,6 +3,10 @@
 #include <imgui/imgui.h>
 #include <imgui/backends/imgui_impl_opengl3.h>
 #include <imgui/backends/imgui_impl_glfw.h>
+#include <glad/glad.h>
+#include <GLFW/glfw3.h>
+#include "Scene.h"
+#include "Global.h"
 
 class MyGui {
 public:
@@ -29,7 +33,7 @@ public:
 	}
 
 	void Begin() {
-		ImGui::Begin("Debug Panel");
+		ImGui::Begin("Settings");
 	}
 
 	void End() {
@@ -39,6 +43,33 @@ public:
 	void Render() {
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+	}
+
+	void Anti_Aliasing_UI() {
+		AntiAliasManager& AnitAliasMgr = AntiAliasManager::GetInstance();
+		static int selectedOptionAA = 0;
+		int optionAACount = sizeof(AntiAliasManager::optionsAA) / sizeof(AntiAliasManager::optionsAA[0]);
+		if (ImGui::Combo("Anti-aliasing", &selectedOptionAA, AntiAliasManager::optionsAA, optionAACount)) {
+			switch (selectedOptionAA) {
+			case AntiAliasManager::Default:
+				AnitAliasMgr.AntiAliasByType(AntiAliasManager::Default);
+				break;
+			case AntiAliasManager::MSAA:
+				AnitAliasMgr.AntiAliasByType(AntiAliasManager::MSAA);
+				break;
+			}
+		}
+	}
+
+	void Gamma_UI() {
+		ImGui::Checkbox("gammaCorrection", &GAMMA_CORRECTION);
+		if (GAMMA_CORRECTION) {
+			ImGui::DragFloat("gammaValue", &GAMMA_VALUE, 0.01f, 1.0f, 2.6f, "%.2f");
+		}
+	}
+
+	void Scene_UI(Scene& scene) {
+		scene.SetSceneGui();
 	}
 private:
 	MyGui() = default;

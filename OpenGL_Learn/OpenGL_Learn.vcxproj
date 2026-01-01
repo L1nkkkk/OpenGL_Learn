@@ -137,7 +137,11 @@
     <ClCompile Include="..\..\..\..\..\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\include\imgui\imgui_tables.cpp" />
     <ClCompile Include="..\..\..\..\..\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\include\imgui\imgui_widgets.cpp" />
     <ClCompile Include="..\..\..\Downloads\src\glad.c" />
+    <ClCompile Include="AntiAliasManager.cpp" />
     <ClCompile Include="callbacks.cpp" />
+    <ClCompile Include="FramebufferManager.cpp" />
+    <ClCompile Include="Global.cpp" />
+    <ClCompile Include="Learn.cpp" />
     <ClCompile Include="Model.cpp" />
     <ClCompile Include="Scene.cpp" />
     <ClCompile Include="Shader.cpp" />
@@ -147,6 +151,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="callbacks.h" />
+    <ClInclude Include="Learn.h" />
     <ClInclude Include="Light.h" />
     <ClInclude Include="Model.h" />
     <ClInclude Include="mygui.h" />
@@ -158,11 +163,13 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="FragmentShader.fs" />
-    <None Include="LightFragment.fs" />
-    <None Include="LightFragmentShader.fs" />
-    <None Include="LightVertex.vs" />
-    <None Include="LightVertexShader.vs" />
     <None Include="shaders\defaultFragment.fs" />
+    <None Include="shaders\diffuseFragment.fs" />
+    <None Include="LightFragmentShader.fs" />
+    <None Include="shaders\diffuseGeometry.gs" />
+    <None Include="shaders\diffuseVertex.vs" />
+    <None Include="LightVertexShader.vs" />
+    <None Include="shaders\outlineFragment.fs" />
     <None Include="shaders\defaultVertex.vs" />
     <None Include="shaders\explodeFragment.fs" />
     <None Include="shaders\explodeGeometry.gs" />
@@ -177,6 +184,7 @@
     <None Include="shaders\normalFragment.fs" />
     <None Include="shaders\normalGeometry.gs" />
     <None Include="shaders\normalVertex.vs" />
+    <None Include="shaders\outlineVertex.vs" />
     <None Include="shaders\phongFragment.fs" />
     <None Include="shaders\phongVertex.vs" />
     <None Include="shaders\sceneFragment.fs" />

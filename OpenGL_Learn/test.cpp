@@ -1,6 +1,9 @@
 #pragma once
 #define STB_IMAGE_IMPLEMENTATION
 //#define USE_GEOMETRY_SHADER
+#define USE_SCENE_SHADER
+//#define USE_PLANET_SHADER
+#include "Learn.h"
 #include "Model.h"
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -10,14 +13,16 @@
 #include "Scene.h"
 #include "mygui.h"
 #include "ShaderManager.h"
+#include "Global.h"
 
-
-const int SCREEN_WIDTH = 1440;
-const int SCREEN_HEIGHT = 900;
 bool firstMouse = false;
 bool lastFrameMkeyState = false;
 
+int frameCount = 0;
+float lastFrameTime = 0.0f;
+
 Camera camera(5.0f, glm::vec3(0.0f, 0.0f, 3.0f), SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f);
+glm::mat4 view, projection;
 
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
@@ -68,6 +73,11 @@ void ProcessInput(GLFWwindow* window) {
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
 	glViewport(0, 0, width, height);
+	SCREEN_HEIGHT = height;
+	SCREEN_WIDTH = width;
+
+	auto& fBuffersMgr = FramebuffersManager::GetInstance();
+	fBuffersMgr.Resize();
 }
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
@@ -86,19 +96,23 @@ void SetGui() {
 	MyGui& mygui = MyGui::GetInstance();
 	mygui.NewFrame();
 	ImGui::SetNextWindowSize(ImVec2(400, 300));
-	mygui.Begin();
-	ImGui::Text("Use WASD to move the camera");
-	ImGui::Text("Use mouse to look around after Press M");
-	ImGui::Text("Press Esc to close");
-	ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-	mygui.End();
+}
+
+void SetUniformBuffer() {
+	view = camera.GetViewMatrix();
+	projection = glm::perspective(glm::radians(camera.fov), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, 0.1f, 100.0f);
+	ShaderManager& ShaderMgr = ShaderManager::GetInstance();
+	ShaderMgr.SetUBOData(ShaderManager::Matrices, 0, sizeof(glm::mat4), &view);
+	ShaderMgr.SetUBOData(ShaderManager::Matrices, sizeof(glm::mat4), sizeof(glm::mat4), &projection);
 }
 
 int main() {
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+	glfwWindowHint(GLFW_SAMPLES, 4);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+	
 
 	GLFWwindow* window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Learn OpenGL", NULL, NULL);
 	if (!window) {
@@ -108,12 +122,17 @@ int main() {
 	}
 	glfwMakeContextCurrent(window);
 	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	//register function after initializing window and before renderering
+	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 	glfwSetCursorPosCallback(window, mouse_callback);
 	glfwSetScrollCallback(window, scroll_callback);
 	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
 		std::cout << "Fail to initialize GLAD" << std::endl;
 		return -1;
 	}
+	glfwGetFramebufferSize(window, &SCREEN_WIDTH, &SCREEN_HEIGHT);
+	glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+
 
 	MyGui& mygui = MyGui::GetInstance();
 	mygui.Init(window);
@@ -140,13 +159,16 @@ int main() {
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(2 * sizeof(float)));
 	glEnableVertexAttribArray(1);
+#elif defined(USE_PLANET_SHADER)
+	Planet planet;
+	planet.Init();
 #endif
 
 	Scene scene(&camera, SCREEN_WIDTH, SCREEN_HEIGHT);
 
 	auto object = std::make_shared<Model>("models/saki/saki.obj");
 	object->scale = glm::vec3(0.1f);
-	object->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Default));
+	object->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
 	object->AddOtherShader(OtherShaderType::normalLines, shaderManager.GetShader(ShaderManager::NormalLines));
 	scene.modelSource.AddOpaqueModel(shaderManager.GetShader(ShaderManager::Phong), object);
 
@@ -174,7 +196,8 @@ int main() {
 	};
 	std::vector<Texture> grassTextures;
 	Texture grassTexture;
-	grassTexture.id = TextureFromFile("blending_transparent_window.png", "models/blending_transparent_window",true);
+	grassTexture.textureID = TextureFromFile("blending_transparent_window.png", "models/blending_transparent_window",true);
+	grassTexture.textureGammaID = TextureFromFile("blending_transparent_window.png", "models/blending_transparent_window", true,true);
 	grassTexture.type = "texture_diffuse";
 	grassTextures.push_back(grassTexture);
 
@@ -249,44 +272,19 @@ int main() {
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 	glBindVertexArray(0);
-	/*scene.skyboxSource.cubeMapVAO = skyboxVAO;
-	scene.skyboxSource.textureCubeMap = skybox.id;
-	scene.skyboxSource.skyboxShader_ptr = &skyboxShader;*/
-	scene.skyboxSource = SkyboxSource(skybox.id, skyboxVAO, shaderManager.GetShader(ShaderManager::Skybox));
-	int width, height;
+	scene.skyboxSource = SkyboxSource(skybox, skyboxVAO, shaderManager.GetShader(ShaderManager::Skybox));
 	
-	glfwGetFramebufferSize(window, &width, &height);
-	glViewport(0, 0, width, height);
+	FramebuffersManager& framebuffersMgr = FramebuffersManager::GetInstance();
+	AntiAliasManager& antiAliasMgr = AntiAliasManager::GetInstance();
+	//default fBuffer
+	FBO defaultFBO(FBO::Framebuffer);
+	framebuffersMgr.GenFBO(&defaultFBO);
+	//MSAA fBuffer
+	FBO multisampleFBO(FBO::Multisample);
+	framebuffersMgr.GenFBO(&multisampleFBO);
 
-	//register function after initializing window and before renderering
-	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-
-	glm::mat4 view = glm::mat4(1.0f);
-	glm::mat4 projection = glm::mat4(1.0f);
-	
-	unsigned int framebuffer;
-	glGenFramebuffers(1, &framebuffer);
-	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-
-	unsigned int textureColorbuffer;
-	glGenTextures(1, &textureColorbuffer);
-	glBindTexture(GL_TEXTURE_2D, textureColorbuffer);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
-	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glBindTexture(GL_TEXTURE_2D, 0);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureColorbuffer, 0);
-
-	unsigned int rbo;
-	glGenRenderbuffers(1, &rbo);
-	glBindRenderbuffer(GL_RENDERBUFFER, rbo);
-	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, SCREEN_WIDTH, SCREEN_HEIGHT);
-	glBindRenderbuffer(GL_RENDERBUFFER, 0);
-	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbo);
-
-	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-		std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
-	}
+	FBO intermediateFBO(FBO::Framebuffer);
+	framebuffersMgr.GenFBO(&intermediateFBO);
 
 	unsigned int quadVAO,quadVBO,quadEBO;
 	glGenVertexArrays(1, &quadVAO);
@@ -329,18 +327,44 @@ int main() {
 	glEnable(GL_PROGRAM_POINT_SIZE);
 
 	glEnable(GL_BLEND);
+	
+	//glEnable(GL_FRAMEBUFFER_SRGB);
+
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	
 	while (!glfwWindowShouldClose(window)) {
+		++frameCount;
 		float currentTime = (float)glfwGetTime();
 		deltaTime = currentTime - lastFrame;
 		lastFrame = currentTime;
-		ProcessInput(window);
-#ifndef USE_GEOMETRY_SHADER
-		//start the Dear ImGui frame
+		//calculate FPS
+		if (currentTime - lastFrameTime > .1f) {
+			std::stringstream windowTitle;
+			
+			windowTitle << "OpenGL_Learn FPS:" << (float)frameCount/(currentTime-lastFrameTime);
+			lastFrameTime = currentTime;
+			frameCount = 0;
+			glfwSetWindowTitle(window, windowTitle.str().c_str());
+		}
+		//set system configUI
 		SetGui();
-		scene.SetSceneGui();
-		//firtt pass: render scene to framebuffer
-		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+		mygui.Begin();
+		mygui.Gamma_UI();
+		mygui.Anti_Aliasing_UI();
+		mygui.Scene_UI(scene);
+		mygui.End();
+		//process input
+		ProcessInput(window);
+		//before pass: set uniform buffer
+		SetUniformBuffer();
+#ifdef USE_SCENE_SHADER
+		//first pass: render scene to framebuffer
+		if (antiAliasMgr.antiAliasType == AntiAliasManager::MSAA) {
+			glBindFramebuffer(GL_FRAMEBUFFER, multisampleFBO.framebufferID);
+		}
+		else {
+			glBindFramebuffer(GL_FRAMEBUFFER, defaultFBO.framebufferID);
+		}
 		glEnable(GL_DEPTH_TEST);
 		glEnable(GL_STENCIL_TEST);
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -349,6 +373,11 @@ int main() {
 		glStencilMask(0x00);
 		scene.Draw();
 		//second pass: render framebuffer texture to screen
+		if (antiAliasMgr.antiAliasType == AntiAliasManager::MSAA) {
+			glBindFramebuffer(GL_READ_FRAMEBUFFER, multisampleFBO.framebufferID);
+			glBindFramebuffer(GL_DRAW_FRAMEBUFFER, intermediateFBO.framebufferID);
+			glBlitFramebuffer(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+		}
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
@@ -356,15 +385,28 @@ int main() {
 		screenShader.use();
 		glBindVertexArray(quadVAO);
 		glDisable(GL_DEPTH_TEST);
-		glBindTexture(GL_TEXTURE_2D, textureColorbuffer);
+		if (antiAliasMgr.antiAliasType == AntiAliasManager::MSAA) {
+			glBindTexture(GL_TEXTURE_2D, intermediateFBO.textureID);
+		}
+		else {
+			glBindTexture(GL_TEXTURE_2D, defaultFBO.textureID);
+		}
 		glActiveTexture(GL_TEXTURE0);
+		screenShader.setFloat("gamma", GAMMA_VALUE);
+		screenShader.setBool("useGamma", GAMMA_CORRECTION);
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 		//Draw GUI
 		mygui.Render();
-#else
+#elif defined(USE_GEOMETRY_SHADER)
 		geometryShader.use();
 		glBindVertexArray(VAO);
 		glDrawArrays(GL_POINTS, 0, 4);
+#elif defined(USE_PLANET_SHADER)
+		glEnable(GL_DEPTH_TEST);
+		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+		glClearStencil(0);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		planet.Draw();
 #endif
 		// glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
 		glfwSwapBuffers(window);

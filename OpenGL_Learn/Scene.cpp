@@ -1,20 +1,12 @@
 #include "Scene.h"
-
 void Scene::Draw()
-{
-    view = camera_ptr->GetViewMatrix();
-    projection = glm::perspective(glm::radians(camera_ptr->fov), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, 0.1f, 100.0f);
-	ShaderManager& ShaderMgr = ShaderManager::GetInstance();
-	ShaderMgr.SetUBOData(ShaderManager::Matrices, 0, sizeof(glm::mat4), &view);
-	ShaderMgr.SetUBOData(ShaderManager::Matrices, sizeof(glm::mat4), sizeof(glm::mat4), &projection);
-
-	//Draw scene in the following order
+{  //Draw scene in the following order
     DrawPointLights();
     DrawOpaqueModels();  // 先绘制所有不透明物体，记录需要outline的物体到stencil buffer
     DrawNormalLines(); // 可选：绘制法线线段用于调试
     DrawSkybox();        // 绘制天空盒（使用深度测试优化，但不影响stencil buffer）
     DrawTransparentModels();  // 绘制透明物体
-	DrawOutlines();      // 最后绘制outline（禁用深度测试，基于stencil buffer绘制）
+    DrawOutlines();      // 最后绘制outline（禁用深度测试，基于stencil buffer绘制）
 }
 
 void Scene::DrawPointLights()
@@ -46,8 +38,10 @@ void Scene::DrawOpaqueModels()
         Shader& ourShader = *(ourshaderPair.first);
 		//std::cout << ourshaderPair.second.size() << std::endl;
         ourShader.use();
-       
-        glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxSource.textureCubeMap);
+        if(GAMMA_CORRECTION)
+            glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxSource.textureCubeMap->textureGammaID);
+        else
+            glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxSource.textureCubeMap->textureID);
         ourShader.setFloat("time", glfwGetTime());
         ourShader.setVec3("viewPos", camera_ptr->cameraPos);
         SetLightUniforms(ourShader);
@@ -150,7 +144,10 @@ void Scene::DrawSkybox()
 	skyboxSource.skyboxShader_ptr->use();
     glBindVertexArray(skyboxSource.cubeMapVAO);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxSource.textureCubeMap);
+    if (GAMMA_CORRECTION)
+        glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxSource.textureCubeMap->textureGammaID);
+    else
+        glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxSource.textureCubeMap->textureID);
 	skyboxSource.skyboxShader_ptr->setInt("skybox", 0);
 	skyboxSource.skyboxShader_ptr->setMat4("skyboxView", glm::mat4(glm::mat3(view))); // Remove translation from the view matrix
     glDrawArrays(GL_TRIANGLES, 0, 36);
@@ -236,8 +233,6 @@ void Scene::DrawNormalLines()
 
 void Scene::SetSceneGui()
 {
-	ImGui::SetNextWindowSize(ImVec2(300, 400), ImGuiCond_FirstUseEver);
-    ImGui::Begin("Scene Settings");
     if (ImGui::CollapsingHeader("Light Settings")) {
         if (ImGui::TreeNode("Direction Lights")) {
             for (size_t i = 0; i < lightSource.directionLights.size(); ++i) {
@@ -279,41 +274,44 @@ void Scene::SetSceneGui()
             for (const auto& [shader, models] : modelSource.opaqueModelsMap) {
                 for (size_t i = 0; i < models.size(); ++i) {
                     std::string label = "Opaque Model " + std::to_string(i);
+                    auto model = models[i];
                     if (ImGui::TreeNode(label.c_str())) {
-                        ImGui::DragFloat3("Position", &models[i]->position[0], 0.1f);
-                        ImGui::DragFloat3("Rotation", &models[i]->rotation[0], 0.5f);
-                        ImGui::DragFloat3("Scale", &models[i]->scale[0], 0.01f, 0.01f, 10.0f);
+                        ImGui::DragFloat3("Position", &model->position[0], 0.1f);
+                        ImGui::DragFloat3("Rotation", &model->rotation[0], 0.5f);
+                        ImGui::DragFloat3("Scale", &model->scale[0], 0.01f, 0.01f, 10.0f);
                         if (ImGui::TreeNode("Other Shader Use")) {
-                            for (auto& [key, value] : models[i]->otherShaderUse)
+                            for (auto& [key, value] : model->otherShaderUse)
                             {
 								ImGui::Checkbox(OtherShader::OtherShaderTypeToString(static_cast<OtherShaderType>(key)).c_str(), &value);
                             }
                             ImGui::TreePop();
                         }
-						ImGui::DragFloat("Outline Width", &models[i]->outlineWidth, 0.01f, 0.0f, 0.5f);
-						ImGui::ColorEdit3("Outline Color", &models[i]->outlineColor[0]);
+						ImGui::DragFloat("Outline Width", &model->outlineWidth, 0.01f, 0.0f, 0.5f);
+						ImGui::ColorEdit3("Outline Color", &model->outlineColor[0]);
                         ImGui::DragFloat("NormalLine Width", &OtherShader::normalLineMagnitude, 0.01, 0.0f, 0.4f);
 						int curShaderIdx = ShaderManager::GetInstance().GetShaderIndexByShader(shader);
+
 						//std::cout<< "curShaderIdx:"<< curShaderIdx << std::endl;
                         if (ImGui::Combo("Shader Type", &selectedOption, options, optionCount)) {
                             switch (selectedOption) {
                             case 0:
                                 if (curShaderIdx != ShaderManager::Phong) {
-                                    modelSource.DeleteOpaqueModel(models[i]);
-                                    modelSource.AddOpaqueModel(ShaderManager::GetInstance().GetShader(ShaderManager::Phong), models[i]);
+                                    modelSource.DeleteOpaqueModel(model);
+                                    modelSource.AddOpaqueModel(ShaderManager::GetInstance().GetShader(ShaderManager::Phong), model);
                                 }
                                 break;
                             case 1:
                                 if (curShaderIdx != ShaderManager::Mirror) {
-                                    modelSource.DeleteOpaqueModel(models[i]);
-                                    modelSource.AddOpaqueModel(ShaderManager::GetInstance().GetShader(ShaderManager::Mirror), models[i]);
+                                    modelSource.DeleteOpaqueModel(model);
+                                    modelSource.AddOpaqueModel(ShaderManager::GetInstance().GetShader(ShaderManager::Mirror), model);
                                 }
                                 break;
 							case 2:
                                 if (curShaderIdx != ShaderManager::Explode){
-									modelSource.DeleteOpaqueModel(models[i]);
-									modelSource.AddOpaqueModel(ShaderManager::GetInstance().GetShader(ShaderManager::Explode), models[i]);
+									modelSource.DeleteOpaqueModel(model);
+									modelSource.AddOpaqueModel(ShaderManager::GetInstance().GetShader(ShaderManager::Explode), model);
                                 }
+                                break;
                             }
                         }
 						ImGui::TreePop();
@@ -345,5 +343,4 @@ void Scene::SetSceneGui()
 		}	 
         
 	}
-    ImGui::End();
 }

@@ -50,7 +50,10 @@ void Mesh::Draw(Shader& shader)
 		std::string number;
 		number = std::to_string(diffuseNr++);
 		shader.setInt(("texture_diffuse" + number).c_str(), i);
-		glBindTexture(GL_TEXTURE_2D, material.diffuseTextures[i].id);
+		if(GAMMA_CORRECTION)
+			glBindTexture(GL_TEXTURE_2D, material.diffuseTextures[i].textureGammaID);
+		else
+			glBindTexture(GL_TEXTURE_2D, material.diffuseTextures[i].textureID);
 	}
 
 	for (unsigned int i = 0; i < material.specularTextures.size(); ++i) {
@@ -58,7 +61,7 @@ void Mesh::Draw(Shader& shader)
 		std::string number;
 		number = std::to_string(specularNr++);
 		shader.setInt(("texture_specular" + number).c_str(), i);
-		glBindTexture(GL_TEXTURE_2D, material.specularTextures[i].id);
+		glBindTexture(GL_TEXTURE_2D, material.specularTextures[i].textureID);
 	}
 
 	glActiveTexture(GL_TEXTURE0);
@@ -183,7 +186,8 @@ std::vector<Texture> Model::loadMaterialTextures(aiMaterial* mat, aiTextureType 
 		if (!skip)
 		{   // 如果纹理还没有被加载，则加载它
 			Texture texture;
-			texture.id = TextureFromFile(str.C_Str(), directory);
+			texture.textureID = TextureFromFile(str.C_Str(), directory,false,false);
+			texture.textureGammaID = TextureFromFile(str.C_Str(), directory, false, true);
 			texture.type = typeName;
 			texture.path = str.C_Str();
 			textures.push_back(texture);
@@ -206,23 +210,30 @@ unsigned int TextureFromFile(const char* path, const std::string& directory,bool
 	if (data)
 	{
 		GLenum format;
-		if (nrComponents == 1)
-			format = GL_RED;
-		else if (nrComponents == 2)
-			format = GL_RG;
-		else if (nrComponents == 3)
+		GLenum internalFormat;
+		if (nrComponents == 1) {
+			internalFormat = format = GL_RED;
+		}
+		else if (nrComponents == 2) {
+			internalFormat = format = GL_RG;
+		}
+		else if (nrComponents == 3) {
+			internalFormat = gamma ? GL_SRGB : GL_RGB;
 			format = GL_RGB;
-		else if (nrComponents == 4)
+		}
+		else if (nrComponents == 4) {
+			internalFormat = gamma ? GL_SRGB_ALPHA : GL_RGBA;
 			format = GL_RGBA;
-
+		}
 		glBindTexture(GL_TEXTURE_2D, textureID);
-		glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+		glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, GL_UNSIGNED_BYTE, data);
 		glGenerateMipmap(GL_TEXTURE_2D);
 
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
 		if (alpha) {
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);

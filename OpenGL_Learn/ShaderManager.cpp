@@ -39,6 +39,7 @@ void ShaderManager::SetUBOData(UniformBufferType uboType, unsigned int offset, s
 }
 
 Shader* ShaderManager::GetShader(int index) {
+	assert(index < shaderMap.size() && "³¬¹ýShader·ÃÎÊ·¶Î§£¡");
 	if (index < 0 || index > shaderNames.size()+geometryShaderNames.size()) return nullptr;
 	if (index < shaderNames.size()) return shaderMap[shaderNames[index]];
 	else return shaderMap[geometryShaderNames[index - shaderNames.size()]];

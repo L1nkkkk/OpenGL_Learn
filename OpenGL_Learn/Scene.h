@@ -9,8 +9,11 @@
 #include <memory>
 #include <utility>
 #include <algorithm>
-#include "mygui.h"
 #include "shaderManager.h"
+#include "Global.h"
+#include <imgui/imgui.h>
+#include <imgui/backends/imgui_impl_opengl3.h>
+#include <imgui/backends/imgui_impl_glfw.h>
 
 struct LightSource {
 	unsigned int pointLightVAO;
@@ -42,13 +45,14 @@ struct ModelSource {
 	}
 
 	void AddOpaqueModel(Shader* shader,std::shared_ptr<Model> model) {
-		if (shader == nullptr || model == nullptr) return;
+		assert(shader != nullptr && "AddTransparentModel: shader 不能为空指针！");
+		assert(model != nullptr && "AddTransparentModel: model 不能为空智能指针！");
 		opaqueModelsMap[shader].push_back(model);
 		std::cout << "Added opaque model. Total models for this shader: " << opaqueModelsMap[shader].size() << std::endl;
 	}
 
 	void DeleteOpaqueModel(std::shared_ptr<Model> model) {
-		if (model == nullptr) return;
+		assert(model != nullptr && "AddTransparentModel: model 不能为空智能指针！");
 		for (auto& pair : opaqueModelsMap) {
 			auto& models = pair.second;
 			models.erase(std::remove(models.begin(), models.end(), model), models.end());
@@ -56,26 +60,28 @@ struct ModelSource {
 	}
 
 	void AddTransparentModel(Shader* shader, std::shared_ptr<Model> model) {
-		if (shader == nullptr||model == nullptr) return;
+		assert(shader != nullptr && "AddTransparentModel: shader 不能为空指针！");
+		assert(model != nullptr && "AddTransparentModel: model 不能为空智能指针！");
 		transparentModels.emplace_back(model, shader);
 	}
 };
 
-struct SkyboxSource {
-	unsigned int textureCubeMap;
+class SkyboxSource {
+public:
+	CubeTexture* textureCubeMap;
 	unsigned int cubeMapVAO;
 	Shader* skyboxShader_ptr;
-	SkyboxSource() {}
 	SkyboxSource(const SkyboxSource& other) {
 		textureCubeMap = other.textureCubeMap;
 		cubeMapVAO = other.cubeMapVAO;
 		skyboxShader_ptr = other.skyboxShader_ptr;
 	}
-	SkyboxSource(unsigned int textureid,unsigned int cubeMapVao,Shader* skyboxShader) {
-		textureCubeMap = textureid;
+	SkyboxSource(CubeTexture& textureid,unsigned int cubeMapVao,Shader* skyboxShader) {
+		textureCubeMap = &textureid;
 		cubeMapVAO = cubeMapVao;
 		skyboxShader_ptr = skyboxShader;
 	}
+	SkyboxSource() = default;
 };
 
 class Scene {
@@ -84,12 +90,8 @@ public:
 	ModelSource modelSource;
 	SkyboxSource skyboxSource;
 	Camera* camera_ptr = nullptr;
-	unsigned int SCREEN_WIDTH;
-	unsigned int SCREEN_HEIGHT;
 
 	Scene(Camera* camera,const unsigned int& width,const unsigned int& height) {
-		SCREEN_HEIGHT = height;
-		SCREEN_WIDTH = width;
 		camera_ptr = camera;
 		lightSource.pointLightVAO = GetPointLightVAO();
 	}

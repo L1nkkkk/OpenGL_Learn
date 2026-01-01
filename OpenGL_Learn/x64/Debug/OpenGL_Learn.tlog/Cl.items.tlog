@@ -5,7 +5,11 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.3520
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\include\imgui\imgui_tables.cpp;C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\x64\Debug\imgui_tables.obj
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\include\imgui\imgui_widgets.cpp;C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\x64\Debug\imgui_widgets.obj
 C:\Users\Link\Downloads\src\glad.c;C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\x64\Debug\glad.obj
+C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\AntiAliasManager.cpp;C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\x64\Debug\AntiAliasManager.obj
 C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\callbacks.cpp;C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\x64\Debug\callbacks.obj
+C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\FramebufferManager.cpp;C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\x64\Debug\FramebufferManager.obj
+C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.cpp;C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\x64\Debug\Global.obj
+C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Learn.cpp;C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\x64\Debug\Learn.obj
 C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Model.cpp;C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\x64\Debug\Model.obj
 C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Scene.cpp;C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\x64\Debug\Scene.obj
 C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Shader.cpp;C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\x64\Debug\Shader.obj
