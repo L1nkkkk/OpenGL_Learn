@@ -154,6 +154,7 @@
     <ClInclude Include="Learn.h" />
     <ClInclude Include="Light.h" />
     <ClInclude Include="Model.h" />
+    <ClInclude Include="ModelsLoader.h" />
     <ClInclude Include="mygui.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="Scene.h" />
@@ -189,6 +190,8 @@
     <None Include="shaders\phongVertex.vs" />
     <None Include="shaders\sceneFragment.fs" />
     <None Include="shaders\sceneVertex.vs" />
+    <None Include="shaders\shadowFragment.fs" />
+    <None Include="shaders\shadowVertex.vs" />
     <None Include="shaders\skyboxFragment.fs" />
     <None Include="shaders\skyboxVertex.vs" />
     <None Include="VertexShader.vs" />

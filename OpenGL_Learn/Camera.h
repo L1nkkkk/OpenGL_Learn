@@ -30,7 +30,7 @@ public:
 	void SetCameraDirection(float pitch, float yaw);
 private:
 	
-	float yaw = 90.0f;
+	float yaw = -90.0f;
 	float pitch = 0.0f;
 	float lastX;
 	float lastY;

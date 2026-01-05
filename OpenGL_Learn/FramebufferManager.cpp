@@ -47,6 +47,31 @@ void FramebuffersManager::GenFBO(FBO* framebufferobject) {
 			std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
 		}
 		break;
+	case FBO::ShadowMap:
+		glGenFramebuffers(1, &framebuffer);
+		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+
+		glGenTextures(1, &textureColorbuffer);
+		glBindTexture(GL_TEXTURE_2D, textureColorbuffer);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT,SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+		float borderColor[] = { 1.0, 1.0, 1.0, 1.0 };
+		glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+		glBindTexture(GL_TEXTURE_2D, 0);
+
+		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, textureColorbuffer, 0);
+		glDrawBuffer(GL_NONE);
+		glReadBuffer(GL_NONE);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+			std::cout << "ERROR::FRAMEBUFFER:: ShadowMap Framebuffer is not complete!" << std::endl;
+		}
+		break;
 	}
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	if (!framebufferobject->init) {
@@ -70,8 +95,8 @@ size_t FramebuffersManager::GetFramebuffersSize(FBO::FramebufferType type) {
 }
 
 void FramebuffersManager::Resize() {
-	for (auto& [type, fbos] : FBOmap) {
-		for (auto& fbo : fbos) {
+	for (FBO::FramebufferType& type : FBOResizeableTpye) {
+		for (auto& fbo : FBOmap[type]) {
 			fbo->Delete();
 			GenFBO(fbo);
 		}

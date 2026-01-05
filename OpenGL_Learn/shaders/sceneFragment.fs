@@ -7,6 +7,7 @@ in vec2 TexCoords;
 uniform sampler2D screenTexture;
 uniform float gamma;
 uniform bool useGamma;
+uniform bool useShadowMap;
 
 const float offset = 1.0 / 300.0;  
 
@@ -42,5 +43,8 @@ void main()
     FragColor = vec4(col, 1.0);
     if(useGamma){
         FragColor.rgb = pow(FragColor.rgb,vec3(1.0/gamma));
+    }
+    if(useShadowMap){
+        FragColor = vec4(vec3(texture(screenTexture,TexCoords).r),1.0);
     }
 }

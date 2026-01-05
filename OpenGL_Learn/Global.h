@@ -9,6 +9,10 @@
 extern int SCREEN_WIDTH;
 extern int SCREEN_HEIGHT;
 
+extern int SHADOW_WIDTH;
+extern int SHADOW_HEIGHT;
+extern bool SHADOW_MAP_SHOW;
+
 extern float GAMMA_VALUE;
 extern bool GAMMA_CORRECTION;
 
@@ -17,7 +21,19 @@ public:
 	static enum FramebufferType{
 		Framebuffer = 0,
 		Multisample,
+		ShadowMap,
 	};
+
+	static enum FrameRenderType {
+		Default_FrameRenderType = 0,
+		ShadowMap_FrameRenderType,
+	};
+
+	inline static const char* optionFrame[] = {
+		"Default",
+		"ShadowMap",
+	};
+
 	FramebufferType type;
 	unsigned int framebufferID;
 	unsigned int textureID;
@@ -66,6 +82,9 @@ private:
 
 class FramebuffersManager {
 public:
+	static unsigned int renderFBO;
+	inline static FBO::FrameRenderType useType = FBO::Default_FrameRenderType;
+
 	static FramebuffersManager& GetInstance() {
 		static FramebuffersManager instance;
 		return instance;
@@ -78,7 +97,13 @@ public:
 
 	size_t GetFramebuffersSize(FBO::FramebufferType type);
 
+
 	void Resize();
+private:
+	inline static FBO::FramebufferType FBOResizeableTpye[] = {
+		FBO::FramebufferType::Framebuffer,
+		FBO::FramebufferType::Multisample
+	};
 };
 
 enum class OtherShaderType {

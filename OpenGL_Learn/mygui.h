@@ -71,6 +71,24 @@ public:
 	void Scene_UI(Scene& scene) {
 		scene.SetSceneGui();
 	}
+
+	void Framebuffers_UI() {
+		auto& framebuffersMgr = FramebuffersManager::GetInstance();
+		static int selectedOption = FBO::Default_FrameRenderType;
+		int optionCount = sizeof(FBO::optionFrame) / sizeof(FBO::optionFrame[0]);
+		if (ImGui::Combo("FrameType", &selectedOption, FBO::optionFrame, optionCount)) {
+			switch (selectedOption) {
+			case FBO::FrameRenderType::Default_FrameRenderType:
+				framebuffersMgr.useType = FBO::FrameRenderType::Default_FrameRenderType;
+				SHADOW_MAP_SHOW = false;
+				break;
+			case FBO::FrameRenderType::ShadowMap_FrameRenderType:
+				framebuffersMgr.useType = FBO::FrameRenderType::ShadowMap_FrameRenderType;
+				SHADOW_MAP_SHOW = true;
+				break;
+			}
+		}
+	}
 private:
 	MyGui() = default;
 };

@@ -21,6 +21,7 @@ public:
 		Outline,
 		Default,
 		Diffuse,
+		Shadow,
 		//StartGeometryShaderIndex
 		Explode,
 		NormalLines,
@@ -58,12 +59,12 @@ private:
 		"mirror",
 		"outline",
 		"default",
-		"diffuse"
+		"diffuse",
+		"shadow",
 	};
 	std::vector<std::string> geometryShaderNames = {
 		"explode",
 		"normal",
-		
 	};
 	ShaderManager() = default;
 };

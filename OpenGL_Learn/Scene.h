@@ -91,18 +91,28 @@ public:
 	SkyboxSource skyboxSource;
 	Camera* camera_ptr = nullptr;
 
+	FBO* defaultFBO;
+	FBO* MSAAFBO;
+
 	Scene(Camera* camera,const unsigned int& width,const unsigned int& height) {
 		camera_ptr = camera;
 		lightSource.pointLightVAO = GetPointLightVAO();
+		defaultFBO = new FBO(FBO::Framebuffer);
+		MSAAFBO = new FBO(FBO::Multisample);
+		FramebuffersManager::GetInstance().GenFBO(defaultFBO);
+		FramebuffersManager::GetInstance().GenFBO(MSAAFBO);
 	}
 	void DrawPointLights();
 	void DrawOpaqueModels();
 	void DrawTransparentModels();
 	void Draw();
 	void SetLightUniforms(Shader& shader);
+	unsigned int SetShadowMap(Shader& shader);
 	void DrawSkybox();
 	void DrawOutlines();
 	void DrawNormalLines();
+	
+	void DrawShadowMap();
 
 	void SetSceneGui();
 
@@ -160,6 +170,8 @@ public:
 		glEnableVertexAttribArray(0);
 		return VAO;
 	}
+
+	unsigned int GetNeedShowFramebuffer();
 private:
 	glm::mat4 view;
 	glm::mat4 projection;

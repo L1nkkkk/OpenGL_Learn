@@ -21,6 +21,9 @@ struct Vertex {
 	glm::vec3 Position;
 	glm::vec3 Normal;
 	glm::vec2 TexCoords;
+	Vertex() = default;
+	Vertex(glm::vec3 Pos,glm::vec3 Nor,glm::vec2 Tex):
+		Position(Pos),Normal(Nor),TexCoords(Tex){}
 };
 
 struct Texture {
@@ -122,6 +125,7 @@ public:
 	std::vector<Vertex> vertices;
 	std::vector<unsigned int> indices;
 	Material material;
+	unsigned int start_tex_index;
 
 	Mesh(std::vector<Vertex> vertices, 
 		 std::vector<unsigned int> indices, 
@@ -170,7 +174,7 @@ public:
 		localCenter = CalculateLocalCenter();
 		setModelMatrix(matrix);
 	}
-	void Draw(Shader& shader);
+	void Draw(Shader& shader, unsigned int start_tex_index = 0);
 	glm::mat4 modelMatrix = glm::mat4(1.0f);
 	void setModelMatrix(glm::mat4 matrix) {
 		modelMatrix = matrix;

@@ -7,6 +7,7 @@ Mesh::Mesh(std::vector<Vertex> vertices,
 	this->vertices = vertices;
 	this->indices = indices;
 	this->material = material;
+	this->start_tex_index = 0;
 	setupMesh();
 }
 
@@ -44,12 +45,12 @@ void Mesh::Draw(Shader& shader)
 
 	unsigned int diffuseNr = 1;
 	unsigned int specularNr = 1;
-	unsigned int textureCount = 0;
+	unsigned int textureCount = start_tex_index;
 	for (unsigned int i = 0; i < material.diffuseTextures.size(); ++i) {
-		glActiveTexture(GL_TEXTURE0 + textureCount++);
+		glActiveTexture(GL_TEXTURE0 + textureCount);
 		std::string number;
 		number = std::to_string(diffuseNr++);
-		shader.setInt(("texture_diffuse" + number).c_str(), i);
+		shader.setInt(("texture_diffuse" + number).c_str(), textureCount++);
 		if(GAMMA_CORRECTION)
 			glBindTexture(GL_TEXTURE_2D, material.diffuseTextures[i].textureGammaID);
 		else
@@ -57,10 +58,10 @@ void Mesh::Draw(Shader& shader)
 	}
 
 	for (unsigned int i = 0; i < material.specularTextures.size(); ++i) {
-		glActiveTexture(GL_TEXTURE0 + textureCount++);
+		glActiveTexture(GL_TEXTURE0 + textureCount);
 		std::string number;
 		number = std::to_string(specularNr++);
-		shader.setInt(("texture_specular" + number).c_str(), i);
+		shader.setInt(("texture_specular" + number).c_str(), textureCount++);
 		glBindTexture(GL_TEXTURE_2D, material.specularTextures[i].textureID);
 	}
 
@@ -70,9 +71,10 @@ void Mesh::Draw(Shader& shader)
 	glBindVertexArray(0);
 }
 
-void Model::Draw(Shader& shader)
+void Model::Draw(Shader& shader, unsigned int start_tex_index )
 {
 	for (unsigned int i = 0; i < meshes.size(); ++i) {
+		meshes[i].start_tex_index = start_tex_index;
 		meshes[i].Draw(shader);
 	}
 }
