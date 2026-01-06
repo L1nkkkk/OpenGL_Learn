@@ -3,8 +3,8 @@
 void ShaderManager::Init() {
 	//load Shaders
 	for (int i = 0; i < shaderNames.size(); ++i) {
-		std::string vertexPath = "shaders/" + shaderNames[i] + "Vertex.vs";
-		std::string fragmentPath = "shaders/" + shaderNames[i] + "Fragment.fs";
+		std::string vertexPath = "shaders/" + shaderNames[i] + "Vertex.glsl";
+		std::string fragmentPath = "shaders/" + shaderNames[i] + "Fragment.glsl";
 		Shader* shader = new Shader(vertexPath.c_str(), fragmentPath.c_str());
 		shaderMap[shaderNames[i]] = shader;
 		shader2Idx[shader] = i;
@@ -12,9 +12,9 @@ void ShaderManager::Init() {
 	}
 	//load Geometry Shaders
 	for (int i = 0; i < geometryShaderNames.size(); ++i) {
-		std::string vertexPath = "shaders/" + geometryShaderNames[i] + "Vertex.vs";
-		std::string geometryPath = "shaders/" + geometryShaderNames[i] + "Geometry.gs";
-		std::string fragmentPath = "shaders/" + geometryShaderNames[i] + "Fragment.fs";
+		std::string vertexPath = "shaders/" + geometryShaderNames[i] + "Vertex.glsl";
+		std::string geometryPath = "shaders/" + geometryShaderNames[i] + "Geometry.glsl";
+		std::string fragmentPath = "shaders/" + geometryShaderNames[i] + "Fragment.glsl";
 		Shader* shader = new GeometryShader(vertexPath.c_str(), geometryPath.c_str(), fragmentPath.c_str());
 		//std::cout << shader << std::endl;
 		shaderMap[geometryShaderNames[i]] = shader;
