@@ -147,12 +147,14 @@ public:
 		rotation = glm::vec3(0.0f);
 		loadModel(path);
 		localCenter = CalculateLocalCenter();
+		name = "model" + std::to_string(count++);
 	}
 	Model(std::string path,Shader) {
 		position = glm::vec3(0.0f);
 		rotation = glm::vec3(0.0f);
 		loadModel(path);
 		localCenter = CalculateLocalCenter();
+		name = "model" + std::to_string(count++);
 	}
 	Model(std::string path, glm::mat4 matrix) {
 		position = glm::vec3(0.0f);
@@ -160,12 +162,14 @@ public:
 		loadModel(path);
 		localCenter = CalculateLocalCenter();
 		setModelMatrix(matrix);
+		name = "model" + std::to_string(count++);
 	}
 	Model(std::vector<Mesh> inputMeshes) {
 		position = glm::vec3(0.0f);
 		rotation = glm::vec3(0.0f);
 		meshes = inputMeshes;
 		localCenter = CalculateLocalCenter();
+		name = "model" + std::to_string(count++);
 	}
 	Model(std::vector<Mesh> inputMeshes, glm::mat4 matrix) {
 		position = glm::vec3(0.0f);
@@ -173,6 +177,7 @@ public:
 		meshes = inputMeshes;
 		localCenter = CalculateLocalCenter();
 		setModelMatrix(matrix);
+		name = "model" + std::to_string(count++);
 	}
 	void Draw(Shader& shader, unsigned int start_tex_index = 0);
 	glm::mat4 modelMatrix = glm::mat4(1.0f);
@@ -228,11 +233,21 @@ public:
 		return GAMMA_CORRECTION?textures_loaded[index].textureGammaID: textures_loaded[index].textureID;
 	}
 
+	std::string GetName() {
+		return name;
+	}
+
+	void SetName(std::string name) {
+		this->name = name;
+	}
+
 private:
 	std::vector<Texture> textures_loaded;
 	std::vector<Mesh> meshes;
 	std::string directory;
 	glm::vec3 localCenter;
+	std::string name;
+	inline static unsigned int count = 0;
 
 	void loadModel(std::string path);
 	Mesh processMesh(aiMesh* mesh, const aiScene* scene);

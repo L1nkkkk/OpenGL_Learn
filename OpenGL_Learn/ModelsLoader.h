@@ -19,6 +19,7 @@ void LoadModels(Scene& scene) {
 	object->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
 	object->AddOtherShader(OtherShaderType::normalLines, shaderManager.GetShader(ShaderManager::NormalLines));
 	scene.modelSource.AddOpaqueModel(shaderManager.GetShader(ShaderManager::Phong), object);
+	object->SetName("saki");
 	//Load PointLight
 	
 	//scene.lightSource.AddPointLight(PointLight(pointLightPositions[0], glm::vec3(0.05f), glm::vec3(0.8f), glm::vec3(1.0f)));
@@ -89,4 +90,5 @@ void LoadModels(Scene& scene) {
 
 	auto plane = std::make_shared<Model>(planeMeshes);
 	scene.modelSource.AddOpaqueModel(shaderManager.GetShader(ShaderManager::Phong), plane);
+	plane->SetName("plane");
 }

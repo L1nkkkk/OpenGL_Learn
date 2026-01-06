@@ -367,7 +367,7 @@ void Scene::SetSceneGui()
         if (ImGui::TreeNode("Opacity Models")) {
             for (const auto& [shader, models] : modelSource.opaqueModelsMap) {
                 for (size_t i = 0; i < models.size(); ++i) {
-                    std::string label = "Opaque Model " + std::to_string(i);
+                    std::string label = "Opaque Model: " + models[i]->GetName();
                     auto model = models[i];
                     if (ImGui::TreeNode(label.c_str())) {
                         ImGui::DragFloat3("Position", &model->position[0], 0.1f);
@@ -415,21 +415,21 @@ void Scene::SetSceneGui()
 			ImGui::TreePop();
         }
         if (ImGui::TreeNode("Transparent Models")) {
-            for (size_t i = 0; i < modelSource.transparentModels.size(); ++i) {
-                std::string label = "Transparent Model " + std::to_string(i);
+            for (auto& [model,shader] : modelSource.transparentModels) {
+                std::string label = "Transparent Model: " + model->GetName();
                 if (ImGui::TreeNode(label.c_str())) {
-                    ImGui::DragFloat3("Position", &modelSource.transparentModels[i].first->position[0], 0.1f);
-                    ImGui::DragFloat3("Rotation", &modelSource.transparentModels[i].first->rotation[0], 0.5f);
-                    ImGui::DragFloat3("Scale", &modelSource.transparentModels[i].first->scale[0], 0.01f, 0.01f, 10.0f);
+                    ImGui::DragFloat3("Position", &model->position[0], 0.1f);
+                    ImGui::DragFloat3("Rotation", &model->rotation[0], 0.5f);
+                    ImGui::DragFloat3("Scale", &model->scale[0], 0.01f, 0.01f, 10.0f);
                     if (ImGui::TreeNode("Other Shader Use")) {
-                        for (auto& [key, value] : modelSource.transparentModels[i].first->otherShaderUse)
+                        for (auto& [key, value] : model->otherShaderUse)
                         {
                             ImGui::Checkbox(OtherShader::OtherShaderTypeToString(static_cast<OtherShaderType>(key)).c_str(), &value);
                         }
                         ImGui::TreePop();
                     }
-                    ImGui::DragFloat("Outline Width", &modelSource.transparentModels[i].first->outlineWidth, 0.01f, 0.0f, 0.5f);
-                    ImGui::ColorEdit3("Outline Color", &modelSource.transparentModels[i].first->outlineColor[0]);
+                    ImGui::DragFloat("Outline Width", &model->outlineWidth, 0.01f, 0.0f, 0.5f);
+                    ImGui::ColorEdit3("Outline Color", &model->outlineColor[0]);
                     ImGui::TreePop();
                 }
             }
