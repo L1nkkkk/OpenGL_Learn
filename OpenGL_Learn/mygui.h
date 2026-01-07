@@ -89,6 +89,28 @@ public:
 			}
 		}
 	}
+
+	void Shadow_UI() {
+		static int selectedOption = ShadowProperty::Default;
+		int optionCount = sizeof(ShadowProperty::ShadowTypeStrs) / sizeof(ShadowProperty::ShadowTypeStrs[0]);
+		if (ImGui::CollapsingHeader("Shadow Settings")) {
+			if (ImGui::Combo("ShadowType", &selectedOption, ShadowProperty::ShadowTypeStrs, optionCount)) {
+				switch (selectedOption) {
+				case ShadowProperty::Default:
+					SHADOW_TYPE = ShadowProperty::Default;
+					break;
+				case ShadowProperty::PCF:
+					SHADOW_TYPE = ShadowProperty::PCF;				
+					break;
+				case ShadowProperty::PCSS:
+					SHADOW_TYPE = ShadowProperty::PCSS;
+					break;
+				}
+			}
+		}
+		ImGui::DragInt("shadow samples", &SHADOW_PCF_SAMPLE_NUM, 1.0, 16, 512);
+		ImGui::DragInt("shadow rings", &SHADOW_PCF_RING_NUM, 1.0, 5, 20);
+	}
 private:
 	MyGui() = default;
 };

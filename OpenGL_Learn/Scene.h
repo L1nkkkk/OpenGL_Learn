@@ -23,7 +23,7 @@ struct LightSource {
 
 	Shader pointLightShader;
 	LightSource()
-		: pointLightShader("LightVertexShader.vs", "LightFragmentShader.fs") {
+		: pointLightShader("LightVertexShader.glsl", "LightFragmentShader.glsl") {
 	}
 	void AddPointLight(const PointLight& pointLight) {
 		pointLights.push_back(pointLight);

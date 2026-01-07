@@ -292,6 +292,7 @@ int main() {
 		//set system configUI
 		SetGui();
 		mygui.Begin();
+		mygui.Shadow_UI();
 		mygui.Gamma_UI();
 		mygui.Framebuffers_UI();
 		mygui.Anti_Aliasing_UI();

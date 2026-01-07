@@ -165,6 +165,9 @@ unsigned int Scene::SetShadowMap(Shader& shader) {
             glBindTexture(GL_TEXTURE_2D, dirLight.shadowFBO->textureID);
             shader.setInt(("shadowMap" + number).c_str(), map2d-1);
             shader.setMat4("lightSpaceMatrix", dirLight.GetLightSpaceMatrix());
+            shader.setInt("shadowSampleNum", SHADOW_PCF_SAMPLE_NUM);
+            shader.setInt("shadowSampleRings", SHADOW_PCF_RING_NUM);
+            shader.setInt("shadowType", SHADOW_TYPE);
             ++map2d;
         }
     }

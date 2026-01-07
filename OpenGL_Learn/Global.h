@@ -12,6 +12,9 @@ extern int SCREEN_HEIGHT;
 extern int SHADOW_WIDTH;
 extern int SHADOW_HEIGHT;
 extern bool SHADOW_MAP_SHOW;
+extern int SHADOW_PCF_SAMPLE_NUM;
+extern int SHADOW_PCF_RING_NUM;
+extern int SHADOW_TYPE;
 
 extern float GAMMA_VALUE;
 extern bool GAMMA_CORRECTION;
@@ -126,3 +129,16 @@ public:
 
 	inline static float normalLineMagnitude = 0.01;
 };
+
+namespace ShadowProperty {
+	enum ShadowType {
+		Default = 0,
+		PCF,
+		PCSS,
+	};
+	inline const char* ShadowTypeStrs[] = {
+		"Default",
+		"PCF",
+		"PCSS",
+	};
+}

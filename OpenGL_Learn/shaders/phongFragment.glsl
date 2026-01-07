@@ -57,11 +57,21 @@ uniform Material material;
 
 uniform bool useShadowMap;
 uniform sampler2D shadowMap1;
+uniform int shadowSampleNum;
+uniform int shadowSampleRings;
+uniform int shadowType;
 
-
+#define EPS 1e-5
+#define PI 3.141592653589793
+#define PI2 6.283185307179586
 #define MAX_POINT_LIGHTS 16
 #define MAX_DIR_LIGHTS 16
 #define MAX_SPOT_LIGHTS 16
+#define MAX_SAMPLE_NUM 512
+#define MAX_RINGS_NUM MAX_SAMPLE_NUM
+#define DEFAULT_SHADOW 0
+#define PCF_SHADOW 1
+#define PCSS_SHADOW 2
 
 uniform int NR_POINT_LIGHTS;
 uniform int NR_DIR_LIGHTS;
@@ -69,6 +79,91 @@ uniform int NR_SPOT_LIGHTS;
 uniform PointLight pointLights[MAX_POINT_LIGHTS];
 uniform DirLight dirLights[MAX_DIR_LIGHTS];
 uniform SpotLight spotLights[MAX_SPOT_LIGHTS];
+
+vec2 poissonDisk[MAX_SAMPLE_NUM];
+
+float rand_1to1(float x){
+	return fract(sin(x)*10000.0);
+}
+
+float rand_2to1(vec2 uv){
+	const float a = 12.9898, b = 78.233, c = 43758.5453;
+	float dt = dot( uv.xy, vec2( a,b ) ), sn = mod( dt, PI );
+	return fract(sin(sn) * c);
+}
+
+void poissonDiskSamples( const in vec2 randomSeed ) {
+	int samplesNum = min(shadowSampleNum,MAX_SAMPLE_NUM);
+	float ANGLE_STEP = PI2 * float(min(shadowSampleRings,MAX_RINGS_NUM)) / float(samplesNum);
+	float INV_NUM_SAMPLES = 1.0 / float(samplesNum);
+
+	float angle = rand_2to1( randomSeed ) * PI2;
+	float radius = INV_NUM_SAMPLES;
+	float radiusStep = radius;
+
+	for(int i = 0; i < samplesNum; i ++ ) {
+		poissonDisk[i] = vec2(cos(angle),sin(angle)) * pow(radius,0.75);
+		radius += radiusStep;
+		angle += ANGLE_STEP;
+	}
+}
+
+float PCF(sampler2D shadowMap,vec4 coords,float w_penumbraSize,vec3 normal,vec3 lightDir){
+	if(!useShadowMap) return 0.0;
+	float bias = max(0.05 * (1.0 - dot(normal, lightDir)), 0.005);
+	float shadow = 0.0;
+	vec3 projCoords = coords.xyz/coords.w;
+	projCoords = (projCoords+1.0)* 0.5;
+
+	if(projCoords.z >= 1.0) {
+		return 0.0; // 超出远平面，不在阴影中
+	}
+
+	float currentDepth = projCoords.z;
+	poissonDiskSamples(projCoords.xy);
+
+	int shadowSamples = min(shadowSampleNum,MAX_SAMPLE_NUM);
+	float stepth = 64.0/1024.0;
+	for(int i = 0; i < shadowSamples;++i){
+		float pcfDepth = texture(shadowMap, projCoords.xy + poissonDisk[i]*w_penumbraSize*stepth).r;
+		if(currentDepth-bias>pcfDepth) shadow += 1.0;
+	}
+	shadow = shadow/float(shadowSamples);
+	return shadow;
+}
+
+float findBlocker( sampler2D shadowMap,  vec2 uv, float zReceiver ) {
+	float avgBlockerDepth = 0.0;
+	int numBlockers = 0;
+
+	poissonDiskSamples(uv);
+
+	int shadowSamples = min(shadowSampleNum,MAX_SAMPLE_NUM);
+
+	for(int i = 0; i < shadowSamples; ++i) {
+	float pcfDepth =texture(shadowMap, uv + poissonDisk[i] * 0.1).r;
+		if(pcfDepth < zReceiver-EPS) {
+			avgBlockerDepth += pcfDepth;
+			++numBlockers;
+		}
+	}
+
+	if(numBlockers == 0)
+		return zReceiver;
+
+	avgBlockerDepth /= float(numBlockers);
+	return avgBlockerDepth;
+}
+
+float PCSS(sampler2D shadowMap,vec4 coords,vec3 normal,vec3 lightDir){
+	vec3 projCoords = coords.xyz/coords.w;
+	projCoords = (projCoords+1.0)*0.5;
+	float receiverDistance = projCoords.z;
+	float avgBlockerDepth = findBlocker(shadowMap,projCoords.xy,receiverDistance);
+	if(avgBlockerDepth>=1.0) return 0.0;
+	float penumbraSize = (receiverDistance - avgBlockerDepth)  / avgBlockerDepth ;
+	return PCF(shadowMap,coords,penumbraSize,normal,lightDir);
+}
 
 float ShadowCalculation(vec4 fragPosLightSpace,vec3 normal,vec3 lightDir){
 	if(!useShadowMap) return 0.0;
@@ -160,7 +255,17 @@ void main()
 	int spotLightsNum = min(MAX_SPOT_LIGHTS,NR_SPOT_LIGHTS);
 
 	for(int i = 0;i<dirLightsNum;i++){
-		shadow = ShadowCalculation(fs_in.FragPosLightSpace,norm,normalize(-dirLights[i].direction));
+		switch(shadowType){
+			case DEFAULT_SHADOW:
+				shadow = ShadowCalculation(fs_in.FragPosLightSpace,norm,normalize(-dirLights[i].direction));
+				break;
+			case PCF_SHADOW:
+				shadow = PCF(shadowMap1,fs_in.FragPosLightSpace,0.1,norm,normalize(-dirLights[i].direction));
+				break;
+			case PCSS_SHADOW:
+				shadow = PCSS(shadowMap1,fs_in.FragPosLightSpace,norm,normalize(-dirLights[i].direction));
+				break;
+		}
 		results += CalcDirLight(dirLights[i], norm, viewDir,shadow);
 	}
 
