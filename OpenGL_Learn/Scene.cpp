@@ -10,6 +10,9 @@ void Scene::Draw()
     }
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_STENCIL_TEST);
+    glStencilMask(0xFF);
+    glStencilFunc(GL_ALWAYS, 0, 0xFF); 
+    glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
     glClearStencil(0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
@@ -22,6 +25,20 @@ void Scene::Draw()
     DrawTransparentModels();  // 绘制透明物体
     DrawOutlines();      // 最后绘制outline（禁用深度测试，基于stencil buffer绘制）
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void Scene::RenderScene(Shader& shader) {
+    for (auto& [_, opaqueModels] : modelSource.opaqueModelsMap) {
+        for (auto& model : opaqueModels) {
+            shader.setMat4("model", model->getModelMatrix());
+            model->Draw(shader);
+        }
+    }
+
+    for (auto& [model, _] : modelSource.transparentModels) {
+        shader.setMat4("model", model->getModelMatrix());
+        model->Draw(shader);
+    }
 }
 
 void Scene::DrawPointLights()
@@ -42,8 +59,6 @@ void Scene::DrawPointLights()
         glBindVertexArray(lightSource.pointLightVAO);
         glDrawArrays(GL_TRIANGLES, 0, 36);
     }
-    
-    glStencilMask(0xFF); // 恢复stencil写入，供DrawOpaqueModels使用
 }
 
 void Scene::DrawOpaqueModels()
@@ -53,11 +68,16 @@ void Scene::DrawOpaqueModels()
         Shader& ourShader = *(ourshaderPair.first);
 		//std::cout << ourshaderPair.second.size() << std::endl;
         ourShader.use();
-        auto shadowCount = SetShadowMap(ourShader);
-        if(GAMMA_CORRECTION)
+        USED_TEXTURE_NUM = SetShadowMap(ourShader);
+        glActiveTexture(GL_TEXTURE0+ USED_TEXTURE_NUM++);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        if (GAMMA_CORRECTION) {
             glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxSource.textureCubeMap->textureGammaID);
-        else
+        }
+        else {
             glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxSource.textureCubeMap->textureID);
+        }
+        glActiveTexture(GL_TEXTURE0);
         ourShader.setFloat("time", glfwGetTime());
         ourShader.setVec3("viewPos", camera_ptr->cameraPos);
         ourShader.setVec3("color", glm::vec3(0.2f));
@@ -67,16 +87,15 @@ void Scene::DrawOpaqueModels()
 				glStencilMask(0x00); // Disable writing to the stencil buffer
                 glStencilFunc(GL_ALWAYS, 0, 0xFF);
                 ourShader.setMat4("model", model->getModelMatrix());
-                model->Draw(ourShader,shadowCount);
-                glStencilMask(0xFF);
+                model->Draw(ourShader);
             }
             else {
                 // Draw outline
                 glStencilMask(0xFF);
                 glStencilFunc(GL_ALWAYS, 1, 0xFF);
-                glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+                glStencilOp(GL_KEEP, GL_REPLACE, GL_REPLACE);
                 ourShader.setMat4("model", model->getModelMatrix());
-                model->Draw(ourShader,shadowCount);
+                model->Draw(ourShader);
             }
         }
     }
@@ -84,7 +103,6 @@ void Scene::DrawOpaqueModels()
 
 void Scene::DrawTransparentModels()
 {
-    glStencilMask(0x00); // 禁用stencil写入，保护已记录的stencil值
     view = camera_ptr->GetViewMatrix();
     projection = glm::perspective(glm::radians(camera_ptr->fov), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, 0.1f, 100.0f);
     std::sort(modelSource.transparentModels.begin(), modelSource.transparentModels.end(), [this](const auto& a, const auto& b) {
@@ -114,7 +132,6 @@ void Scene::DrawTransparentModels()
         lastShaderPtr->setMat4("model", modelPair.first->getModelMatrix());
 		modelPair.first->Draw(*lastShaderPtr);
     }
-    glStencilMask(0xFF); // 恢复stencil写入（虽然DrawOutlines会再次设置）
 }
 
 void Scene::SetLightUniforms(Shader& shader)
@@ -155,24 +172,31 @@ void Scene::SetLightUniforms(Shader& shader)
 }
 
 unsigned int Scene::SetShadowMap(Shader& shader) {
-    unsigned int shadowMapCount = 0;
-    unsigned int map2d = 1;
-    for (auto& dirLight : lightSource.directionLights) {
-        if (dirLight.useShadowMap) {
-            std::string number;
-            number = std::to_string(map2d);
-            glActiveTexture(GL_TEXTURE0 + shadowMapCount++);
-            glBindTexture(GL_TEXTURE_2D, dirLight.shadowFBO->textureID);
-            shader.setInt(("shadowMap" + number).c_str(), map2d-1);
-            shader.setMat4("lightSpaceMatrix", dirLight.GetLightSpaceMatrix());
-            shader.setInt("shadowSampleNum", SHADOW_PCF_SAMPLE_NUM);
-            shader.setInt("shadowSampleRings", SHADOW_PCF_RING_NUM);
-            shader.setInt("shadowType", SHADOW_TYPE);
-            ++map2d;
-        }
+    int shadowMapCount = 0;
+    shader.setInt("shadowSampleNum", SHADOW_PCF_SAMPLE_NUM);
+    shader.setInt("shadowSampleRings", SHADOW_PCF_RING_NUM);
+    shader.setInt("shadowType", SHADOW_TYPE);
+    for (int i = 0; i < lightSource.directionLights.size(); ++i) {
+        auto& dirLight = lightSource.directionLights[i];
+        shader.setBool("dirLights[" + std::to_string(i) + "].useShadowMap", dirLight.useShadowMap);
+        glActiveTexture(GL_TEXTURE0 + shadowMapCount);
+        glBindTexture(GL_TEXTURE_2D, dirLight.shadowFBO->textureID);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+        shader.setInt("dirLights[" + std::to_string(i) + "].shadowMap", shadowMapCount);
+        shader.setMat4("lightSpaceMatrix", dirLight.GetLightSpaceMatrix());
+        shadowMapCount++;
     }
-    if (shadowMapCount) shader.setBool("useShadowMap", true);
-    else shader.setBool("useShadowMap", false);
+    //TODO
+    for (int i = 0; i < lightSource.pointLights.size(); ++i) {
+        auto& pointLight = lightSource.pointLights[i];
+        shader.setBool("pointLights[" + std::to_string(i) + "].useShadowMap", pointLight.useShadowMap);
+        glActiveTexture(GL_TEXTURE0 + shadowMapCount);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, pointLight.shadowFBO->textureID);
+        shader.setInt("pointLights[" + std::to_string(i) + "].shadowCubeMap", shadowMapCount);
+        shader.setFloat("pointLights[" + std::to_string(i) + "].far_plane", pointLight.far);
+        shadowMapCount++;
+    }
     glActiveTexture(GL_TEXTURE0);
     return shadowMapCount;
 }
@@ -183,12 +207,13 @@ void Scene::DrawSkybox()
 	glStencilMask(0x00); // Disable writing to stencil buffer for skybox
 	skyboxSource.skyboxShader_ptr->use();
     glBindVertexArray(skyboxSource.cubeMapVAO);
-    glActiveTexture(GL_TEXTURE0);
+    glActiveTexture(GL_TEXTURE0+ USED_TEXTURE_NUM);
+    glBindTexture(GL_TEXTURE_2D, 0);
     if (GAMMA_CORRECTION)
         glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxSource.textureCubeMap->textureGammaID);
     else
         glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxSource.textureCubeMap->textureID);
-	skyboxSource.skyboxShader_ptr->setInt("skybox", 0);
+	skyboxSource.skyboxShader_ptr->setInt("skybox", USED_TEXTURE_NUM++);
 	skyboxSource.skyboxShader_ptr->setMat4("skyboxView", glm::mat4(glm::mat3(view))); // Remove translation from the view matrix
     glDrawArrays(GL_TRIANGLES, 0, 36);
     
@@ -271,40 +296,44 @@ void Scene::DrawNormalLines()
     //glStencilMask(0xFF); // Re-enable stencil mask
 }
 
+
+
 void Scene::DrawShadowMap() {
     glCullFace(GL_FRONT);
+    glEnable(GL_DEPTH_TEST);
+    glDisable(GL_STENCIL_TEST);
+    glClearDepth(1.0f);
+    glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+    glStencilMask(0x00);
     auto* shadowShader = ShaderManager::GetInstance().GetShader(ShaderManager::Shadow);
     shadowShader->use();
-    glEnable(GL_DEPTH_TEST);
-    glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
-    for (auto& DirLight : lightSource.directionLights) {
-        if (!DirLight.useShadowMap) {
-            glBindFramebuffer(GL_FRAMEBUFFER, DirLight.shadowFBO->framebufferID);
-            glClearDepth(1.0f);
-            glClear(GL_DEPTH_BUFFER_BIT);
-            continue;
-        }
-        glBindFramebuffer(GL_FRAMEBUFFER, DirLight.shadowFBO->framebufferID);
-        glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-        glClearDepth(1.0f);
+    for (auto& dirLight : lightSource.directionLights) {
+        if (!dirLight.useShadowMap) continue;
+        glBindFramebuffer(GL_FRAMEBUFFER, dirLight.shadowFBO->framebufferID);
         glClear(GL_DEPTH_BUFFER_BIT);
-        glStencilMask(0x00);
-        shadowShader->setMat4("lightSpaceMatrix", DirLight.GetLightSpaceMatrix());
-        for (auto& [_, opaqueModels] : modelSource.opaqueModelsMap) {
-            for (auto& model : opaqueModels) {
-                shadowShader->setMat4("model", model->getModelMatrix());
-                model->Draw(*shadowShader);
-            }
+        shadowShader->setMat4("lightSpaceMatrix", dirLight.GetLightSpaceMatrix());
+        RenderScene(*shadowShader);
+    }
+    
+    
+    auto* shadowCubeShader = ShaderManager::GetInstance().GetShader(ShaderManager::ShadowCube);
+    shadowCubeShader->use();
+    for (auto& pointLight : lightSource.pointLights) {
+        if (!pointLight.useShadowMap) continue;
+        glBindFramebuffer(GL_FRAMEBUFFER, pointLight.shadowFBO->framebufferID);
+        glClear(GL_DEPTH_BUFFER_BIT);
+        auto& lightSpaceMatrices = pointLight.GetLightSpaceMatrices();
+        for (int i = 0; i < 6; ++i) {
+            shadowCubeShader->setMat4("shadowMatrices[" +std::to_string(i) + "]", lightSpaceMatrices[i]);
         }
-
-        for (auto& [model, _] : modelSource.transparentModels) {
-            shadowShader->setMat4("model", model->getModelMatrix());
-            model->Draw(*shadowShader);
-        }
+        shadowCubeShader->setFloat("far_plane", pointLight.far);
+        shadowCubeShader->setVec3("lightPos", pointLight.position);
+        RenderScene(*shadowCubeShader);
     }
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
     glCullFace(GL_BACK);
 }
 
@@ -355,6 +384,9 @@ void Scene::SetSceneGui()
                     ImGui::DragFloat("Constant", &lightSource.pointLights[i].constant, 0.01f, 0.0f, 10.0f);
                     ImGui::DragFloat("Linear", &lightSource.pointLights[i].linear, 0.001f, 0.0f, 1.0f);
                     ImGui::DragFloat("Quadratic", &lightSource.pointLights[i].quadratic, 0.0001f, 0.0f, 1.0f);
+                    ImGui::Checkbox("useShadow", &lightSource.pointLights[i].useShadowMap);
+                    ImGui::DragFloat("nearPlane", &lightSource.pointLights[i].near, 0.1f, 0.1f, 5.0f);
+                    ImGui::DragFloat("farPlane", &lightSource.pointLights[i].far, 0.1f, 5.0f, 100.0f);
                     ImGui::TreePop();
                 }
             }

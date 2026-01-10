@@ -5,6 +5,9 @@ struct DirLight{
 	vec3 ambient;
 	vec3 diffuse;
 	vec3 specular;
+
+	sampler2D shadowMap;
+	bool useShadowMap;
 };
 
 struct PointLight{
@@ -17,6 +20,10 @@ struct PointLight{
 	vec3 ambient;
 	vec3 diffuse;
 	vec3 specular;
+
+	float far_plane;
+	samplerCube shadowCubeMap;
+	bool useShadowMap;
 };
 
 struct SpotLight{
@@ -55,8 +62,6 @@ uniform sampler2D texture_specular1;
 
 uniform Material material;
 
-uniform bool useShadowMap;
-uniform sampler2D shadowMap1;
 uniform int shadowSampleNum;
 uniform int shadowSampleRings;
 uniform int shadowType;
@@ -67,7 +72,7 @@ uniform int shadowType;
 #define MAX_POINT_LIGHTS 16
 #define MAX_DIR_LIGHTS 16
 #define MAX_SPOT_LIGHTS 16
-#define MAX_SAMPLE_NUM 512
+#define MAX_SAMPLE_NUM 256
 #define MAX_RINGS_NUM MAX_SAMPLE_NUM
 #define DEFAULT_SHADOW 0
 #define PCF_SHADOW 1
@@ -92,6 +97,20 @@ float rand_2to1(vec2 uv){
 	return fract(sin(sn) * c);
 }
 
+void VecToSpherial(vec3 dir,out float phi,out float theta){
+	phi = acos(clamp(dir.z,-1.0,1.0));
+	theta = atan(dir.y,dir.x);
+}
+
+vec3 SphericalToVec(float phi, float theta) {
+    float sinPhi = sin(phi);
+    return vec3(
+        sinPhi * cos(theta),
+        sinPhi * sin(theta),
+        cos(phi)
+    );
+}
+
 void poissonDiskSamples( const in vec2 randomSeed ) {
 	int samplesNum = min(shadowSampleNum,MAX_SAMPLE_NUM);
 	float ANGLE_STEP = PI2 * float(min(shadowSampleRings,MAX_RINGS_NUM)) / float(samplesNum);
@@ -108,9 +127,9 @@ void poissonDiskSamples( const in vec2 randomSeed ) {
 	}
 }
 
-float PCF(sampler2D shadowMap,vec4 coords,float w_penumbraSize,vec3 normal,vec3 lightDir){
-	if(!useShadowMap) return 0.0;
-	float bias = max(0.05 * (1.0 - dot(normal, lightDir)), 0.005);
+float PCF(vec4 coords,float w_penumbraSize,vec3 normal,DirLight light){
+	if(!light.useShadowMap) return 0.0;
+	float bias = max(0.05 * (1.0 - dot(normal, normalize(-light.direction))), 0.005);
 	float shadow = 0.0;
 	vec3 projCoords = coords.xyz/coords.w;
 	projCoords = (projCoords+1.0)* 0.5;
@@ -125,12 +144,37 @@ float PCF(sampler2D shadowMap,vec4 coords,float w_penumbraSize,vec3 normal,vec3 
 	int shadowSamples = min(shadowSampleNum,MAX_SAMPLE_NUM);
 	float stepth = 64.0/1024.0;
 	for(int i = 0; i < shadowSamples;++i){
-		float pcfDepth = texture(shadowMap, projCoords.xy + poissonDisk[i]*w_penumbraSize*stepth).r;
+		float pcfDepth = texture(light.shadowMap, projCoords.xy + poissonDisk[i]*w_penumbraSize*stepth).r;
 		if(currentDepth-bias>pcfDepth) shadow += 1.0;
 	}
 	shadow = shadow/float(shadowSamples);
 	return shadow;
 }
+
+float PCF(vec3 fragPos,float w_penumbraSize,vec3 normal,PointLight light){
+	if(!light.useShadowMap) return 0.0;
+	vec3 direction = normalize(fragPos - light.position);
+	float bias = max(0.05 * (1.0 - dot(normal, -direction)), 0.005);
+	float shadow = 0.0;
+	float currentDepth = length(fragPos - light.position);\
+	if(currentDepth>light.far_plane) {
+		return 0.0; // 超出远平面，不在阴影中
+	}
+	poissonDiskSamples(direction.xy);
+	vec2 sphericalCoords;
+	VecToSpherial(direction,sphericalCoords.x,sphericalCoords.y);
+	int shadowSamples = min(shadowSampleNum,MAX_SAMPLE_NUM);
+	float stepth = 64.0/1024.0;
+	for(int i = 0; i < shadowSamples;++i){
+		vec2 sampleCoords = sphericalCoords + poissonDisk[i]*w_penumbraSize*stepth;
+		float pcfDepth = texture(light.shadowCubeMap, SphericalToVec(sampleCoords.x,sampleCoords.y)).r;
+		pcfDepth *= light.far_plane;
+		if(currentDepth-bias>pcfDepth) shadow += 1.0;
+	}
+	shadow = shadow/float(shadowSamples);
+	return shadow;
+}
+
 
 float findBlocker( sampler2D shadowMap,  vec2 uv, float zReceiver ) {
 	float avgBlockerDepth = 0.0;
@@ -139,15 +183,13 @@ float findBlocker( sampler2D shadowMap,  vec2 uv, float zReceiver ) {
 	poissonDiskSamples(uv);
 
 	int shadowSamples = min(shadowSampleNum,MAX_SAMPLE_NUM);
-
 	for(int i = 0; i < shadowSamples; ++i) {
-	float pcfDepth =texture(shadowMap, uv + poissonDisk[i] * 0.1).r;
+		float pcfDepth =texture(shadowMap, uv + poissonDisk[i] * 0.1).r;
 		if(pcfDepth < zReceiver-EPS) {
 			avgBlockerDepth += pcfDepth;
 			++numBlockers;
 		}
 	}
-
 	if(numBlockers == 0)
 		return zReceiver;
 
@@ -155,22 +197,55 @@ float findBlocker( sampler2D shadowMap,  vec2 uv, float zReceiver ) {
 	return avgBlockerDepth;
 }
 
-float PCSS(sampler2D shadowMap,vec4 coords,vec3 normal,vec3 lightDir){
+float findBlocker( samplerCube shadowMap, vec3 dir, float zReceiver ) {
+	float avgBlockerDepth = 0.0;
+	int numBlockers = 0;
+	vec2 sph;
+	VecToSpherial(dir,sph.x,sph.y);
+	poissonDiskSamples(sph);
+
+	int shadowSamples = min(shadowSampleNum,MAX_SAMPLE_NUM);
+	for(int i = 0; i < shadowSamples; ++i) {
+		vec2 sampleCoords = sph + poissonDisk[i]*0.1;
+		float pcfDepth =texture(shadowMap, SphericalToVec(sampleCoords.x,sampleCoords.y)).r;
+		if(pcfDepth < zReceiver-EPS) {
+			avgBlockerDepth += pcfDepth;
+			++numBlockers;
+		}
+	}
+	if(numBlockers == 0)
+		return zReceiver;
+
+	avgBlockerDepth /= float(numBlockers);
+	return avgBlockerDepth;
+}
+
+float PCSS(vec4 coords,vec3 normal,DirLight light){
+	if(!light.useShadowMap) return 0.0;
 	vec3 projCoords = coords.xyz/coords.w;
 	projCoords = (projCoords+1.0)*0.5;
 	float receiverDistance = projCoords.z;
-	float avgBlockerDepth = findBlocker(shadowMap,projCoords.xy,receiverDistance);
+	float avgBlockerDepth = findBlocker(light.shadowMap,projCoords.xy,receiverDistance);
 	if(avgBlockerDepth>=1.0) return 0.0;
 	float penumbraSize = (receiverDistance - avgBlockerDepth)  / avgBlockerDepth ;
-	return PCF(shadowMap,coords,penumbraSize,normal,lightDir);
+	return PCF(coords,penumbraSize,normal,light);
 }
 
-float ShadowCalculation(vec4 fragPosLightSpace,vec3 normal,vec3 lightDir){
-	if(!useShadowMap) return 0.0;
-	float bias = max(0.05 * (1.0 - dot(normal, lightDir)), 0.005);
+float PCSS(vec3 fragPos,vec3 normal,PointLight light){
+	if(!light.useShadowMap) return 0.0;
+	float receiverDistance = length(fragPos - light.position)/light.far_plane;
+	float avgBlockerDepth = findBlocker(light.shadowCubeMap,normalize(fragPos-light.position),receiverDistance);
+	if(avgBlockerDepth>=1.0) return 0.0;
+	float penumbraSize = (receiverDistance - avgBlockerDepth)  / avgBlockerDepth ;
+	return PCF(fragPos,penumbraSize,normal,light);
+}
+
+float ShadowCalculation(vec4 fragPosLightSpace,vec3 normal,DirLight light){
+	if(!light.useShadowMap) return 0.0;
+	float bias = max(0.05 * (1.0 - dot(normal, normalize(-light.direction))), 0.005);
 	vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
 	projCoords = projCoords * 0.5 + 0.5;
-	float closestDepth = texture(shadowMap1, projCoords.xy).r;
+	float closestDepth = texture(light.shadowMap, projCoords.xy).r;
 	if(projCoords.z > 1.0) {
         return 0.0;
     }
@@ -178,9 +253,23 @@ float ShadowCalculation(vec4 fragPosLightSpace,vec3 normal,vec3 lightDir){
 	return currentDepth - bias > closestDepth ? 1.0 : 0.0;
 }
 
+float ShadowCalculation(vec3 fragPos,PointLight light){
+	if(!light.useShadowMap) return 0.0;
+    vec3 fragToLight = fragPos - light.position;
+    float closestDepth = texture(light.shadowCubeMap, fragToLight).r;
+    closestDepth *= light.far_plane;
+    float currentDepth = length(fragToLight);
+    float bias = 0.05; 
+    float shadow = currentDepth -  bias > closestDepth ? 1.0 : 0.0;
+
+    return shadow;
+}
+
 vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir,float shadow)
 {
 	vec3 color = texture(texture_diffuse1, fs_in.TexCoords).rgb;
+	//After this below, BUG
+	
 	vec3 lightDir = normalize(-light.direction);
 	// diffuse shading
 	float diff = max(dot(normal, lightDir), 0.0);
@@ -191,7 +280,7 @@ vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir,float shadow)
 	vec3 ambient = light.ambient * material.ambient;
 	vec3 diffuse = light.diffuse * material.diffuse * diff;
 	vec3 specular = light.specular * material.specular * spec;
-	return (ambient + (1.0-shadow)*(diffuse + specular))*color;
+	return (ambient + (1.0-shadow)*(diffuse + specular))* color;
 }
 
 vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir,float shadow)
@@ -213,7 +302,7 @@ vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir,fl
 	ambient *= attenuation;
 	diffuse *= attenuation;
 	specular *= attenuation;
-	return (ambient + (1.0-shadow)*(diffuse + specular))*color;
+	return (ambient + (1.0-shadow)*(diffuse + specular)) * color;
 }
 
 vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir,float shadow)
@@ -246,35 +335,48 @@ void main()
 {
 	vec3 norm = normalize(fs_in.Normal);
 	vec3 viewDir = normalize(viewPos - fs_in.FragPos);
-	float shadow;
+	float shadow = 0.0;
 	
 	vec3 results = vec3(0);
 
 	int pointLightsNum = min(MAX_POINT_LIGHTS,NR_POINT_LIGHTS);
 	int dirLightsNum =  min(MAX_DIR_LIGHTS,NR_DIR_LIGHTS);
 	int spotLightsNum = min(MAX_SPOT_LIGHTS,NR_SPOT_LIGHTS);
-
+	
 	for(int i = 0;i<dirLightsNum;i++){
 		switch(shadowType){
 			case DEFAULT_SHADOW:
-				shadow = ShadowCalculation(fs_in.FragPosLightSpace,norm,normalize(-dirLights[i].direction));
+				shadow = ShadowCalculation(fs_in.FragPosLightSpace,norm,dirLights[i]);
 				break;
 			case PCF_SHADOW:
-				shadow = PCF(shadowMap1,fs_in.FragPosLightSpace,0.1,norm,normalize(-dirLights[i].direction));
+				shadow = PCF(fs_in.FragPosLightSpace,0.1,norm,dirLights[i]);
 				break;
 			case PCSS_SHADOW:
-				shadow = PCSS(shadowMap1,fs_in.FragPosLightSpace,norm,normalize(-dirLights[i].direction));
+				shadow = PCSS(fs_in.FragPosLightSpace,norm,dirLights[i]);
 				break;
 		}
 		results += CalcDirLight(dirLights[i], norm, viewDir,shadow);
 	}
 
 	for(int i = 0;i<pointLightsNum;i++){
-		results += CalcPointLight(pointLights[i], norm, fs_in.FragPos, viewDir,0);
+		switch(shadowType){
+			case DEFAULT_SHADOW:
+				shadow = ShadowCalculation(fs_in.FragPos,pointLights[i]);
+				break;
+			case PCF_SHADOW:
+				shadow = PCF(fs_in.FragPos,0.1,norm,pointLights[i]);
+				break;
+			case PCSS_SHADOW:
+				shadow = PCSS(fs_in.FragPos,norm,pointLights[i]);
+				break;
+		}
+
+		results += CalcPointLight(pointLights[i], norm, fs_in.FragPos, viewDir,shadow);
 	}
 
 	for(int i = 0;i<spotLightsNum;i++){
 		results += CalcSpotLight(spotLights[i], norm, fs_in.FragPos, viewDir,0);
-	}       
+	}
 	FragColor = vec4(results, 1.0);
+	return;
 }

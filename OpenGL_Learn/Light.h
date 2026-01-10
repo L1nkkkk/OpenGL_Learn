@@ -1,6 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <array>
 #include "GLobal.h"
 
 struct PointLight {
@@ -13,11 +14,42 @@ struct PointLight {
 	float linear;
 	float quadratic;
 
+	bool useShadowMap;
+	FBO* shadowFBO;
+	
+	float near = 1.0f;
+	float far = 25.0f;
+	glm::mat4 shadowProj;
+	std::array<glm::mat4, 6> lightSpaceMatrices;
+
 	PointLight(const glm::vec3& pos, const glm::vec3& amb, const glm::vec3& diff, const glm::vec3& spec)
 		: position(pos), ambient(amb), diffuse(diff), specular(spec) {
 		constant = 1.0f;
 		linear = 0.09f;
 		quadratic = 0.032f;
+
+		shadowFBO = new FBO(FBO::ShadowBox);
+		FramebuffersManager::GetInstance().GenFBO(shadowFBO);
+		useShadowMap = false;
+	}
+
+	std::array<glm::mat4, 6>& GetLightSpaceMatrices() {
+		shadowProj = glm::perspective(glm::radians(90.0f), (float)SHADOW_WIDTH / (float)SHADOW_HEIGHT, near, far);
+
+		lightSpaceMatrices[0] = (shadowProj *
+			glm::lookAt(position, position + glm::vec3(1.0, 0.0, 0.0), glm::vec3(0.0, -1.0, 0.0)));
+		lightSpaceMatrices[1] = (shadowProj *
+			glm::lookAt(position, position + glm::vec3(-1.0, 0.0, 0.0), glm::vec3(0.0, -1.0, 0.0)));
+		lightSpaceMatrices[2] = (shadowProj *
+			glm::lookAt(position, position + glm::vec3(0.0, 1.0, 0.0), glm::vec3(0.0, 0.0, 1.0)));
+		lightSpaceMatrices[3] = (shadowProj *
+			glm::lookAt(position, position + glm::vec3(0.0, -1.0, 0.0), glm::vec3(0.0, 0.0, -1.0)));
+		lightSpaceMatrices[4] = (shadowProj *
+			glm::lookAt(position, position + glm::vec3(0.0, 0.0, 1.0), glm::vec3(0.0, -1.0, 0.0)));
+		lightSpaceMatrices[5] = (shadowProj *
+			glm::lookAt(position, position + glm::vec3(0.0, 0.0, -1.0), glm::vec3(0.0, -1.0, 0.0)));
+
+		return lightSpaceMatrices;
 	}
 };
 

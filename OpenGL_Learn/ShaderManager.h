@@ -25,7 +25,7 @@ public:
 		//StartGeometryShaderIndex
 		Explode,
 		NormalLines,
-		
+		ShadowCube,
 	};
 
 	static enum UniformBufferType {
@@ -65,6 +65,7 @@ private:
 	std::vector<std::string> geometryShaderNames = {
 		"explode",
 		"normal",
+		"shadowCube",
 	};
 	ShaderManager() = default;
 };

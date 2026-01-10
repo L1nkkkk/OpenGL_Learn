@@ -102,6 +102,8 @@ public:
 		FramebuffersManager::GetInstance().GenFBO(defaultFBO);
 		FramebuffersManager::GetInstance().GenFBO(MSAAFBO);
 	}
+	void RenderScene(Shader&);
+
 	void DrawPointLights();
 	void DrawOpaqueModels();
 	void DrawTransparentModels();

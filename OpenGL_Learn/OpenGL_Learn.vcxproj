@@ -190,6 +190,9 @@
     <None Include="shaders\phongVertex.glsl" />
     <None Include="shaders\sceneFragment.glsl" />
     <None Include="shaders\sceneVertex.glsl" />
+    <None Include="shaders\shadowCubeFragment.glsl" />
+    <None Include="shaders\shadowCubeGeometry.glsl" />
+    <None Include="shaders\shadowCubeVertex.glsl" />
     <None Include="shaders\shadowFragment.glsl" />
     <None Include="shaders\shadowVertex.glsl" />
     <None Include="shaders\skyboxFragment.glsl" />

@@ -89,6 +89,7 @@ void LoadModels(Scene& scene) {
 	planeMeshes.emplace_back(planeVertices, planeIndices, planeMaterial);
 
 	auto plane = std::make_shared<Model>(planeMeshes);
+	plane->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
 	scene.modelSource.AddOpaqueModel(shaderManager.GetShader(ShaderManager::Phong), plane);
 	plane->SetName("plane");
 }

@@ -9,6 +9,8 @@
 extern int SCREEN_WIDTH;
 extern int SCREEN_HEIGHT;
 
+extern int USED_TEXTURE_NUM;
+
 extern int SHADOW_WIDTH;
 extern int SHADOW_HEIGHT;
 extern bool SHADOW_MAP_SHOW;
@@ -25,16 +27,19 @@ public:
 		Framebuffer = 0,
 		Multisample,
 		ShadowMap,
+		ShadowBox,
 	};
 
 	static enum FrameRenderType {
 		Default_FrameRenderType = 0,
 		ShadowMap_FrameRenderType,
+		ShadowBox_FrameRenderType,
 	};
 
 	inline static const char* optionFrame[] = {
 		"Default",
 		"ShadowMap",
+		"ShadowBox",
 	};
 
 	FramebufferType type;
