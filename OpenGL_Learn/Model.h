@@ -11,6 +11,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <string>
 #include <vector>
+#include <tuple>
 #include <unordered_map>
 #include "Global.h"
 #include "Shader.h"
@@ -21,6 +22,8 @@ struct Vertex {
 	glm::vec3 Position;
 	glm::vec3 Normal;
 	glm::vec2 TexCoords;
+	glm::vec3 Tangent;
+	glm::vec3 Bitangent;
 	Vertex() = default;
 	Vertex(glm::vec3 Pos,glm::vec3 Nor,glm::vec2 Tex):
 		Position(Pos),Normal(Nor),TexCoords(Tex){}
@@ -44,7 +47,7 @@ struct Material {
 	// 纹理ID（MTL中的map_Kd等）
 	std::vector<Texture> diffuseTextures;    // map_Kd 漫反射纹理
 	std::vector<Texture> specularTextures; // map_Ks 高光纹理
-	std::vector<Texture> bumpTextures; // map_Bump 凹凸纹理
+	std::vector<Texture> normalTextures; // map_Bump 凹凸纹理
 
 	// 构造函数：初始化默认值（匹配MTL默认规则）
 	Material()
@@ -56,7 +59,7 @@ struct Material {
 		opacity = 1.0f;
 		diffuseTextures = {};
 		specularTextures = {};
-		bumpTextures = {};
+		normalTextures = {};
 	}
 };
 
@@ -123,12 +126,12 @@ private:
 class Mesh {
 public:
 	std::vector<Vertex> vertices;
-	std::vector<unsigned int> indices;
+
 	Material material;
 	unsigned int start_tex_index;
 
-	Mesh(std::vector<Vertex> vertices, 
-		 std::vector<unsigned int> indices, 
+	Mesh(std::vector<Vertex> vertices,
+		std::vector<unsigned int> indices,
 		 Material& material);
 	void Draw(Shader& shader);
 
@@ -258,3 +261,7 @@ private:
 };
 
 unsigned int TextureFromFile(const char* path, const std::string& directory,bool alpha = false ,bool gamma = false);
+
+std::vector<Vertex> ComputeTBNVertices(std::vector<Vertex>& vertices, std::vector<unsigned int> indices);
+
+void ComputeTBN(Vertex&, Vertex&, Vertex&);

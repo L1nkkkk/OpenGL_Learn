@@ -69,24 +69,51 @@ void LoadModels(Scene& scene) {
 	//Load Plane
 	std::vector<Vertex> planeVertices;
 	planeVertices.emplace_back(glm::vec3(-5.0f, 0.0f, -5.0f), glm::vec3(0.0f,1.0f,0.0f), glm::vec2(0.0f,0.0f));
-	planeVertices.emplace_back(glm::vec3(5.0f, 0.0f, -5.0f), glm::vec3(0.0f,1.0f,0.0f), glm::vec2(1.0f,0.0f));
-	planeVertices.emplace_back(glm::vec3(-5.0f, 0.0f, 5.0f), glm::vec3(0.0f,1.0f,0.0f), glm::vec2(0.0f,1.0f));
-	planeVertices.emplace_back(glm::vec3(5.0f, 0.0f, 5.0f), glm::vec3(0.0f,1.0f,0.0f), glm::vec2(1.0f,1.0f));
+	planeVertices.emplace_back(glm::vec3(5.0f, 0.0f, -5.0f), glm::vec3(0.0f,1.0f,0.0f), glm::vec2(2.0f,0.0f));
+	planeVertices.emplace_back(glm::vec3(-5.0f, 0.0f, 5.0f), glm::vec3(0.0f,1.0f,0.0f), glm::vec2(0.0f,2.0f));
+	planeVertices.emplace_back(glm::vec3(5.0f, 0.0f, 5.0f), glm::vec3(0.0f,1.0f,0.0f), glm::vec2(2.0f,2.0f));
 	std::vector<unsigned int> planeIndices = {
 		0,1,2,
 		1,3,2
 	};
 	std::vector<Texture> planeTextures;
+	std::vector<Texture> planeNormalTextures;
 	Texture planeTexture;
-	planeTexture.textureID = TextureFromFile("wood.png", "materials/wood", true);
-	planeTexture.textureGammaID = TextureFromFile("wood.png", "materials/wood", true, true);
+	Texture planeNormalTexture;
+	planeTexture.textureID = TextureFromFile("brickwall.jpg", "materials/brickwall", true);
+	glBindTexture(GL_TEXTURE_2D, planeTexture.textureID);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	planeTexture.textureGammaID = TextureFromFile("brickwall.jpg", "materials/brickwall", true, true);
+	glBindTexture(GL_TEXTURE_2D, planeTexture.textureGammaID);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+	glBindTexture(GL_TEXTURE_2D,0);
 	planeTexture.type = "texture_diffuse";
 	planeTextures.push_back(planeTexture);
+
+	planeNormalTexture.textureID = TextureFromFile("brickwall_normal.jpg", "materials/brickwall", true);
+	glBindTexture(GL_TEXTURE_2D, planeNormalTexture.textureID);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+	glBindTexture(GL_TEXTURE_2D, 0);
+	planeNormalTexture.type = "texture_normal";
+	planeNormalTextures.push_back(planeNormalTexture);
+
 	Material planeMaterial;
 	planeMaterial.diffuseTextures = planeTextures;
+	planeMaterial.normalTextures = planeNormalTextures;
 
 	std::vector<Mesh> planeMeshes;
-	planeMeshes.emplace_back(planeVertices, planeIndices, planeMaterial);
+	planeMeshes.emplace_back(planeVertices,planeIndices,planeMaterial);
 
 	auto plane = std::make_shared<Model>(planeMeshes);
 	plane->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));

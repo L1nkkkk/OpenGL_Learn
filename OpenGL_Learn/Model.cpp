@@ -1,11 +1,10 @@
 #include "Model.h"
 
 Mesh::Mesh(std::vector<Vertex> vertices,
-		   std::vector<unsigned int> indices,
+		std::vector<unsigned int> indices,
 		   Material& material)
 {
-	this->vertices = vertices;
-	this->indices = indices;
+	this->vertices = ComputeTBNVertices(vertices,indices);
 	this->material = material;
 	this->start_tex_index = 0;
 	setupMesh();
@@ -19,11 +18,7 @@ void Mesh::setupMesh()
 
 	glBindVertexArray(VAO);
 	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-
 	glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), &vertices[0], GL_STATIC_DRAW);
-
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), &indices[0], GL_STATIC_DRAW);
 
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
@@ -31,7 +26,10 @@ void Mesh::setupMesh()
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Normal));
 	glEnableVertexAttribArray(2);
 	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, TexCoords));
-
+	glEnableVertexAttribArray(3);
+	glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Tangent));
+	glEnableVertexAttribArray(4);
+	glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Bitangent));
 	glBindVertexArray(0);
 }
 
@@ -43,30 +41,44 @@ void Mesh::Draw(Shader& shader)
 	shader.setFloat("material.shininess", material.shininess);
 	shader.setFloat("material.opacity", material.opacity);
 
+	shader.setBool("hasDiffuseMap", false);
+	shader.setBool("hasSpecularMap", false);
+	shader.setBool("hasNormalMap", false);
 	unsigned int diffuseNr = 1;
 	unsigned int specularNr = 1;
+	unsigned int normalNr = 1;
 	for (unsigned int i = 0; i < material.diffuseTextures.size(); ++i) {
 		glActiveTexture(GL_TEXTURE0 + USED_TEXTURE_NUM);
 		std::string number;
 		number = std::to_string(diffuseNr++);
-		shader.setInt(("texture_diffuse" + number).c_str(), USED_TEXTURE_NUM++);
 		if(GAMMA_CORRECTION)
 			glBindTexture(GL_TEXTURE_2D, material.diffuseTextures[i].textureGammaID);
 		else
 			glBindTexture(GL_TEXTURE_2D, material.diffuseTextures[i].textureID);
+		shader.setInt(("texture_diffuse" + number).c_str(), USED_TEXTURE_NUM++);
+		shader.setBool("hasDiffuseMap", true);
 	}
 
 	for (unsigned int i = 0; i < material.specularTextures.size(); ++i) {
 		glActiveTexture(GL_TEXTURE0 + USED_TEXTURE_NUM);
 		std::string number;
 		number = std::to_string(specularNr++);
-		shader.setInt(("texture_specular" + number).c_str(), USED_TEXTURE_NUM++);
 		glBindTexture(GL_TEXTURE_2D, material.specularTextures[i].textureID);
+		shader.setInt(("texture_specular" + number).c_str(), USED_TEXTURE_NUM++);
+		shader.setBool("hasSpecularMap", true);
+	}
+
+	for (unsigned int i = 0; i < material.normalTextures.size(); ++i) {
+		glActiveTexture(GL_TEXTURE0 + USED_TEXTURE_NUM);
+		std::string number = std::to_string(normalNr++);
+		glBindTexture(GL_TEXTURE_2D, material.normalTextures[i].textureID);
+		shader.setInt(("texture_normal" + number).c_str(), USED_TEXTURE_NUM++);
+		shader.setBool("hasNormalMap", true);
 	}
 
 	glActiveTexture(GL_TEXTURE0);
 	glBindVertexArray(VAO);
-	glDrawElements(GL_TRIANGLES, static_cast<unsigned int>(indices.size()), GL_UNSIGNED_INT, 0);
+	glDrawArrays(GL_TRIANGLES, 0, vertices.size());
 	glBindVertexArray(0);
 }
 
@@ -105,8 +117,7 @@ void Model::processNode(aiNode* node, const aiScene* scene)
 Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene)
 {
 	std::vector<Vertex> vertices;
-	std::vector<unsigned int> indices;
-	std::vector<Texture> textures;
+	std::vector<unsigned int>indices;
 	Material material;
 	for (unsigned int i = 0; i < mesh->mNumVertices; ++i) {
 		Vertex vertex;
@@ -139,7 +150,7 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene)
 	if (mesh->mMaterialIndex >= 0) {
 		material = prosessMaterial(scene->mMaterials[mesh->mMaterialIndex]);
 	}
-	return Mesh(vertices, indices,material);
+	return Mesh(vertices,indices, material);
 }
 
 Material Model::prosessMaterial(aiMaterial* mat)
@@ -160,8 +171,8 @@ Material Model::prosessMaterial(aiMaterial* mat)
 		material.opacity = opacity;
 	
 	material.diffuseTextures = loadMaterialTextures(mat, aiTextureType_DIFFUSE, "texture_diffuse");
-	
 	material.specularTextures = loadMaterialTextures(mat, aiTextureType_SPECULAR, "texture_specular");
+	material.normalTextures = loadMaterialTextures(mat, aiTextureType_NORMALS, "texture_normal");
 	
 	return material;
 }
@@ -276,4 +287,50 @@ glm::vec3 Model::CalculateLocalCenter()
 		}
 	}
 	return glm::vec3((minX+maxX)/2.f, (minY+maxY)/2.f, (minZ+maxZ) / 2.f);
+}
+
+std::vector<Vertex> ComputeTBNVertices(std::vector<Vertex>& vertices,std::vector<unsigned int> indices) {
+	std::vector<Vertex> ret;
+	if (indices.size() % 3) {
+		std::cout << "this model has a non-multiple-of-three number of points" << std::endl;
+		return ret;
+	}
+	for (int i = 0; i < indices.size(); i += 3) {
+		auto aPoint = vertices[indices[i]];
+		auto bPoint = vertices[indices[i + 1]];
+		auto cPoint = vertices[indices[i + 2]];
+		ComputeTBN(aPoint,bPoint,cPoint);
+		ret.push_back(aPoint);
+		ret.push_back(bPoint);
+		ret.push_back(cPoint);
+	}
+	return ret;
+}
+
+void ComputeTBN(Vertex& aPoint, Vertex& bPoint, Vertex& cPoint) {
+	auto edge1 = bPoint.Position - aPoint.Position;
+	auto edge2 = cPoint.Position - aPoint.Position;
+	auto deltaUV1 = bPoint.TexCoords - aPoint.TexCoords;
+	auto deltaUV2 = cPoint.TexCoords - aPoint.TexCoords;
+
+	GLfloat f = 1.0f / (deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y);
+	glm::vec3 tangent, bitangent;
+	tangent.x = f * (deltaUV2.y * edge1.x - deltaUV1.y * edge2.x);
+	tangent.y = f * (deltaUV2.y * edge1.y - deltaUV1.y * edge2.y);
+	tangent.z = f * (deltaUV2.y * edge1.z - deltaUV1.y * edge2.z);
+	tangent = glm::normalize(tangent);
+
+	bitangent.x = f * (-deltaUV2.x * edge1.x + deltaUV1.x * edge2.x);
+	bitangent.y = f * (-deltaUV2.x * edge1.y + deltaUV1.x * edge2.y);
+	bitangent.z = f * (-deltaUV2.x * edge1.z + deltaUV1.x * edge2.z);
+	bitangent = glm::normalize(bitangent - glm::dot(bitangent,tangent)*tangent);
+
+	aPoint.Tangent = tangent;
+	bPoint.Tangent = tangent;
+	cPoint.Tangent = tangent;
+	aPoint.Bitangent = bitangent;
+	bPoint.Bitangent = bitangent;
+	cPoint.Bitangent = bitangent;
+	
+	return;
 }

@@ -52,13 +52,18 @@ in VS_OUT {
     vec3 Normal;
     vec2 TexCoords;
     vec4 FragPosLightSpace;
+	mat3 TBN;
 } fs_in;
 
 out vec4 FragColor;
 
 uniform vec3 viewPos;
+uniform bool hasDiffuseMap;
 uniform sampler2D texture_diffuse1;
+uniform bool hasSpecularMap;
 uniform sampler2D texture_specular1;
+uniform bool hasNormalMap;
+uniform sampler2D texture_normal1;
 
 uniform Material material;
 
@@ -333,7 +338,14 @@ vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir,floa
 
 void main()
 {
-	vec3 norm = normalize(fs_in.Normal);
+	vec3 norm;
+	if(hasNormalMap){
+		norm = texture(texture_normal1,fs_in.TexCoords).rgb;
+		norm = normalize(norm * 2.0 - 1.0);  
+		norm = normalize(fs_in.TBN * norm);
+	}
+	else
+		norm = normalize(fs_in.Normal);
 	vec3 viewDir = normalize(viewPos - fs_in.FragPos);
 	float shadow = 0.0;
 	

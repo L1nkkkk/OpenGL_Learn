@@ -81,8 +81,8 @@ void Planet::Draw() {
     for (unsigned int i = 0; i < meshes.size(); i++)
     {
         glBindVertexArray(meshes[i].GetVAO());
-        glDrawElementsInstanced(
-            GL_TRIANGLES, meshes[i].indices.size(), GL_UNSIGNED_INT, 0, amount
+        glDrawArraysInstanced(
+            GL_TRIANGLES,0, meshes[i].vertices.size(), amount
         );
     }
     /*for (unsigned int i = 0; i < amount; ++i) {
