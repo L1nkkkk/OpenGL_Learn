@@ -14,3 +14,5 @@ int SHADOW_TYPE = ShadowProperty::Default;
 
 bool GAMMA_CORRECTION = true;
 float GAMMA_VALUE = 2.2f;
+
+bool USE_HDR = false;

@@ -91,16 +91,14 @@ public:
 	SkyboxSource skyboxSource;
 	Camera* camera_ptr = nullptr;
 
-	FBO* defaultFBO;
-	FBO* MSAAFBO;
+	FBO* fbo;
+	FBO* fboTemp;
 
 	Scene(Camera* camera,const unsigned int& width,const unsigned int& height) {
 		camera_ptr = camera;
 		lightSource.pointLightVAO = GetPointLightVAO();
-		defaultFBO = new FBO(FBO::Framebuffer);
-		MSAAFBO = new FBO(FBO::Multisample);
-		FramebuffersManager::GetInstance().GenFBO(defaultFBO);
-		FramebuffersManager::GetInstance().GenFBO(MSAAFBO);
+		FBOAttributes attr;
+		fboTemp = FramebuffersManager::GetInstance().GetFBO(attr);
 	}
 	void RenderScene(Shader&);
 

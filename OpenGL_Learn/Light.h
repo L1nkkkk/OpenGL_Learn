@@ -27,9 +27,10 @@ struct PointLight {
 		constant = 1.0f;
 		linear = 0.09f;
 		quadratic = 0.032f;
-
-		shadowFBO = new FBO(FBO::ShadowBox);
-		FramebuffersManager::GetInstance().GenFBO(shadowFBO);
+		FBOAttributes attr;
+		attr.isShadowMap = true;
+		attr.shadowType = FBOAttributes::FramebufferType::ShadowBox;
+		shadowFBO = FramebuffersManager::GetInstance().GetFBO(attr);
 		useShadowMap = false;
 	}
 
@@ -73,8 +74,10 @@ struct DirectionLight {
 		far_plane = 7.5f;
 		distance = 5.f;
 		width = 10.f;
-		shadowFBO = new FBO(FBO::ShadowMap);
-		FramebuffersManager::GetInstance().GenFBO(shadowFBO);
+		FBOAttributes attr;
+		attr.isShadowMap = true;
+		attr.shadowType = FBOAttributes::FramebufferType::ShadowMap;
+		shadowFBO = FramebuffersManager::GetInstance().GetFBO(attr);
 		useShadowMap = false;
 	}
 	glm::mat4 GetLightSpaceMatrix() {

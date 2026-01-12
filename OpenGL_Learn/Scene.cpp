@@ -2,12 +2,13 @@
 void Scene::Draw()
 {
     DrawShadowMap();
-    if (AntiAliasManager::GetInstance().antiAliasType == AntiAliasManager::Default) {
-        glBindFramebuffer(GL_FRAMEBUFFER, defaultFBO->framebufferID);
-    }
-    else if (AntiAliasManager::GetInstance().antiAliasType == AntiAliasManager::MSAA) {
-        glBindFramebuffer(GL_FRAMEBUFFER, MSAAFBO->framebufferID);
-    }
+    FBOAttributes attr;
+    attr.aaType = AntiAliasManager::GetInstance().antiAliasType;
+    attr.isGamma = GAMMA_CORRECTION;
+    attr.isHDR = USE_HDR;
+    fbo = FramebuffersManager::GetInstance().GetFBO(attr);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo->framebufferID);
+
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_STENCIL_TEST);
     glStencilMask(0xFF);
@@ -25,6 +26,8 @@ void Scene::Draw()
     DrawTransparentModels();  // 绘制透明物体
     DrawOutlines();      // 最后绘制outline（禁用深度测试，基于stencil buffer绘制）
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    
+    FramebuffersManager::GetInstance().ReleaseFBO(fbo);
 }
 
 void Scene::RenderScene(Shader& shader) {
@@ -339,13 +342,14 @@ void Scene::DrawShadowMap() {
 
 unsigned int Scene::GetNeedShowFramebuffer() {
     if (FramebuffersManager::GetInstance().useType == FBO::Default_FrameRenderType) {
-        if (AntiAliasManager::GetInstance().antiAliasType == FBO::Multisample) {
-            glBindFramebuffer(GL_READ_FRAMEBUFFER, MSAAFBO->framebufferID);
-            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, defaultFBO->framebufferID);
+        if (fbo->attr.aaType == AntiAliasManager::MSAA) {
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo->framebufferID);
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fboTemp->framebufferID);
             glBlitFramebuffer(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, GL_COLOR_BUFFER_BIT, GL_NEAREST);
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            return fboTemp->textureID;
         }
-        return defaultFBO->textureID;
+        else return fbo->textureID;
     }
     else if (FramebuffersManager::GetInstance().useType == FBO::ShadowMap_FrameRenderType) {
         return lightSource.directionLights[0].shadowFBO->textureID;

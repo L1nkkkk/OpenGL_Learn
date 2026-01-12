@@ -5,6 +5,8 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <functional>
+#include <tuple> 
 
 extern int SCREEN_WIDTH;
 extern int SCREEN_HEIGHT;
@@ -21,43 +23,7 @@ extern int SHADOW_TYPE;
 extern float GAMMA_VALUE;
 extern bool GAMMA_CORRECTION;
 
-class FBO {
-public:
-	static enum FramebufferType{
-		Framebuffer = 0,
-		Multisample,
-		ShadowMap,
-		ShadowBox,
-	};
-
-	static enum FrameRenderType {
-		Default_FrameRenderType = 0,
-		ShadowMap_FrameRenderType,
-		ShadowBox_FrameRenderType,
-	};
-
-	inline static const char* optionFrame[] = {
-		"Default",
-		"ShadowMap",
-		"ShadowBox",
-	};
-
-	FramebufferType type;
-	unsigned int framebufferID;
-	unsigned int textureID;
-	unsigned int rboID;
-	bool init = false;
-
-	FBO(FramebufferType type) {
-		this->type = type;
-	}
-
-	void Delete() {
-		glDeleteFramebuffers(1, &framebufferID);
-		glDeleteTextures(1, &textureID);
-		glDeleteRenderbuffers(1, &rboID);
-	}
-};
+extern bool USE_HDR;
 
 class AntiAliasManager {
 public:
@@ -85,8 +51,87 @@ public:
 	void AntiAliasByType(AntiAliasType);
 	AntiAliasType antiAliasType;
 private:
-	
+
 };
+
+struct FBOAttributes {
+	static enum FramebufferType {
+		Framebuffer = 0,
+		Multisample,
+		ShadowMap,
+		ShadowBox,
+		HDR,
+	};
+
+	AntiAliasManager::AntiAliasType aaType = AntiAliasManager::AntiAliasType::Default;
+	bool isHDR = false; 
+	bool isShadowMap = false;
+	bool isGamma = false;
+	FramebufferType shadowType = FramebufferType::ShadowMap; 
+
+	bool operator==(const FBOAttributes& other) const {
+		return std::tie(aaType, isHDR, isGamma,isShadowMap, shadowType) ==
+			std::tie(other.aaType, other.isHDR, other.isGamma,other.isShadowMap, other.shadowType);
+	}
+};
+
+namespace std {
+	template<> struct hash<FBOAttributes> {
+		size_t operator()(const FBOAttributes& attr) const {
+			size_t hashVal = 0;
+			unsigned int offset = 0;
+			hashVal ^= hash<int>()(static_cast<int>(attr.aaType)) << offset;
+			offset += 3;
+			hashVal ^= hash<bool>()((attr.isHDR)) << offset;
+			offset += 1;
+			hashVal ^= hash<bool>()(attr.isShadowMap) << offset;
+			offset += 3;
+			hashVal ^= hash<int>()(static_cast<int>(attr.shadowType)) << offset;
+			offset += 1;
+			hashVal ^= hash<bool>()(static_cast<int>(attr.isGamma)) << offset;
+
+			return hashVal;
+		}
+	};
+}
+
+class FBO {
+public:
+	static enum FrameRenderType {
+		Default_FrameRenderType = 0,
+		ShadowMap_FrameRenderType,
+	};
+
+	inline static const char* optionFrame[] = {
+		"Default",
+		"ShadowMap",
+	};
+	bool isBusy = false;
+	unsigned int framebufferID;
+	unsigned int textureID;
+	unsigned int rboID;
+	bool init = false;
+
+	FBOAttributes attr;
+
+	FBO(FBOAttributes attr) {
+		Init(attr);
+	}
+
+	void Delete() {
+		glDeleteFramebuffers(1, &framebufferID);
+		glDeleteTextures(1, &textureID);
+		glDeleteRenderbuffers(1, &rboID);
+	}
+	void Init(FBOAttributes attr);
+
+	void Resize() {
+		Delete();
+		Init(attr);
+	}
+};
+
+
 
 class FramebuffersManager {
 public:
@@ -97,21 +142,23 @@ public:
 		static FramebuffersManager instance;
 		return instance;
 	}
-	std::unordered_map<FBO::FramebufferType, std::vector<FBO*>> FBOmap;
 
-	void GenFBO(FBO*);
+	void ReleaseFBO(FBO* fbo) {
+		fbo->isBusy = false;
+	}
 	
-	void AddFBO(FBO*);
+	FBO* GetFBO(FBOAttributes);
 
-	size_t GetFramebuffersSize(FBO::FramebufferType type);
 
 
 	void Resize();
 private:
-	inline static FBO::FramebufferType FBOResizeableTpye[] = {
-		FBO::FramebufferType::Framebuffer,
-		FBO::FramebufferType::Multisample
+	inline static FBOAttributes::FramebufferType FBOResizeableTpye[] = {
+		FBOAttributes::FramebufferType::Framebuffer,
+		FBOAttributes::FramebufferType::Multisample
 	};
+
+	std::unordered_map<FBOAttributes, std::vector<FBO*>> m_hashMapFBO;
 };
 
 enum class OtherShaderType {

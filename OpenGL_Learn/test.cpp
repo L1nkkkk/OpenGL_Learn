@@ -218,16 +218,6 @@ int main() {
 	
 	FramebuffersManager& framebuffersMgr = FramebuffersManager::GetInstance();
 	AntiAliasManager& antiAliasMgr = AntiAliasManager::GetInstance();
-	//default fBuffer
-	FBO defaultFBO(FBO::Framebuffer);
-	framebuffersMgr.GenFBO(&defaultFBO);
-	//MSAA fBuffer
-	FBO multisampleFBO(FBO::Multisample);
-	framebuffersMgr.GenFBO(&multisampleFBO);
-
-	FBO intermediateFBO(FBO::Framebuffer);
-	framebuffersMgr.GenFBO(&intermediateFBO);
-	//ShadowMap fBuffer
 
 	unsigned int quadVAO,quadVBO;
 	glGenVertexArrays(1, &quadVAO);
