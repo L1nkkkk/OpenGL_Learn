@@ -9,6 +9,10 @@ uniform float gamma;
 uniform bool useGamma;
 uniform bool useShadowMap;
 
+uniform bool hdr;
+uniform float exposure;
+
+
 const float offset = 1.0 / 300.0;  
 
 void main()
@@ -41,6 +45,9 @@ void main()
         col += sampleTex[i] * kernel[i];
 
     FragColor = vec4(col, 1.0);
+    if(hdr){
+        FragColor.rgb = vec3(1.0) - exp(-FragColor.rgb * exposure);
+    }
     if(useGamma){
         FragColor.rgb = pow(FragColor.rgb,vec3(1.0/gamma));
     }

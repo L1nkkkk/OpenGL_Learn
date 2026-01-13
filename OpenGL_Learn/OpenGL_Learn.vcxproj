@@ -143,6 +143,7 @@
     <ClCompile Include="Global.cpp" />
     <ClCompile Include="Learn.cpp" />
     <ClCompile Include="Model.cpp" />
+    <ClCompile Include="Object.cpp" />
     <ClCompile Include="Scene.cpp" />
     <ClCompile Include="Shader.cpp" />
     <ClCompile Include="ShaderManager.cpp" />

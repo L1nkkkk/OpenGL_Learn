@@ -7,6 +7,10 @@
 #include <vector>
 #include <functional>
 #include <tuple> 
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
 
 extern int SCREEN_WIDTH;
 extern int SCREEN_HEIGHT;
@@ -24,6 +28,7 @@ extern float GAMMA_VALUE;
 extern bool GAMMA_CORRECTION;
 
 extern bool USE_HDR;
+extern float HDR_EXPOSURE;
 
 class AntiAliasManager {
 public:
@@ -194,3 +199,23 @@ namespace ShadowProperty {
 		"PCSS",
 	};
 }
+
+class BaseObject {
+public:
+	glm::vec3 position = glm::vec3(0);
+	glm::vec3 rotation = glm::vec3(0);
+	glm::vec3 scale = glm::vec3(1);
+	bool m_active = true;
+	glm::mat4 getModelMatrix();
+	void setModelMatrix(glm::mat4);
+
+	bool GetActiveStatus() {
+		return m_active;
+	}
+
+	void SetActiveStatus(bool val) {
+		m_active = val;
+	}
+protected:
+	glm::mat4 modelMatrix;
+};

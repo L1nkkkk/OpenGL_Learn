@@ -4,8 +4,8 @@
 #include <array>
 #include "GLobal.h"
 
-struct PointLight {
-	glm::vec3 position;
+class PointLight : public BaseObject{
+public:
 	glm::vec3 ambient;
 	glm::vec3 diffuse;
 	glm::vec3 specular;
@@ -23,7 +23,8 @@ struct PointLight {
 	std::array<glm::mat4, 6> lightSpaceMatrices;
 
 	PointLight(const glm::vec3& pos, const glm::vec3& amb, const glm::vec3& diff, const glm::vec3& spec)
-		: position(pos), ambient(amb), diffuse(diff), specular(spec) {
+		: ambient(amb), diffuse(diff), specular(spec) {
+		position = pos;
 		constant = 1.0f;
 		linear = 0.09f;
 		quadratic = 0.032f;
@@ -54,7 +55,8 @@ struct PointLight {
 	}
 };
 
-struct DirectionLight {
+class DirectionLight : public BaseObject{
+public:
 	glm::vec3 direction;
 	glm::vec3 ambient;
 	glm::vec3 diffuse;
@@ -111,8 +113,8 @@ struct DirectionLight {
 	}
 };
 
-struct SpotLight {
-	glm::vec3 position;
+class SpotLight : public BaseObject{
+public:
 	glm::vec3 direction;
 	float cutOff;
 	float outerCutOff;
@@ -123,7 +125,8 @@ struct SpotLight {
 	glm:: vec3 diffuse;
 	glm:: vec3 specular;
 	SpotLight(const glm::vec3& pos, const glm::vec3& dir,const glm::vec3& amb, const glm::vec3& diff, const glm::vec3& spec,const float& cut,const float& outerCut)
-		: position(pos), direction(dir), ambient(amb), diffuse(diff), specular(spec), cutOff(cut), outerCutOff(outerCut) {
+		: direction(dir), ambient(amb), diffuse(diff), specular(spec), cutOff(cut), outerCutOff(outerCut) {
+		position = pos;
 		constant = 1.0f;
 		linear = 0.09f;
 		quadratic = 0.032f;

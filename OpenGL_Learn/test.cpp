@@ -308,6 +308,8 @@ int main() {
 		screenShader.setFloat("gamma", GAMMA_VALUE);
 		screenShader.setBool("useShadowMap", SHADOW_MAP_SHOW);
 		screenShader.setBool("useGamma", GAMMA_CORRECTION);
+		screenShader.setBool("hdr", USE_HDR);
+		screenShader.setFloat("exposure", HDR_EXPOSURE);
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 		//Draw GUI
 		mygui.Render();

@@ -143,7 +143,7 @@ private:
 	void setupMesh();
 };
 
-class Model {
+class Model : public BaseObject {
 public:
 	Model(std::string path) {
 		position = glm::vec3(0.0f);
@@ -184,28 +184,11 @@ public:
 	}
 	void Draw(Shader& shader, unsigned int start_tex_index = 0);
 	glm::mat4 modelMatrix = glm::mat4(1.0f);
-	void setModelMatrix(glm::mat4 matrix) {
-		modelMatrix = matrix;
-	}
-
-	glm::mat4 getModelMatrix() {
-		modelMatrix = glm::mat4(1.0f);
-		modelMatrix = glm::translate(modelMatrix, position);
-		modelMatrix = glm::rotate(modelMatrix, glm::radians(rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
-		modelMatrix = glm::rotate(modelMatrix, glm::radians(rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
-		modelMatrix = glm::rotate(modelMatrix, glm::radians(rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
-		modelMatrix = glm::scale(modelMatrix, scale);
-		return modelMatrix;
-	}
 
 	std::unordered_map<int,bool> otherShaderUse;
 	std::unordered_map<int,Shader*> otherShaderPtr;
 	glm::vec3 outlineColor = glm::vec3(0.0f);
 	float outlineWidth = 0.05f;
-
-	glm::vec3 position;
-	glm::vec3 rotation;
-	glm::vec3 scale = glm::vec3(1.0f);
 
 	glm::vec3 GetWorldPosition() {
 		return glm::vec3(modelMatrix[3]);
@@ -242,6 +225,14 @@ public:
 
 	void SetName(std::string name) {
 		this->name = name;
+	}
+
+	bool GetAcitveStatus() {
+		return m_active;
+	}
+
+	void SetActiveStatus(bool val) {
+		m_active = val;
 	}
 
 private:

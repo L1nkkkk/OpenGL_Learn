@@ -53,9 +53,8 @@ void Scene::DrawPointLights()
 	lightSource.pointLightShader.use();
     lightSource.pointLightShader.setVec3("lightColor", lightColor);
     for (unsigned int i = 0; i < lightSource.pointLights.size(); ++i) {
-        glm::mat4 model = glm::mat4(1.0f);
-        model = glm::translate(model, lightSource.pointLights[i].position);
-        model = glm::scale(model, glm::vec3(0.2f));
+        if (!lightSource.pointLights[i].GetActiveStatus()) continue;
+        glm::mat4 model = lightSource.pointLights[i].getModelMatrix();
         // Assume lightShader is a valid Shader object already in use
 		lightSource.pointLightShader.setMat4("model", model);
 		
@@ -86,6 +85,7 @@ void Scene::DrawOpaqueModels()
         ourShader.setVec3("color", glm::vec3(0.2f));
         SetLightUniforms(ourShader);
         for (auto& model : ourshaderPair.second) {
+            if (!model->GetAcitveStatus()) continue;
             if (!model->IsOtherShaderUsed(OtherShaderType::outline)) {
 				glStencilMask(0x00); // Disable writing to the stencil buffer
                 glStencilFunc(GL_ALWAYS, 0, 0xFF);
@@ -117,6 +117,7 @@ void Scene::DrawTransparentModels()
         });
     Shader* lastShaderPtr = nullptr;
     for (const auto& modelPair : modelSource.transparentModels) {
+        if (!modelPair.first->GetAcitveStatus()) continue;
         if(modelPair.first->IsOtherShaderUsed(OtherShaderType::outline)){
             glStencilMask(0xFF);
             glStencilFunc(GL_ALWAYS, 1, 0xFF);
@@ -139,39 +140,44 @@ void Scene::DrawTransparentModels()
 
 void Scene::SetLightUniforms(Shader& shader)
 {
-	shader.setInt("NR_POINT_LIGHTS", static_cast<int>(lightSource.pointLights.size()));
-    for(int i = 0; i < lightSource.pointLights.size(); ++i) {
-        std::string baseName = "pointLights[" + std::to_string(i) + "]";
-        shader.setVec3(baseName + ".position", lightSource.pointLights[i].position);
-        shader.setVec3(baseName + ".ambient", lightSource.pointLights[i].ambient);
-        shader.setVec3(baseName + ".diffuse", lightSource.pointLights[i].diffuse);
-        shader.setVec3(baseName + ".specular", lightSource.pointLights[i].specular);
-        shader.setFloat(baseName + ".constant", lightSource.pointLights[i].constant);
-        shader.setFloat(baseName + ".linear", lightSource.pointLights[i].linear);
-        shader.setFloat(baseName + ".quadratic", lightSource.pointLights[i].quadratic);
+    int count = 0;
+    for(auto& pointLight : lightSource.pointLights) {
+        if (!pointLight.GetActiveStatus()) continue;
+        std::string baseName = "pointLights[" + std::to_string(count++) + "]";
+        shader.setVec3(baseName + ".position", pointLight.position);
+        shader.setVec3(baseName + ".ambient", pointLight.ambient);
+        shader.setVec3(baseName + ".diffuse", pointLight.diffuse);
+        shader.setVec3(baseName + ".specular", pointLight.specular);
+        shader.setFloat(baseName + ".constant", pointLight.constant);
+        shader.setFloat(baseName + ".linear", pointLight.linear);
+        shader.setFloat(baseName + ".quadratic", pointLight.quadratic);
 	}
-
-	shader.setInt("NR_DIR_LIGHTS", static_cast<int>(lightSource.directionLights.size()));
-    for(int i = 0; i < lightSource.directionLights.size(); ++i) {
-        std::string baseName = "dirLights[" + std::to_string(i) + "]";
-        shader.setVec3(baseName + ".direction", lightSource.directionLights[i].direction);
-        shader.setVec3(baseName + ".ambient", lightSource.directionLights[i].ambient);
-        shader.setVec3(baseName + ".diffuse", lightSource.directionLights[i].diffuse);
-        shader.setVec3(baseName + ".specular", lightSource.directionLights[i].specular);
+    shader.setInt("NR_POINT_LIGHTS", count);
+    count = 0;
+    for(auto& dirLight : lightSource.directionLights) {
+        if (!dirLight.GetActiveStatus()) continue;
+        std::string baseName = "dirLights[" + std::to_string(count++) + "]";
+        shader.setVec3(baseName + ".direction", dirLight.direction);
+        shader.setVec3(baseName + ".ambient", dirLight.ambient);
+        shader.setVec3(baseName + ".diffuse", dirLight.diffuse);
+        shader.setVec3(baseName + ".specular", dirLight.specular);
 	}
-
-    shader.setInt("NR_SPOT_LIGHTS", static_cast<int>(lightSource.spotLights.size()));
-    for (int i = 0; i < lightSource.spotLights.size(); ++i) {
-        std::string baseName = "spotLights[" + std::to_string(i) + "]";
-        shader.setVec3(baseName + ".position", lightSource.spotLights[i].position);
-        shader.setVec3(baseName + ".ambient", lightSource.spotLights[i].ambient);
-        shader.setVec3(baseName + ".diffuse", lightSource.spotLights[i].diffuse);
-        shader.setVec3(baseName + ".specular", lightSource.spotLights[i].specular);
-        shader.setFloat(baseName + ".constant", lightSource.spotLights[i].constant);
-        shader.setFloat(baseName + ".linear", lightSource.spotLights[i].linear);
-        shader.setFloat(baseName + ".quadratic", lightSource.spotLights[i].quadratic);
-        shader.setVec3(baseName + ".direction", lightSource.spotLights[i].direction);
+    shader.setInt("NR_DIR_LIGHTS", count);
+    count = 0;
+    
+    for (auto& spotLight : lightSource.spotLights) {
+        if (!spotLight.GetActiveStatus()) continue;
+        std::string baseName = "spotLights[" + std::to_string(count++) + "]";
+        shader.setVec3(baseName + ".position", spotLight.position);
+        shader.setVec3(baseName + ".ambient", spotLight.ambient);
+        shader.setVec3(baseName + ".diffuse", spotLight.diffuse);
+        shader.setVec3(baseName + ".specular", spotLight.specular);
+        shader.setFloat(baseName + ".constant", spotLight.constant);
+        shader.setFloat(baseName + ".linear", spotLight.linear);
+        shader.setFloat(baseName + ".quadratic", spotLight.quadratic);
+        shader.setVec3(baseName + ".direction", spotLight.direction);
     }
+    shader.setInt("NR_SPOT_LIGHTS", count);
 }
 
 unsigned int Scene::SetShadowMap(Shader& shader) {
@@ -181,6 +187,7 @@ unsigned int Scene::SetShadowMap(Shader& shader) {
     shader.setInt("shadowType", SHADOW_TYPE);
     for (int i = 0; i < lightSource.directionLights.size(); ++i) {
         auto& dirLight = lightSource.directionLights[i];
+        if (!dirLight.GetActiveStatus()) continue;
         shader.setBool("dirLights[" + std::to_string(i) + "].useShadowMap", dirLight.useShadowMap);
         glActiveTexture(GL_TEXTURE0 + shadowMapCount);
         glBindTexture(GL_TEXTURE_2D, dirLight.shadowFBO->textureID);
@@ -192,6 +199,7 @@ unsigned int Scene::SetShadowMap(Shader& shader) {
     //TODO
     for (int i = 0; i < lightSource.pointLights.size(); ++i) {
         auto& pointLight = lightSource.pointLights[i];
+        if (!pointLight.GetActiveStatus()) continue;
         shader.setBool("pointLights[" + std::to_string(i) + "].useShadowMap", pointLight.useShadowMap);
         glActiveTexture(GL_TEXTURE0 + shadowMapCount);
         glBindTexture(GL_TEXTURE_2D, 0);
@@ -363,6 +371,7 @@ void Scene::SetSceneGui()
             for (size_t i = 0; i < lightSource.directionLights.size(); ++i) {
                 std::string label = "Direction Light " + std::to_string(i);
                 if (ImGui::TreeNode(label.c_str())) {
+                    ImGui::Checkbox("Active", &lightSource.directionLights[i].m_active);
                     ImGui::ColorEdit3("Ambient", &lightSource.directionLights[i].ambient[0]);
                     ImGui::ColorEdit3("Diffuse", &lightSource.directionLights[i].diffuse[0]);
                     ImGui::ColorEdit3("Specular", &lightSource.directionLights[i].specular[0]);
@@ -381,6 +390,7 @@ void Scene::SetSceneGui()
             for (size_t i = 0; i < lightSource.pointLights.size(); ++i) {
                 std::string label = "Point Light " + std::to_string(i);
                 if (ImGui::TreeNode(label.c_str())) {
+                    ImGui::Checkbox("Active", &lightSource.pointLights[i].m_active);
                     ImGui::ColorEdit3("Ambient", &lightSource.pointLights[i].ambient[0]);
                     ImGui::ColorEdit3("Diffuse", &lightSource.pointLights[i].diffuse[0]);
                     ImGui::ColorEdit3("Specular", &lightSource.pointLights[i].specular[0]);
@@ -409,6 +419,7 @@ void Scene::SetSceneGui()
                     std::string label = "Opaque Model: " + models[i]->GetName();
                     auto model = models[i];
                     if (ImGui::TreeNode(label.c_str())) {
+                        ImGui::Checkbox("Active", &model->m_active);
                         ImGui::DragFloat3("Position", &model->position[0], 0.1f);
                         ImGui::DragFloat3("Rotation", &model->rotation[0], 0.5f);
                         ImGui::DragFloat3("Scale", &model->scale[0], 0.01f, 0.01f, 10.0f);
@@ -457,6 +468,7 @@ void Scene::SetSceneGui()
             for (auto& [model,shader] : modelSource.transparentModels) {
                 std::string label = "Transparent Model: " + model->GetName();
                 if (ImGui::TreeNode(label.c_str())) {
+                    ImGui::Checkbox("Active", &model->m_active);
                     ImGui::DragFloat3("Position", &model->position[0], 0.1f);
                     ImGui::DragFloat3("Rotation", &model->rotation[0], 0.5f);
                     ImGui::DragFloat3("Scale", &model->scale[0], 0.01f, 0.01f, 10.0f);
