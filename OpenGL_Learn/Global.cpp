@@ -17,3 +17,5 @@ float GAMMA_VALUE = 2.2f;
 
 bool USE_HDR = false;
 float HDR_EXPOSURE = 1.0;
+
+bool BLOOM = false;

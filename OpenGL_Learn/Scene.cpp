@@ -2,10 +2,7 @@
 void Scene::Draw()
 {
     DrawShadowMap();
-    FBOAttributes attr;
-    attr.aaType = AntiAliasManager::GetInstance().antiAliasType;
-    attr.isGamma = GAMMA_CORRECTION;
-    attr.isHDR = USE_HDR;
+    auto attr = FramebuffersManager::GenCurrentAttr();
     fbo = FramebuffersManager::GetInstance().GetFBO(attr);
     glBindFramebuffer(GL_FRAMEBUFFER, fbo->framebufferID);
 
@@ -26,8 +23,6 @@ void Scene::Draw()
     DrawTransparentModels();  // 绘制透明物体
     DrawOutlines();      // 最后绘制outline（禁用深度测试，基于stencil buffer绘制）
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    
-    FramebuffersManager::GetInstance().ReleaseFBO(fbo);
 }
 
 void Scene::RenderScene(Shader& shader) {
@@ -190,7 +185,7 @@ unsigned int Scene::SetShadowMap(Shader& shader) {
         if (!dirLight.GetActiveStatus()) continue;
         shader.setBool("dirLights[" + std::to_string(i) + "].useShadowMap", dirLight.useShadowMap);
         glActiveTexture(GL_TEXTURE0 + shadowMapCount);
-        glBindTexture(GL_TEXTURE_2D, dirLight.shadowFBO->textureID);
+        glBindTexture(GL_TEXTURE_2D, dirLight.shadowFBO->textureIDs[0]);
         glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
         shader.setInt("dirLights[" + std::to_string(i) + "].shadowMap", shadowMapCount);
         shader.setMat4("lightSpaceMatrix", dirLight.GetLightSpaceMatrix());
@@ -203,7 +198,7 @@ unsigned int Scene::SetShadowMap(Shader& shader) {
         shader.setBool("pointLights[" + std::to_string(i) + "].useShadowMap", pointLight.useShadowMap);
         glActiveTexture(GL_TEXTURE0 + shadowMapCount);
         glBindTexture(GL_TEXTURE_2D, 0);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, pointLight.shadowFBO->textureID);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, pointLight.shadowFBO->textureIDs[0]);
         shader.setInt("pointLights[" + std::to_string(i) + "].shadowCubeMap", shadowMapCount);
         shader.setFloat("pointLights[" + std::to_string(i) + "].far_plane", pointLight.far);
         shadowMapCount++;
@@ -349,19 +344,76 @@ void Scene::DrawShadowMap() {
 }
 
 unsigned int Scene::GetNeedShowFramebuffer() {
+    unsigned int texID = 0;
     if (FramebuffersManager::GetInstance().useType == FBO::Default_FrameRenderType) {
         if (fbo->attr.aaType == AntiAliasManager::MSAA) {
             glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo->framebufferID);
             glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fboTemp->framebufferID);
             glBlitFramebuffer(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, GL_COLOR_BUFFER_BIT, GL_NEAREST);
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
-            return fboTemp->textureID;
+            texID = fboTemp->textureIDs[0];
         }
-        else return fbo->textureID;
+        else if (fbo->attr.isBloom) {
+            texID = fbo->textureIDs[0];
+        }
+        else texID=fbo->textureIDs[0];
     }
     else if (FramebuffersManager::GetInstance().useType == FBO::ShadowMap_FrameRenderType) {
-        return lightSource.directionLights[0].shadowFBO->textureID;
+        return lightSource.directionLights[0].shadowFBO->textureIDs[0];
     }
+    else if (FramebuffersManager::GetInstance().useType == FBO::BrightColor_FrameRenderType) {
+        if (BLOOM) {
+
+            texID = fbo->textureIDs[1];
+        }
+        else {
+            std::cout << "NO BLOOM USED" << std::endl;
+            texID = fbo->textureIDs[0];
+        }
+    }
+    return texID;
+}
+
+void Scene::ClearFBO() {
+    FramebuffersManager::GetInstance().ReleaseFBO(fbo);
+    FramebuffersManager::GetInstance().ReleaseFBO(fboTemp);
+}
+
+void Scene::Bulr(int times) {
+    if (times <= 0) return;
+    auto bulrShader = ShaderManager::GetInstance().GetShader(ShaderManager::Bulr);
+    FBO* fbos[2];
+    FBOAttributes attr;
+    attr.isHDR = USE_HDR;
+    fbos[0] = FramebuffersManager::GetInstance().GetFBO(attr);
+    fbos[1] = FramebuffersManager::GetInstance().GetFBO(attr);
+    GLboolean horizontal = true, first_iteration = true;
+    GLuint amount = times<<1;
+    bulrShader->use();
+    for (GLuint i = 0; i < amount; i++)
+    {
+        glBindFramebuffer(GL_FRAMEBUFFER, fbos[i%2]->framebufferID);
+        bulrShader->setBool("horizontal", horizontal);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(
+            GL_TEXTURE_2D, first_iteration ? fbo->textureIDs[1] : fbos[(i+1)%2]->textureIDs[0]
+        );
+        bulrShader->setInt("image", 0);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        horizontal = !horizontal;
+        if (first_iteration)
+            first_iteration = false;
+    }
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbos[1]->framebufferID);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo->framebufferID);
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
+    glDrawBuffer(GL_COLOR_ATTACHMENT1);
+    glBlitFramebuffer(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    FramebuffersManager::GetInstance().ReleaseFBO(fbos[0]);
+    FramebuffersManager::GetInstance().ReleaseFBO(fbos[1]);
 }
 
 void Scene::SetSceneGui()

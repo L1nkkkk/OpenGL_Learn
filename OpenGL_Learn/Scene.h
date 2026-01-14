@@ -116,6 +116,9 @@ public:
 
 	void SetSceneGui();
 
+	void Bulr(int);
+	void ClearFBO();
+
 	unsigned int GetPointLightVAO() {
 		float vertices[] = {
 		-0.5f, -0.5f, -0.5f,

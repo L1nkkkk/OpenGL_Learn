@@ -22,6 +22,7 @@ public:
 		Default,
 		Diffuse,
 		Shadow,
+		Bulr,
 		//StartGeometryShaderIndex
 		Explode,
 		NormalLines,
@@ -61,6 +62,7 @@ private:
 		"default",
 		"diffuse",
 		"shadow",
+		"bulr",
 	};
 	std::vector<std::string> geometryShaderNames = {
 		"explode",

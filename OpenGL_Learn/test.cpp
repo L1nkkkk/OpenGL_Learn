@@ -300,11 +300,12 @@ int main() {
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 		glDisable(GL_DEPTH_TEST);
-		screenShader.use();
 		glBindVertexArray(quadVAO);
 		glDisable(GL_DEPTH_TEST);
 		glBindTexture(GL_TEXTURE_2D, scene.GetNeedShowFramebuffer());
+		scene.ClearFBO();
 		glActiveTexture(GL_TEXTURE0);
+		screenShader.use();
 		screenShader.setFloat("gamma", GAMMA_VALUE);
 		screenShader.setBool("useShadowMap", SHADOW_MAP_SHOW);
 		screenShader.setBool("useGamma", GAMMA_CORRECTION);

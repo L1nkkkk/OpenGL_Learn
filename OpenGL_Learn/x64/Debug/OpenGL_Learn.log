@@ -1,145 +1,26 @@
-﻿  AntiAliasManager.cpp
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(44,14): warning C4091: “static ”: 没有声明变量时忽略“AntiAliasManager::AntiAliasType”的左侧
-  (编译源文件“AntiAliasManager.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(63,14): warning C4091: “static ”: 没有声明变量时忽略“FBOAttributes::FramebufferType”的左侧
-  (编译源文件“AntiAliasManager.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(105,14): warning C4091: “static ”: 没有声明变量时忽略“FBO::FrameRenderType”的左侧
-  (编译源文件“AntiAliasManager.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(187,44): warning C4305: “初始化”: 从“double”到“float”截断
-  (编译源文件“AntiAliasManager.cpp”)
-  
-  FramebufferManager.cpp
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(44,14): warning C4091: “static ”: 没有声明变量时忽略“AntiAliasManager::AntiAliasType”的左侧
-  (编译源文件“FramebufferManager.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(63,14): warning C4091: “static ”: 没有声明变量时忽略“FBOAttributes::FramebufferType”的左侧
-  (编译源文件“FramebufferManager.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(105,14): warning C4091: “static ”: 没有声明变量时忽略“FBO::FrameRenderType”的左侧
-  (编译源文件“FramebufferManager.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(187,44): warning C4305: “初始化”: 从“double”到“float”截断
-  (编译源文件“FramebufferManager.cpp”)
-  
-  Global.cpp
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(44,14): warning C4091: “static ”: 没有声明变量时忽略“AntiAliasManager::AntiAliasType”的左侧
-  (编译源文件“Global.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(63,14): warning C4091: “static ”: 没有声明变量时忽略“FBOAttributes::FramebufferType”的左侧
-  (编译源文件“Global.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(105,14): warning C4091: “static ”: 没有声明变量时忽略“FBO::FrameRenderType”的左侧
-  (编译源文件“Global.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(187,44): warning C4305: “初始化”: 从“double”到“float”截断
-  (编译源文件“Global.cpp”)
-  
-  Learn.cpp
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\ShaderManager.h(15,14): warning C4091: “static ”: 没有声明变量时忽略“ShaderManager::ShaderType”的左侧
-  (编译源文件“Learn.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\ShaderManager.h(31,14): warning C4091: “static ”: 没有声明变量时忽略“ShaderManager::UniformBufferType”的左侧
-  (编译源文件“Learn.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(44,14): warning C4091: “static ”: 没有声明变量时忽略“AntiAliasManager::AntiAliasType”的左侧
-  (编译源文件“Learn.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(63,14): warning C4091: “static ”: 没有声明变量时忽略“FBOAttributes::FramebufferType”的左侧
-  (编译源文件“Learn.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(105,14): warning C4091: “static ”: 没有声明变量时忽略“FBO::FrameRenderType”的左侧
-  (编译源文件“Learn.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(187,44): warning C4305: “初始化”: 从“double”到“float”截断
-  (编译源文件“Learn.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Learn.cpp(10,22): warning C4244: “参数”: 从“double”转换到“unsigned int”，可能丢失数据
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Learn.cpp(25,21): warning C4244: “初始化”: 从“double”转换到“float”，可能丢失数据
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Learn.cpp(28,24): warning C4244: “初始化”: 从“int”转换到“float”，可能丢失数据
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Learn.cpp(47,71): warning C4312: “类型强制转换”: 从“GLsizei”转换到更大的“void *”
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Learn.cpp(49,71): warning C4312: “类型强制转换”: 从“GLsizei”转换到更大的“void *”
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Learn.cpp(51,71): warning C4312: “类型强制转换”: 从“GLsizei”转换到更大的“void *”
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Learn.cpp(85,52): warning C4267: “参数”: 从“size_t”转换到“GLsizei”，可能丢失数据
-  Model.cpp
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(44,14): warning C4091: “static ”: 没有声明变量时忽略“AntiAliasManager::AntiAliasType”的左侧
-  (编译源文件“Model.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(63,14): warning C4091: “static ”: 没有声明变量时忽略“FBOAttributes::FramebufferType”的左侧
-  (编译源文件“Model.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(105,14): warning C4091: “static ”: 没有声明变量时忽略“FBO::FrameRenderType”的左侧
-  (编译源文件“Model.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(187,44): warning C4305: “初始化”: 从“double”到“float”截断
-  (编译源文件“Model.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Model.cpp(81,45): warning C4267: “参数”: 从“size_t”转换到“GLsizei”，可能丢失数据
-  Object.cpp
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(44,14): warning C4091: “static ”: 没有声明变量时忽略“AntiAliasManager::AntiAliasType”的左侧
-  (编译源文件“Object.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(63,14): warning C4091: “static ”: 没有声明变量时忽略“FBOAttributes::FramebufferType”的左侧
-  (编译源文件“Object.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(105,14): warning C4091: “static ”: 没有声明变量时忽略“FBO::FrameRenderType”的左侧
-  (编译源文件“Object.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(187,44): warning C4305: “初始化”: 从“double”到“float”截断
-  (编译源文件“Object.cpp”)
-  
-  Scene.cpp
+﻿  Scene.cpp
 C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Scene.cpp(1,1): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\GLobal.h(44,14): warning C4091: “static ”: 没有声明变量时忽略“AntiAliasManager::AntiAliasType”的左侧
+C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\GLobal.h(47,14): warning C4091: “static ”: 没有声明变量时忽略“AntiAliasManager::AntiAliasType”的左侧
   (编译源文件“Scene.cpp”)
   
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\GLobal.h(63,14): warning C4091: “static ”: 没有声明变量时忽略“FBOAttributes::FramebufferType”的左侧
+C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\GLobal.h(66,14): warning C4091: “static ”: 没有声明变量时忽略“FBOAttributes::FramebufferType”的左侧
   (编译源文件“Scene.cpp”)
   
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\GLobal.h(105,14): warning C4091: “static ”: 没有声明变量时忽略“FBO::FrameRenderType”的左侧
+C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\GLobal.h(111,14): warning C4091: “static ”: 没有声明变量时忽略“FBO::FrameRenderType”的左侧
   (编译源文件“Scene.cpp”)
   
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\GLobal.h(187,44): warning C4305: “初始化”: 从“double”到“float”截断
+C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\GLobal.h(136,35): warning C4267: “参数”: 从“size_t”转换到“GLsizei”，可能丢失数据
+  (编译源文件“Scene.cpp”)
+  
+C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\GLobal.h(202,44): warning C4305: “初始化”: 从“double”到“float”截断
   (编译源文件“Scene.cpp”)
   
 C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\shaderManager.h(15,14): warning C4091: “static ”: 没有声明变量时忽略“ShaderManager::ShaderType”的左侧
   (编译源文件“Scene.cpp”)
   
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\shaderManager.h(31,14): warning C4091: “static ”: 没有声明变量时忽略“ShaderManager::UniformBufferType”的左侧
+C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\shaderManager.h(32,14): warning C4091: “static ”: 没有声明变量时忽略“ShaderManager::UniformBufferType”的左侧
   (编译源文件“Scene.cpp”)
   
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Scene.cpp(83,47): warning C4244: “参数”: 从“double”转换到“float”，可能丢失数据
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Scene.cpp(435,97): warning C4305: “参数”: 从“double”到“float”截断
-  test.cpp
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\ShaderManager.h(15,14): warning C4091: “static ”: 没有声明变量时忽略“ShaderManager::ShaderType”的左侧
-  (编译源文件“test.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\ShaderManager.h(31,14): warning C4091: “static ”: 没有声明变量时忽略“ShaderManager::UniformBufferType”的左侧
-  (编译源文件“test.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(44,14): warning C4091: “static ”: 没有声明变量时忽略“AntiAliasManager::AntiAliasType”的左侧
-  (编译源文件“test.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(63,14): warning C4091: “static ”: 没有声明变量时忽略“FBOAttributes::FramebufferType”的左侧
-  (编译源文件“test.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(105,14): warning C4091: “static ”: 没有声明变量时忽略“FBO::FrameRenderType”的左侧
-  (编译源文件“test.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Global.h(187,44): warning C4305: “初始化”: 从“double”到“float”截断
-  (编译源文件“test.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\ModelsLoader.h(29,31): warning C4305: “参数”: 从“double”到“T”截断
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\ModelsLoader.h(29,31): warning C4305:         with
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\ModelsLoader.h(29,31): warning C4305:         [
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\ModelsLoader.h(29,31): warning C4305:             T=float
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\ModelsLoader.h(29,31): warning C4305:         ]
-  (编译源文件“test.cpp”)
-  
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\test.cpp(81,27): warning C4244: “参数”: 从“double”转换到“float”，可能丢失数据
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\test.cpp(81,21): warning C4244: “参数”: 从“double”转换到“float”，可能丢失数据
-  正在生成代码...
-C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Scene.cpp(365,1): warning C4715: “Scene::GetNeedShowFramebuffer”: 不是所有的控件路径都返回值
+C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Scene.cpp(78,47): warning C4244: “参数”: 从“double”转换到“float”，可能丢失数据
+C:\Users\Link\Dev\OpenGL_Learn\OpenGL_Learn\Scene.cpp(487,97): warning C4305: “参数”: 从“double”到“float”截断
   OpenGL_Learn.vcxproj -> C:\Users\Link\Dev\OpenGL_Learn\x64\Debug\OpenGL_Learn.exe

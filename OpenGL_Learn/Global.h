@@ -30,6 +30,9 @@ extern bool GAMMA_CORRECTION;
 extern bool USE_HDR;
 extern float HDR_EXPOSURE;
 
+extern bool BLOOM;
+extern float GAUSS_BLUR;
+
 class AntiAliasManager {
 public:
 	static AntiAliasManager& GetInstance() {
@@ -72,11 +75,12 @@ struct FBOAttributes {
 	bool isHDR = false; 
 	bool isShadowMap = false;
 	bool isGamma = false;
-	FramebufferType shadowType = FramebufferType::ShadowMap; 
+	FramebufferType shadowType = FramebufferType::ShadowMap;
+	bool isBloom = false;
 
 	bool operator==(const FBOAttributes& other) const {
-		return std::tie(aaType, isHDR, isGamma,isShadowMap, shadowType) ==
-			std::tie(other.aaType, other.isHDR, other.isGamma,other.isShadowMap, other.shadowType);
+		return std::tie(aaType, isHDR, isGamma,isShadowMap, shadowType,isBloom) ==
+			std::tie(other.aaType, other.isHDR, other.isGamma,other.isShadowMap, other.shadowType,other.isBloom);
 	}
 };
 
@@ -90,11 +94,13 @@ namespace std {
 			hashVal ^= hash<bool>()((attr.isHDR)) << offset;
 			offset += 1;
 			hashVal ^= hash<bool>()(attr.isShadowMap) << offset;
-			offset += 3;
-			hashVal ^= hash<int>()(static_cast<int>(attr.shadowType)) << offset;
 			offset += 1;
+			hashVal ^= hash<int>()(static_cast<int>(attr.shadowType)) << offset;
+			offset += 3;
 			hashVal ^= hash<bool>()(static_cast<int>(attr.isGamma)) << offset;
-
+			offset += 1;
+			hashVal ^= hash<bool>()(attr.isBloom) << offset;
+			offset += 1;
 			return hashVal;
 		}
 	};
@@ -105,15 +111,17 @@ public:
 	static enum FrameRenderType {
 		Default_FrameRenderType = 0,
 		ShadowMap_FrameRenderType,
+		BrightColor_FrameRenderType,
 	};
 
 	inline static const char* optionFrame[] = {
 		"Default",
 		"ShadowMap",
+		"BrightColor",
 	};
 	bool isBusy = false;
 	unsigned int framebufferID;
-	unsigned int textureID;
+	std::vector<unsigned int> textureIDs;
 	unsigned int rboID;
 	bool init = false;
 
@@ -125,7 +133,7 @@ public:
 
 	void Delete() {
 		glDeleteFramebuffers(1, &framebufferID);
-		glDeleteTextures(1, &textureID);
+		glDeleteTextures(textureIDs.size(), textureIDs.data());
 		glDeleteRenderbuffers(1, &rboID);
 	}
 	void Init(FBOAttributes attr);
@@ -148,13 +156,20 @@ public:
 		return instance;
 	}
 
+	static FBOAttributes GenCurrentAttr() {
+		FBOAttributes attr;
+		attr.aaType = AntiAliasManager::GetInstance().antiAliasType;
+		attr.isGamma = GAMMA_CORRECTION;
+		attr.isHDR = USE_HDR;
+		attr.isBloom = BLOOM;
+		return attr;
+	}
+
 	void ReleaseFBO(FBO* fbo) {
 		fbo->isBusy = false;
 	}
 	
 	FBO* GetFBO(FBOAttributes);
-
-
 
 	void Resize();
 private:

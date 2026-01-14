@@ -64,12 +64,13 @@ public:
 	void Gamma_UI() {
 		ImGui::Checkbox("HDR", &USE_HDR);
 		if (HDR_EXPOSURE) {
-			ImGui::DragFloat("hdr exposure", &HDR_EXPOSURE, 0.01f, 0.01f, 100.0f, "%.2f");
+			ImGui::DragFloat("hdr exposure", &HDR_EXPOSURE, 0.00f, 0.01f, 100.0f, "%.2f");
 		}
 		ImGui::Checkbox("gammaCorrection", &GAMMA_CORRECTION);
 		if (GAMMA_CORRECTION) {
 			ImGui::DragFloat("gamma Value", &GAMMA_VALUE, 0.01f, 1.0f, 2.6f, "%.2f");
 		}
+		ImGui::Checkbox("Bloom", &BLOOM);
 	}
 
 	void Scene_UI(Scene& scene) {
@@ -89,6 +90,10 @@ public:
 			case FBO::FrameRenderType::ShadowMap_FrameRenderType:
 				framebuffersMgr.useType = FBO::FrameRenderType::ShadowMap_FrameRenderType;
 				SHADOW_MAP_SHOW = true;
+				break;
+			case FBO::FrameRenderType::BrightColor_FrameRenderType:
+				framebuffersMgr.useType = FBO::FrameRenderType::BrightColor_FrameRenderType;
+				SHADOW_MAP_SHOW = false;
 				break;
 			}
 		}
