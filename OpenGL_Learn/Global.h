@@ -31,7 +31,8 @@ extern bool USE_HDR;
 extern float HDR_EXPOSURE;
 
 extern bool BLOOM;
-extern float GAUSS_BLUR;
+extern float BLOOM_THRESHOLD;
+extern int BLOOM_BLUR_ITERATIONS;
 
 class AntiAliasManager {
 public:
@@ -166,9 +167,23 @@ public:
 	}
 
 	void ReleaseFBO(FBO* fbo) {
+		//ClearFBOBuffers(fbo);
 		fbo->isBusy = false;
 	}
-	
+
+	void ClearFBOBuffers(FBO* fbo) {
+		glBindFramebuffer(GL_FRAMEBUFFER, fbo->framebufferID);
+		if (fbo->attr.isShadowMap) {
+			glClear(GL_DEPTH_BUFFER_BIT);
+		}
+		else {
+			for(auto& texID : fbo->textureIDs) {
+				glClearBufferfv(GL_COLOR, 0, glm::value_ptr(glm::vec4(0.0f)));
+			}
+		}
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	}
+
 	FBO* GetFBO(FBOAttributes);
 
 	void Resize();

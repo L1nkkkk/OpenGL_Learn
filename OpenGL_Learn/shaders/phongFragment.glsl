@@ -89,6 +89,8 @@ uniform int NR_SPOT_LIGHTS;
 uniform PointLight pointLights[MAX_POINT_LIGHTS];
 uniform DirLight dirLights[MAX_DIR_LIGHTS];
 uniform SpotLight spotLights[MAX_SPOT_LIGHTS];
+uniform float bloom_threshold;
+
 
 vec2 poissonDisk[MAX_SAMPLE_NUM];
 
@@ -161,7 +163,7 @@ float PCF(vec3 fragPos,float w_penumbraSize,vec3 normal,PointLight light){
 	vec3 direction = normalize(fragPos - light.position);
 	float bias = max(0.05 * (1.0 - dot(normal, -direction)), 0.005);
 	float shadow = 0.0;
-	float currentDepth = length(fragPos - light.position);\
+	float currentDepth = length(fragPos - light.position);
 	if(currentDepth>light.far_plane) {
 		return 0.0; // 超出远平面，不在阴影中
 	}
@@ -179,7 +181,6 @@ float PCF(vec3 fragPos,float w_penumbraSize,vec3 normal,PointLight light){
 	shadow = shadow/float(shadowSamples);
 	return shadow;
 }
-
 
 float findBlocker( sampler2D shadowMap,  vec2 uv, float zReceiver ) {
 	float avgBlockerDepth = 0.0;
@@ -391,7 +392,7 @@ void main()
 	}
 	FragColor = vec4(results, 1.0);
 	float brightness = dot(FragColor.rgb, vec3(0.2126, 0.7152, 0.0722));
-    if(brightness > 1.0)
+    if(brightness > bloom_threshold)
         BrightColor = vec4(FragColor.rgb, 1.0);
 	else BrightColor = vec4(0,0,0,1);
 	return;

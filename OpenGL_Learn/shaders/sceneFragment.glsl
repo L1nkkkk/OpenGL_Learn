@@ -1,5 +1,4 @@
 #version 330 core
-
 out vec4 FragColor;
 
 in vec2 TexCoords;
@@ -12,6 +11,8 @@ uniform bool useShadowMap;
 uniform bool hdr;
 uniform float exposure;
 
+uniform bool bloom;
+uniform sampler2D bloomBlur;
 
 const float offset = 1.0 / 300.0;  
 
@@ -34,17 +35,11 @@ void main()
         0,1,0,
         0,0,0
     );
-
-    vec3 sampleTex[9];
-    for(int i = 0; i < 9; i++)
-    {
-        sampleTex[i] = vec3(texture(screenTexture, TexCoords.st + offsets[i]));
+    FragColor = vec4(vec3(texture(screenTexture, TexCoords)), 1.0);
+    if(bloom){
+        vec3 bloomColor = texture(bloomBlur, TexCoords).rgb;
+        FragColor.rgb += bloomColor;
     }
-    vec3 col = vec3(0.0);
-    for(int i = 0; i < 9; i++)
-        col += sampleTex[i] * kernel[i];
-
-    FragColor = vec4(col, 1.0);
     if(hdr){
         FragColor.rgb = vec3(1.0) - exp(-FragColor.rgb * exposure);
     }

@@ -116,7 +116,7 @@ public:
 
 	void SetSceneGui();
 
-	void Bulr(int);
+	void Blur(int,FBO*);
 	void ClearFBO();
 
 	unsigned int GetPointLightVAO() {
@@ -174,7 +174,7 @@ public:
 		return VAO;
 	}
 
-	unsigned int GetNeedShowFramebuffer();
+	FBO* GetNeedShowFramebuffer();
 private:
 	glm::mat4 view;
 	glm::mat4 projection;

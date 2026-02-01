@@ -71,6 +71,8 @@ public:
 			ImGui::DragFloat("gamma Value", &GAMMA_VALUE, 0.01f, 1.0f, 2.6f, "%.2f");
 		}
 		ImGui::Checkbox("Bloom", &BLOOM);
+		ImGui::DragFloat("bloom threshold", &BLOOM_THRESHOLD, 0.01f, 0.0f, 10.0f, "%.2f");
+		ImGui::DragInt("bloom blur iterations", &BLOOM_BLUR_ITERATIONS, 1.0f, 1, 20);
 	}
 
 	void Scene_UI(Scene& scene) {

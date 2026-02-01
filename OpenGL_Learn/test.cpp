@@ -296,21 +296,29 @@ int main() {
 		//first pass: render scene to framebuffer
 		scene.Draw();
 		//second pass: render framebuffer texture to screen
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 		glDisable(GL_DEPTH_TEST);
 		glBindVertexArray(quadVAO);
 		glDisable(GL_DEPTH_TEST);
-		glBindTexture(GL_TEXTURE_2D, scene.GetNeedShowFramebuffer());
-		scene.ClearFBO();
+		FBO* sceneFBO = scene.GetNeedShowFramebuffer();
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, sceneFBO->textureIDs[0]);
+		if (BLOOM) {
+			glActiveTexture(GL_TEXTURE1);
+			glBindTexture(GL_TEXTURE_2D, sceneFBO->textureIDs[1]);
+		}
 		screenShader.use();
+		screenShader.setInt("screenTexture", 0);
 		screenShader.setFloat("gamma", GAMMA_VALUE);
 		screenShader.setBool("useShadowMap", SHADOW_MAP_SHOW);
 		screenShader.setBool("useGamma", GAMMA_CORRECTION);
 		screenShader.setBool("hdr", USE_HDR);
 		screenShader.setFloat("exposure", HDR_EXPOSURE);
+		screenShader.setBool("bloom", BLOOM);
+		screenShader.setInt("bloomBlur", 1);
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 		//Draw GUI
 		mygui.Render();
@@ -325,6 +333,7 @@ int main() {
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		planet.Draw();
 #endif
+		scene.ClearFBO();
 		// glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
 		glfwSwapBuffers(window);
 		glfwPollEvents();
