@@ -1,5 +1,7 @@
 #include "Global.h"
 
+bool DEBUG_MODE = false;
+
 int SCREEN_WIDTH = 1440;
 int SCREEN_HEIGHT = 900;
 
@@ -21,3 +23,5 @@ float HDR_EXPOSURE = 1.0;
 bool BLOOM = false;
 float BLOOM_THRESHOLD = 1.0f;
 int BLOOM_BLUR_ITERATIONS = 5;
+
+bool DEFER_RENDERING = false;

@@ -134,6 +134,7 @@ int main() {
 	ShaderManager& shaderManager = ShaderManager::GetInstance();
 	shaderManager.Init();
 	Shader& screenShader = *(shaderManager.GetShader(ShaderManager::Scene));
+	Shader& debugShader = *(shaderManager.GetShader(ShaderManager::DebugScene));
 
 #ifdef USE_GEOMETRY_SHADER
 	GeometryShader geometryShader("shaders/geometryVertex.vs", "shaders/geometryGeometry.gs", "shaders/geometryFragment.fs");
@@ -282,6 +283,7 @@ int main() {
 		//set system configUI
 		SetGui();
 		mygui.Begin();
+		mygui.System_UI();
 		mygui.Shadow_UI();
 		mygui.Gamma_UI();
 		mygui.Framebuffers_UI();
@@ -294,7 +296,10 @@ int main() {
 		SetUniformBuffer();
 #ifdef USE_SCENE_SHADER
 		//first pass: render scene to framebuffer
-		scene.Draw();
+		if(DEFER_RENDERING)
+			scene.DeferDraw();
+		else
+			scene.Draw();
 		//second pass: render framebuffer texture to screen
 		
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -303,22 +308,41 @@ int main() {
 		glBindVertexArray(quadVAO);
 		glDisable(GL_DEPTH_TEST);
 		FBO* sceneFBO = scene.GetNeedShowFramebuffer();
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, sceneFBO->textureIDs[0]);
-		if (BLOOM) {
-			glActiveTexture(GL_TEXTURE1);
-			glBindTexture(GL_TEXTURE_2D, sceneFBO->textureIDs[1]);
+		if (!DEBUG_MODE) {
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, sceneFBO->textureIDs[0]);
+			if (BLOOM) {
+				glActiveTexture(GL_TEXTURE1);
+				glBindTexture(GL_TEXTURE_2D, sceneFBO->textureIDs[1]);
+			}
+			screenShader.use();
+			screenShader.setInt("screenTexture", 0);
+			screenShader.setFloat("gamma", GAMMA_VALUE);
+			screenShader.setBool("useShadowMap", SHADOW_MAP_SHOW);
+			screenShader.setBool("useGamma", GAMMA_CORRECTION);
+			screenShader.setBool("hdr", USE_HDR);
+			screenShader.setFloat("exposure", HDR_EXPOSURE);
+			screenShader.setBool("bloom", BLOOM);
+			screenShader.setInt("bloomBlur", 1);
 		}
-		screenShader.use();
-		screenShader.setInt("screenTexture", 0);
-		screenShader.setFloat("gamma", GAMMA_VALUE);
-		screenShader.setBool("useShadowMap", SHADOW_MAP_SHOW);
-		screenShader.setBool("useGamma", GAMMA_CORRECTION);
-		screenShader.setBool("hdr", USE_HDR);
-		screenShader.setFloat("exposure", HDR_EXPOSURE);
-		screenShader.setBool("bloom", BLOOM);
-		screenShader.setInt("bloomBlur", 1);
+		else {
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			FBO* debugFBO = scene.GetDebugFramebuffer();
+			int size = debugFBO->textureIDs.size();
+			int len = 1;
+			while(len*len<size){
+				len++;
+			}
+			debugShader.use();
+			for(int i = 0;i<size;i++){
+				glActiveTexture(GL_TEXTURE0 + i);
+				glBindTexture(GL_TEXTURE_2D, debugFBO->textureIDs[i]);
+				std::string uniformName = "screenTexture[" + std::to_string(i) + "]";
+				debugShader.setInt(uniformName, i);
+			}
+			debugShader.setFloat("div", (float)len);
+		}
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 		//Draw GUI
 		mygui.Render();

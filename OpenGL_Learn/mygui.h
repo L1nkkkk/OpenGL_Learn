@@ -61,6 +61,11 @@ public:
 		}
 	}
 
+	void System_UI() {
+		ImGui::Checkbox("Defer Rendering", &DEFER_RENDERING);
+		ImGui::Checkbox("Debug Mode", &DEBUG_MODE);
+	}
+
 	void Gamma_UI() {
 		ImGui::Checkbox("HDR", &USE_HDR);
 		if (HDR_EXPOSURE) {

@@ -5,7 +5,10 @@ void FBO::Init(FBOAttributes attr) {
 	glGenFramebuffers(1, &framebufferID);
 	glBindFramebuffer(GL_FRAMEBUFFER, framebufferID);
 	this->attr = attr;
-	if (attr.isBloom) {
+	if (attr.isDefer) {
+		textureIDs.resize(3);
+	}
+	else if (attr.isBloom) {
 		textureIDs.resize(2);
 	}
 	else textureIDs.resize(1);
@@ -58,6 +61,46 @@ void FBO::Init(FBOAttributes attr) {
 		this->init = true;
 		return;
 	}
+	else if(attr.isDefer){
+		glGenTextures(textureIDs.size(), textureIDs.data());
+		// - 位置颜色缓冲
+		glGenTextures(1, &textureIDs[0]);
+		glBindTexture(GL_TEXTURE_2D, textureIDs[0]);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureIDs[0], 0);
+		// - 法线颜色缓冲
+		glGenTextures(1, &textureIDs[1]);
+		glBindTexture(GL_TEXTURE_2D, textureIDs[1]);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, textureIDs[1], 0);
+
+		// - 颜色 + 镜面颜色缓冲
+		glGenTextures(1, &textureIDs[2]);
+		glBindTexture(GL_TEXTURE_2D, textureIDs[2]);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, textureIDs[2], 0);
+
+		// - 告诉OpenGL我们将要使用(帧缓冲的)哪种颜色附件来进行渲染
+		GLuint attachments[3] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 };
+		glDrawBuffers(3, attachments);
+
+		glGenRenderbuffers(1, &rboID);
+		glBindRenderbuffer(GL_RENDERBUFFER, rboID);
+		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, SCREEN_WIDTH, SCREEN_HEIGHT);
+		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rboID);
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+			std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+		}
+		glBindRenderbuffer(GL_RENDERBUFFER, 0);
+		this->init = true;
+		return;
+	}
 	else {
 		glGenTextures(textureIDs.size(),textureIDs.data());
 		std::vector<GLenum> colorAttachments;
@@ -74,20 +117,20 @@ void FBO::Init(FBOAttributes attr) {
 				else
 					glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
 
-				glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-				glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+				glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+				glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 				glBindTexture(GL_TEXTURE_2D, 0);
 				glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D, textureIDs[i], 0);
 			}
 			glGenRenderbuffers(1, &rboID);
 			glBindRenderbuffer(GL_RENDERBUFFER, rboID);
 			glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, SCREEN_WIDTH, SCREEN_HEIGHT);
-			glBindRenderbuffer(GL_RENDERBUFFER, 0);
 			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rboID);
 
 			if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
 				std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
 			}
+			glBindRenderbuffer(GL_RENDERBUFFER, 0);
 			break;
 		case AntiAliasManager::AntiAliasType::MSAA:
 			for (int i = 0; i < textureIDs.size(); ++i) {
@@ -102,12 +145,12 @@ void FBO::Init(FBOAttributes attr) {
 			glGenRenderbuffers(1, &rboID);
 			glBindRenderbuffer(GL_RENDERBUFFER, rboID);
 			glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_DEPTH24_STENCIL8, SCREEN_WIDTH, SCREEN_HEIGHT);
-			glBindRenderbuffer(GL_RENDERBUFFER, 0);
 			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rboID);
 
 			if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
 				std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
 			}
+			glBindRenderbuffer(GL_RENDERBUFFER, 0);
 			break;
 		}
 		glDrawBuffers(colorAttachments.size(), colorAttachments.data());

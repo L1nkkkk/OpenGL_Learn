@@ -93,6 +93,8 @@ public:
 
 	FBO* fbo;
 	FBO* fboTemp;
+	FBO* deferFBO;
+
 
 	Scene(Camera* camera,const unsigned int& width,const unsigned int& height) {
 		camera_ptr = camera;
@@ -106,6 +108,9 @@ public:
 	void DrawOpaqueModels();
 	void DrawTransparentModels();
 	void Draw();
+
+	void DeferDraw();
+
 	void SetLightUniforms(Shader& shader);
 	unsigned int SetShadowMap(Shader& shader);
 	void DrawSkybox();
@@ -175,6 +180,10 @@ public:
 	}
 
 	FBO* GetNeedShowFramebuffer();
+
+	FBO* GetDebugFramebuffer() {
+		return fbo;
+	}
 private:
 	glm::mat4 view;
 	glm::mat4 projection;

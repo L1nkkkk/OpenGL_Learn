@@ -14,6 +14,7 @@ class ShaderManager {
 public:
 	static enum ShaderType{
 		Scene = 0,
+		DebugScene,
 		Phong,
 		Grass,
 		Skybox,
@@ -23,6 +24,7 @@ public:
 		Diffuse,
 		Shadow,
 		Bulr,
+		DeferProcess,
 		//StartGeometryShaderIndex
 		Explode,
 		NormalLines,
@@ -54,6 +56,7 @@ private:
 	std::vector<UBOInfo> UBOInfos;
 	std::vector<std::string> shaderNames = {
 		"scene",
+		"debugScene",
 		"phong",
 		"grass",
 		"skybox",
@@ -63,6 +66,7 @@ private:
 		"diffuse",
 		"shadow",
 		"bulr",
+		"deferProcess",
 	};
 	std::vector<std::string> geometryShaderNames = {
 		"explode",

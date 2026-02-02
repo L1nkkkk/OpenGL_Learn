@@ -11,6 +11,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+extern bool DEBUG_MODE;
 
 extern int SCREEN_WIDTH;
 extern int SCREEN_HEIGHT;
@@ -33,6 +34,8 @@ extern float HDR_EXPOSURE;
 extern bool BLOOM;
 extern float BLOOM_THRESHOLD;
 extern int BLOOM_BLUR_ITERATIONS;
+
+extern bool DEFER_RENDERING;
 
 class AntiAliasManager {
 public:
@@ -78,10 +81,11 @@ struct FBOAttributes {
 	bool isGamma = false;
 	FramebufferType shadowType = FramebufferType::ShadowMap;
 	bool isBloom = false;
+	bool isDefer = false;
 
 	bool operator==(const FBOAttributes& other) const {
-		return std::tie(aaType, isHDR, isGamma,isShadowMap, shadowType,isBloom) ==
-			std::tie(other.aaType, other.isHDR, other.isGamma,other.isShadowMap, other.shadowType,other.isBloom);
+		return std::tie(aaType, isHDR, isGamma,isShadowMap, shadowType,isBloom,isDefer) ==
+			std::tie(other.aaType, other.isHDR, other.isGamma,other.isShadowMap, other.shadowType,other.isBloom,other.isDefer);
 	}
 };
 
@@ -101,6 +105,8 @@ namespace std {
 			hashVal ^= hash<bool>()(static_cast<int>(attr.isGamma)) << offset;
 			offset += 1;
 			hashVal ^= hash<bool>()(attr.isBloom) << offset;
+			offset += 1;
+			hashVal ^= hash<bool>()(attr.isDefer) << offset;
 			offset += 1;
 			return hashVal;
 		}
@@ -163,6 +169,7 @@ public:
 		attr.isGamma = GAMMA_CORRECTION;
 		attr.isHDR = USE_HDR;
 		attr.isBloom = BLOOM;
+		attr.isDefer = DEFER_RENDERING;
 		return attr;
 	}
 
@@ -185,6 +192,8 @@ public:
 	}
 
 	FBO* GetFBO(FBOAttributes);
+
+	void GenGBuffers(FBO* fbo,FBOAttributes attr);
 
 	void Resize();
 private:
