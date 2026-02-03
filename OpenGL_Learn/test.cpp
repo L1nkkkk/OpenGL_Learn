@@ -296,10 +296,7 @@ int main() {
 		SetUniformBuffer();
 #ifdef USE_SCENE_SHADER
 		//first pass: render scene to framebuffer
-		if(DEFER_RENDERING)
-			scene.DeferDraw();
-		else
-			scene.Draw();
+		scene.Draw();
 		//second pass: render framebuffer texture to screen
 		
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);

@@ -41,9 +41,9 @@ void Mesh::Draw(Shader& shader)
 	shader.setFloat("material.shininess", material.shininess);
 	shader.setFloat("material.opacity", material.opacity);
 
-	shader.setBool("hasDiffuseMap", false);
-	shader.setBool("hasSpecularMap", false);
-	shader.setBool("hasNormalMap", false);
+	shader.setBool("hasDiffuseMap", !material.diffuseTextures.empty());
+	shader.setBool("hasSpecularMap", !material.specularTextures.empty());
+	shader.setBool("hasNormalMap", !material.normalTextures.empty());
 	unsigned int diffuseNr = 1;
 	unsigned int specularNr = 1;
 	unsigned int normalNr = 1;

@@ -17,7 +17,7 @@ uniform sampler2D texture_normal1;
 
 uniform bool hasNormalMap;
 uniform bool hasSpecularMap;
-
+uniform bool hasDiffuseMap;
 
 void main()
 {
@@ -31,10 +31,15 @@ void main()
 		gNormal = normalize(fs_in.Normal);
 	}
 	// and the diffuse per-fragment color
-	gAlbedoSpec.rgb = texture(texture_diffuse1, fs_in.TexCoords).rgb;
+	if(!hasDiffuseMap){
+		gAlbedoSpec.rgb = vec3(0,0,0);
+	}
+	else{
+		gAlbedoSpec.rgb = texture(texture_diffuse1, vec2(fs_in.TexCoords)).rgb;
+	}
 	// store specular intensity in gAlbedoSpec's alpha component
 	if(!hasSpecularMap)
 		gAlbedoSpec.a = 1.0;
 	else
-	gAlbedoSpec.a = texture(texture_specular1, fs_in.TexCoords).r;
+		gAlbedoSpec.a = texture(texture_specular1, fs_in.TexCoords).r;
 }

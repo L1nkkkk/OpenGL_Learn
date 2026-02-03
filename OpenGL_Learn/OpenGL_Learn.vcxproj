@@ -167,7 +167,11 @@
     <None Include="FragmentShader.fs" />
     <None Include="shaders\bulrFragment.glsl" />
     <None Include="shaders\bulrVertex.glsl" />
+    <None Include="shaders\debugSceneFragment.glsl" />
+    <None Include="shaders\debugSceneVertex.glsl" />
     <None Include="shaders\defaultFragment.glsl" />
+    <None Include="shaders\deferProcessFragment.glsl" />
+    <None Include="shaders\deferProcessVertex.glsl" />
     <None Include="shaders\diffuseFragment.glsl" />
     <None Include="LightFragmentShader.glsl" />
     <None Include="shaders\diffuseGeometry.glsl" />

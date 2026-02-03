@@ -64,14 +64,12 @@ void FBO::Init(FBOAttributes attr) {
 	else if(attr.isDefer){
 		glGenTextures(textureIDs.size(), textureIDs.data());
 		// - 位置颜色缓冲
-		glGenTextures(1, &textureIDs[0]);
 		glBindTexture(GL_TEXTURE_2D, textureIDs[0]);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureIDs[0], 0);
 		// - 法线颜色缓冲
-		glGenTextures(1, &textureIDs[1]);
 		glBindTexture(GL_TEXTURE_2D, textureIDs[1]);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -79,7 +77,6 @@ void FBO::Init(FBOAttributes attr) {
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, textureIDs[1], 0);
 
 		// - 颜色 + 镜面颜色缓冲
-		glGenTextures(1, &textureIDs[2]);
 		glBindTexture(GL_TEXTURE_2D, textureIDs[2]);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);

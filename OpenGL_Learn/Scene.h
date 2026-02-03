@@ -94,13 +94,14 @@ public:
 	FBO* fbo;
 	FBO* fboTemp;
 	FBO* deferFBO;
-
+	Shader* deferShader;
 
 	Scene(Camera* camera,const unsigned int& width,const unsigned int& height) {
 		camera_ptr = camera;
 		lightSource.pointLightVAO = GetPointLightVAO();
 		FBOAttributes attr;
 		fboTemp = FramebuffersManager::GetInstance().GetFBO(attr);
+		deferShader = ShaderManager::GetInstance().GetShader(ShaderManager::DeferProcess);
 	}
 	void RenderScene(Shader&);
 
@@ -109,7 +110,7 @@ public:
 	void DrawTransparentModels();
 	void Draw();
 
-	void DeferDraw();
+	void DrawDefferedModels();
 
 	void SetLightUniforms(Shader& shader);
 	unsigned int SetShadowMap(Shader& shader);
@@ -182,7 +183,7 @@ public:
 	FBO* GetNeedShowFramebuffer();
 
 	FBO* GetDebugFramebuffer() {
-		return fbo;
+		return deferFBO;
 	}
 private:
 	glm::mat4 view;

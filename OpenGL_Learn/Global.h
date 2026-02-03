@@ -169,12 +169,13 @@ public:
 		attr.isGamma = GAMMA_CORRECTION;
 		attr.isHDR = USE_HDR;
 		attr.isBloom = BLOOM;
-		attr.isDefer = DEFER_RENDERING;
+		attr.isDefer = false;
 		return attr;
 	}
 
 	void ReleaseFBO(FBO* fbo) {
 		//ClearFBOBuffers(fbo);
+		if (fbo == nullptr) return;
 		fbo->isBusy = false;
 	}
 
