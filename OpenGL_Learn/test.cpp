@@ -220,19 +220,9 @@ int main() {
 	FramebuffersManager& framebuffersMgr = FramebuffersManager::GetInstance();
 	AntiAliasManager& antiAliasMgr = AntiAliasManager::GetInstance();
 
-	unsigned int quadVAO,quadVBO;
 	glGenVertexArrays(1, &quadVAO);
 	glGenBuffers(1, &quadVBO);
-	float screenVertices[] = { // vertex attributes for a quad that fills the entire screen in Normalized Device Coordinates.
-		// positions   // texCoords
-		-1.0f,  1.0f,  0.0f, 1.0f,
-		-1.0f, -1.0f,  0.0f, 0.0f,
-		 1.0f, -1.0f,  1.0f, 0.0f,
 
-		-1.0f,  1.0f,  0.0f, 1.0f,
-		 1.0f, -1.0f,  1.0f, 0.0f,
-		 1.0f,  1.0f,  1.0f, 1.0f
-	};
 	float backviewScreenVertices[] = {
 		-0.2f, 1.0f, 0.0f,1.0f,
 		-0.2f, 0.6f, 0.0f,0.0f,
@@ -301,7 +291,6 @@ int main() {
 		
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-		glDisable(GL_DEPTH_TEST);
 		glBindVertexArray(quadVAO);
 		glDisable(GL_DEPTH_TEST);
 		FBO* sceneFBO = scene.GetNeedShowFramebuffer();

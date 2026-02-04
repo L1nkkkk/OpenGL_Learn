@@ -37,6 +37,19 @@ extern int BLOOM_BLUR_ITERATIONS;
 
 extern bool DEFER_RENDERING;
 
+inline float screenVertices[] = { // vertex attributes for a quad that fills the entire screen in Normalized Device Coordinates.
+	// positions   // texCoords
+	-1.0f,  1.0f,  0.0f, 1.0f,
+	-1.0f, -1.0f,  0.0f, 0.0f,
+	 1.0f, -1.0f,  1.0f, 0.0f,
+
+	-1.0f,  1.0f,  0.0f, 1.0f,
+	 1.0f, -1.0f,  1.0f, 0.0f,
+	 1.0f,  1.0f,  1.0f, 1.0f
+};
+
+extern unsigned int quadVAO, quadVBO;
+
 class AntiAliasManager {
 public:
 	static AntiAliasManager& GetInstance() {

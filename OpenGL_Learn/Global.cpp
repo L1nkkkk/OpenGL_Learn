@@ -25,3 +25,5 @@ float BLOOM_THRESHOLD = 1.0f;
 int BLOOM_BLUR_ITERATIONS = 5;
 
 bool DEFER_RENDERING = false;
+
+unsigned int quadVAO, quadVBO;
