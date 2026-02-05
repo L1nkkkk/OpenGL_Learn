@@ -10,6 +10,7 @@ struct DirLight{
 
 	sampler2D shadowMap;
 	bool useShadowMap;
+	mat4 lightSpaceMatrix;
 };
 
 struct PointLight{
@@ -53,7 +54,6 @@ in VS_OUT {
 	vec3 FragPos;
     vec3 Normal;
     vec2 TexCoords;
-    vec4 FragPosLightSpace;
 	mat3 TBN;
 } fs_in;
 
@@ -357,15 +357,16 @@ void main()
 	int spotLightsNum = min(MAX_SPOT_LIGHTS,NR_SPOT_LIGHTS);
 	
 	for(int i = 0;i<dirLightsNum;i++){
+		vec4 FragPosLightSpace =  dirLights[i].lightSpaceMatrix * vec4(fs_in.FragPos,1.0);
 		switch(shadowType){
 			case DEFAULT_SHADOW:
-				shadow = ShadowCalculation(fs_in.FragPosLightSpace,norm,dirLights[i]);
+				shadow = ShadowCalculation(FragPosLightSpace,norm,dirLights[i]);
 				break;
 			case PCF_SHADOW:
-				shadow = PCF(fs_in.FragPosLightSpace,0.1,norm,dirLights[i]);
+				shadow = PCF(FragPosLightSpace,0.1,norm,dirLights[i]);
 				break;
 			case PCSS_SHADOW:
-				shadow = PCSS(fs_in.FragPosLightSpace,norm,dirLights[i]);
+				shadow = PCSS(FragPosLightSpace,norm,dirLights[i]);
 				break;
 		}
 		results += CalcDirLight(dirLights[i], norm, viewDir,shadow);

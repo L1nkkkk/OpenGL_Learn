@@ -9,12 +9,10 @@ out VS_OUT {
 	vec3 FragPos;
 	vec3 Normal;
 	vec2 TexCoords;
-	vec4 FragPosLightSpace;
 	mat3 TBN;
 } vs_out;
 
 uniform mat4 model;
-uniform mat4 lightSpaceMatrix;
 
 layout (std140) uniform Matrices{
 	mat4 view;
@@ -26,7 +24,6 @@ void main()
 	vs_out.FragPos = vec3(model * vec4(aPos, 1.0));
 	vs_out.Normal = mat3(transpose(inverse(model))) * aNormal;
 	vs_out.TexCoords = aTexCoords;
-	vs_out.FragPosLightSpace = lightSpaceMatrix * model * vec4(aPos,1.0);
 
 	vec3 T = normalize(vec3(model * vec4(aTangent,   0.0)));
 	vec3 B = normalize(vec3(model * vec4(aBitangent, 0.0)));

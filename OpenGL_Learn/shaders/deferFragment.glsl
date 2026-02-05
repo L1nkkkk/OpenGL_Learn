@@ -13,6 +13,7 @@ struct DirLight{
 	vec3 ambient;
 	vec3 diffuse;
 	vec3 specular;
+	mat4 lightSpaceMatrix;
 
 	sampler2D shadowMap;
 	bool useShadowMap;
@@ -327,13 +328,36 @@ void main(){
 	int dirLightsNum =  min(MAX_DIR_LIGHTS,NR_DIR_LIGHTS);
 	int pointLightsNum = min(MAX_POINT_LIGHTS,NR_POINT_LIGHTS);
 	int spotLightsNum = min(MAX_SPOT_LIGHTS,NR_SPOT_LIGHTS);
-	
+	float shadow;
 	for(int i = 0;i<dirLightsNum;i++){
-		results += CalcDirLight(dirLights[i], norm, viewDir,0);
+		vec4 FragPosLightSpace =  dirLights[i].lightSpaceMatrix * vec4(FragPos,1.0);
+			switch(shadowType){
+				case DEFAULT_SHADOW:
+					shadow = ShadowCalculation(FragPosLightSpace,norm,dirLights[i]);
+					break;
+				case PCF_SHADOW:
+					shadow = PCF(FragPosLightSpace,0.1,norm,dirLights[i]);
+					break;
+				case PCSS_SHADOW:
+					shadow = PCSS(FragPosLightSpace,norm,dirLights[i]);
+					break;
+		}
+		results += CalcDirLight(dirLights[i], norm, viewDir,shadow);
 	}
 
 	for(int i = 0;i<pointLightsNum;i++){
-		results += CalcPointLight(pointLights[i], norm, FragPos, viewDir,0);
+		switch(shadowType){
+			case DEFAULT_SHADOW:
+				shadow = ShadowCalculation(FragPos,pointLights[i]);
+				break;
+			case PCF_SHADOW:
+				shadow = PCF(FragPos,0.1,norm,pointLights[i]);
+				break;
+			case PCSS_SHADOW:
+				shadow = PCSS(FragPos,norm,pointLights[i]);
+				break;
+		}
+		results += CalcPointLight(pointLights[i], norm, FragPos, viewDir,shadow);
 	}
 
 	for(int i = 0;i<spotLightsNum;i++){
