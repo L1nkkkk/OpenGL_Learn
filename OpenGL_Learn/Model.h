@@ -235,7 +235,7 @@ public:
 		m_active = val;
 	}
 
-private:
+protected:
 	std::vector<Texture> textures_loaded;
 	std::vector<Mesh> meshes;
 	std::string directory;

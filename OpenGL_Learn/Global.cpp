@@ -27,3 +27,5 @@ int BLOOM_BLUR_ITERATIONS = 5;
 bool DEFER_RENDERING = false;
 
 unsigned int quadVAO, quadVBO;
+unsigned int cubeVAO, cubeVBO;
+unsigned int sphereVAO, sphereVBO;

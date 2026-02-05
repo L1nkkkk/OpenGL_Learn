@@ -127,6 +127,7 @@ int main() {
 	glfwGetFramebufferSize(window, &SCREEN_WIDTH, &SCREEN_HEIGHT);
 	glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 
+	InitVAOs();
 
 	MyGui& mygui = MyGui::GetInstance();
 	mygui.Init(window);
@@ -158,7 +159,7 @@ int main() {
 	Planet planet;
 	planet.Init();
 #endif
-
+	
 	Scene scene(&camera, SCREEN_WIDTH, SCREEN_HEIGHT);
 	LoadModels(scene);
 	CubeTexture skybox("materials/skybox");
@@ -219,30 +220,6 @@ int main() {
 	
 	FramebuffersManager& framebuffersMgr = FramebuffersManager::GetInstance();
 	AntiAliasManager& antiAliasMgr = AntiAliasManager::GetInstance();
-
-	glGenVertexArrays(1, &quadVAO);
-	glGenBuffers(1, &quadVBO);
-
-	float backviewScreenVertices[] = {
-		-0.2f, 1.0f, 0.0f,1.0f,
-		-0.2f, 0.6f, 0.0f,0.0f,
-		 0.2f, 0.6f, 1.0f,0.0f,
-
-		-0.2f, 1.0f, 0.0f,1.0f,
-		 0.2f, 0.6f, 1.0f,0.0f,
-		 0.2f, 1.0f, 1.0f,1.0f
-	};
-
-	glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(screenVertices), &screenVertices, GL_STATIC_DRAW);
-
-
-	glBindVertexArray(quadVAO);
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
-	glBindVertexArray(0);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	//glEnable(GL_CULL_FACE);

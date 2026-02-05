@@ -147,6 +147,7 @@
     <ClCompile Include="Scene.cpp" />
     <ClCompile Include="Shader.cpp" />
     <ClCompile Include="ShaderManager.cpp" />
+    <ClCompile Include="Light.cpp" />
     <ClCompile Include="test.cpp" />
     <ClCompile Include="Camera.cpp" />
   </ItemGroup>
@@ -171,6 +172,8 @@
     <None Include="shaders\debugSceneVertex.glsl" />
     <None Include="shaders\defaultFragment.glsl" />
     <None Include="shaders\deferFragment.glsl" />
+    <None Include="shaders\deferLightFragment.glsl" />
+    <None Include="shaders\deferLightVertex.glsl" />
     <None Include="shaders\deferProcessFragment.glsl" />
     <None Include="shaders\deferProcessVertex.glsl" />
     <None Include="shaders\deferVertex.glsl" />

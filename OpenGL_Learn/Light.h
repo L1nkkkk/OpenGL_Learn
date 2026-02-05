@@ -3,8 +3,9 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <array>
 #include "GLobal.h"
+#include "Model.h"
 
-class PointLight : public BaseObject{
+class PointLight : public Model{
 public:
 	glm::vec3 ambient;
 	glm::vec3 diffuse;
@@ -22,8 +23,8 @@ public:
 	glm::mat4 shadowProj;
 	std::array<glm::mat4, 6> lightSpaceMatrices;
 
-	PointLight(const glm::vec3& pos, const glm::vec3& amb, const glm::vec3& diff, const glm::vec3& spec)
-		: ambient(amb), diffuse(diff), specular(spec) {
+	PointLight(const glm::vec3& pos, const glm::vec3& amb, const glm::vec3& diff, const glm::vec3& spec, std::string path)
+		: Model(path),ambient(amb), diffuse(diff), specular(spec) {
 		position = pos;
 		constant = 1.0f;
 		linear = 0.09f;
@@ -34,6 +35,8 @@ public:
 		shadowFBO = FramebuffersManager::GetInstance().GetFBO(attr);
 		useShadowMap = false;
 	}
+
+	void DrawPointLight();
 
 	std::array<glm::mat4, 6>& GetLightSpaceMatrices() {
 		shadowProj = glm::perspective(glm::radians(90.0f), (float)SHADOW_WIDTH / (float)SHADOW_HEIGHT, near, far);

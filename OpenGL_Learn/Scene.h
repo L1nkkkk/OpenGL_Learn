@@ -17,6 +17,7 @@
 
 struct LightSource {
 	unsigned int pointLightVAO;
+	unsigned int vertexCount;
 	std::vector<PointLight> pointLights;
 	std::vector<DirectionLight> directionLights;
 	std::vector<SpotLight> spotLights;
@@ -98,7 +99,8 @@ public:
 
 	Scene(Camera* camera,const unsigned int& width,const unsigned int& height) {
 		camera_ptr = camera;
-		lightSource.pointLightVAO = GetPointLightVAO();
+		lightSource.pointLightVAO = sphereVAO;
+		lightSource.vertexCount = 262;
 		FBOAttributes attr;
 		fboTemp = FramebuffersManager::GetInstance().GetFBO(attr);
 		deferShader = ShaderManager::GetInstance().GetShader(ShaderManager::DeferProcess);
@@ -124,61 +126,6 @@ public:
 
 	void Blur(int,FBO*);
 	void ClearFBO();
-
-	unsigned int GetPointLightVAO() {
-		float vertices[] = {
-		-0.5f, -0.5f, -0.5f,
-		 0.5f, -0.5f, -0.5f,
-		 0.5f,  0.5f, -0.5f,
-		 0.5f,  0.5f, -0.5f,
-		-0.5f,  0.5f, -0.5f,
-		-0.5f, -0.5f, -0.5f,
-
-		-0.5f, -0.5f,  0.5f,
-		 0.5f, -0.5f,  0.5f,
-		 0.5f,  0.5f,  0.5f,
-		 0.5f,  0.5f,  0.5f,
-		-0.5f,  0.5f,  0.5f,
-		-0.5f, -0.5f,  0.5f,
-
-		-0.5f,  0.5f,  0.5f,
-		-0.5f,  0.5f, -0.5f,
-		-0.5f, -0.5f, -0.5f,
-		-0.5f, -0.5f, -0.5f,
-		-0.5f, -0.5f,  0.5f,
-		-0.5f,  0.5f,  0.5f,
-
-		 0.5f,  0.5f,  0.5f,
-		 0.5f,  0.5f, -0.5f,
-		 0.5f, -0.5f, -0.5f,
-		 0.5f, -0.5f, -0.5f,
-		 0.5f, -0.5f,  0.5f,
-		 0.5f,  0.5f,  0.5f,
-
-		-0.5f, -0.5f, -0.5f,
-		 0.5f, -0.5f, -0.5f,
-		 0.5f, -0.5f,  0.5f,
-		 0.5f, -0.5f,  0.5f,
-		-0.5f, -0.5f,  0.5f,
-		-0.5f, -0.5f, -0.5f,
-
-		-0.5f,  0.5f, -0.5f,
-		 0.5f,  0.5f, -0.5f,
-		 0.5f,  0.5f,  0.5f,
-		 0.5f,  0.5f,  0.5f,
-		-0.5f,  0.5f,  0.5f,
-		-0.5f,  0.5f, -0.5f,
-		};
-		unsigned int VBO, VAO;
-		glGenVertexArrays(1, &VAO);
-		glGenBuffers(1, &VBO);
-		glBindVertexArray(VAO);
-		glBindBuffer(GL_ARRAY_BUFFER, VBO);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-		glEnableVertexAttribArray(0);
-		return VAO;
-	}
 
 	FBO* GetNeedShowFramebuffer();
 
