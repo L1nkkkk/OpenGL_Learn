@@ -1,12 +1,15 @@
 #version 330 core
-out vec4 FragColor;
+layout (location = 0) out vec4 FragColor;
+layout (location = 1) out vec4 BrightColor;
 in vec2 TexCoords;
 
 uniform sampler2D gPosition;
 uniform sampler2D gNormal;
 uniform sampler2D gAlbedoSpec;
+uniform sampler2D gMaterial;
 
-vec4 albedoSpec;
+vec3 albedoSpec;
+vec4 material;//r : ambinent g:diffuse b:spec a : shinings
 
 struct DirLight{
 	vec3 direction;
@@ -72,6 +75,8 @@ uniform int NR_SPOT_LIGHTS;
 uniform PointLight pointLights[MAX_POINT_LIGHTS];
 uniform DirLight dirLights[MAX_DIR_LIGHTS];
 uniform SpotLight spotLights[MAX_SPOT_LIGHTS];
+
+uniform float bloom_threshold;
 
 vec2 poissonDisk[MAX_SAMPLE_NUM];
 
@@ -253,7 +258,7 @@ float ShadowCalculation(vec3 fragPos,PointLight light){
 
 vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir,float shadow)
 {
-	vec3 color = albedoSpec.rgb;
+	vec3 color = albedoSpec;
 	//After this below, BUG
 	
 	vec3 lightDir = normalize(-light.direction);
@@ -261,30 +266,30 @@ vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir,float shadow)
 	float diff = max(dot(normal, lightDir), 0.0);
 	// specular shading
 	vec3 halfwayDir = normalize(lightDir + viewDir);
-	float spec = pow(max(dot(normal, halfwayDir), 0.0), albedoSpec.a);
+	float spec = pow(max(dot(normal, halfwayDir), 0.0), material.a);
 	// combine results
-	vec3 ambient = light.ambient;
-	vec3 diffuse = light.diffuse * diff;
-	vec3 specular = light.specular * spec;
+	vec3 ambient = light.ambient * material.r;
+	vec3 diffuse = light.diffuse * material.g *diff;
+	vec3 specular = light.specular * material.b* spec;
 	return (ambient + (1.0-shadow)*(diffuse + specular))* color;
 }
 
 vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir,float shadow)
 {
-	vec3 color = albedoSpec.rgb;
+	vec3 color = albedoSpec;
 	vec3 lightDir = normalize(light.position - fragPos);
 	// diffuse shading
 	float diff = max(dot(normal, lightDir), 0.0);
 	// specular shading
 	vec3 halfwayDir = normalize(lightDir + viewDir);
-	float spec = pow(max(dot(normal, halfwayDir), 0.0), albedoSpec.a);
+	float spec = pow(max(dot(normal, halfwayDir), 0.0), material.a);
 	// attenuation
 	float distance = length(light.position - fragPos);
 	float attenuation = 1.0 / (light.constant + light.linear * distance + light.quadratic * (distance * distance));
 	// combine results
-	vec3 ambient = light.ambient ;
-	vec3 diffuse = light.diffuse * diff;
-	vec3 specular = light.specular * spec;
+	vec3 ambient = light.ambient * material.r;
+	vec3 diffuse = light.diffuse * material.g *diff;
+	vec3 specular = light.specular * material.b* spec;
 	ambient *= attenuation;
 	diffuse *= attenuation;
 	specular *= attenuation;
@@ -293,13 +298,13 @@ vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir,fl
 
 vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir,float shadow)
 {
-	vec3 color = albedoSpec.rgb;
+	vec3 color = albedoSpec;
 	vec3 lightDir = normalize(light.position - fragPos);
 	// diffuse shading
 	float diff = max(dot(normal, lightDir), 0.0);
 	// specular shading
 	vec3 reflectDir = reflect(-lightDir, normal);
-	float spec = pow(max(dot(viewDir, reflectDir), 0.0),albedoSpec.a);
+	float spec = pow(max(dot(viewDir, reflectDir), 0.0),material.a);
 	// attenuation
 	float distance = length(light.position - fragPos);
 	float attenuation = 1.0 / (light.constant + light.linear * distance + light.quadratic * (distance * distance));
@@ -308,9 +313,9 @@ vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir,floa
 	float epsilon = light.cutOff - light.outerCutOff;
 	float intensity = clamp((theta - light.outerCutOff) / epsilon, 0.0, 1.0);
 	// combine results
-	vec3 ambient = light.ambient ;
-	vec3 diffuse = light.diffuse * diff;
-	vec3 specular = light.specular * spec;
+	vec3 ambient = light.ambient * material.r;
+	vec3 diffuse = light.diffuse * material.g *diff;
+	vec3 specular = light.specular * material.b* spec;
 	ambient *= attenuation * intensity;
 	diffuse *= attenuation * intensity;
 	specular *= attenuation * intensity;
@@ -319,7 +324,8 @@ vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir,floa
 
 void main(){
 
-	albedoSpec = texture(gAlbedoSpec, TexCoords);
+	albedoSpec = texture(gAlbedoSpec, TexCoords).rgb;
+	material = texture(gMaterial, TexCoords);
 	vec3 norm = normalize(texture(gNormal,TexCoords).rgb);
 	vec3 FragPos = texture(gPosition,TexCoords).rgb;
 	vec3 viewDir = normalize(viewPos - FragPos);
@@ -364,5 +370,10 @@ void main(){
 		results += CalcSpotLight(spotLights[i], norm, FragPos, viewDir,0);
 	}
 	FragColor = vec4(results, 1.0);
+	float brightness = dot(FragColor.rgb, vec3(0.2126, 0.7152, 0.0722));
+    if(brightness > bloom_threshold)
+        BrightColor = vec4(FragColor.rgb, 1.0);
+	else BrightColor = vec4(0,0,0,1);
+	return;
 	return;
 }

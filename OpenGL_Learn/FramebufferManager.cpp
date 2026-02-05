@@ -6,7 +6,7 @@ void FBO::Init(FBOAttributes attr) {
 	glBindFramebuffer(GL_FRAMEBUFFER, framebufferID);
 	this->attr = attr;
 	if (attr.isDefer) {
-		textureIDs.resize(3);
+		textureIDs.resize(4);
 	}
 	else if (attr.isBloom) {
 		textureIDs.resize(2);
@@ -78,14 +78,20 @@ void FBO::Init(FBOAttributes attr) {
 
 		// - 颜色 + 镜面颜色缓冲
 		glBindTexture(GL_TEXTURE_2D, textureIDs[2]);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, textureIDs[2], 0);
-
+		// - Material properties buffer
+		glBindAttribLocation(GLenum(GL_FRAMEBUFFER), 3, "gMaterial");
+		glBindTexture(GL_TEXTURE_2D, textureIDs[3]);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, textureIDs[3], 0);
 		// - 告诉OpenGL我们将要使用(帧缓冲的)哪种颜色附件来进行渲染
-		GLuint attachments[3] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 };
-		glDrawBuffers(3, attachments);
+		GLuint attachments[4] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3};
+		glDrawBuffers(4, attachments);
 
 		glGenRenderbuffers(1, &rboID);
 		glBindRenderbuffer(GL_RENDERBUFFER, rboID);
