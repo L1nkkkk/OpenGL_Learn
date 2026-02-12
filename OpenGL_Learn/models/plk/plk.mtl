@@ -1,0 +1,118 @@
+newmtl m0
+map_Kd textures/T_actor_pelica_face_01_D.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 4.963533
+d 1
+
+newmtl m1
+map_Kd textures/T_actor_pelica_iris_01_D.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 4.963533
+d 1
+
+newmtl m2
+map_Kd textures/T_actor_pelica_iris_01_D.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 4.963533
+d 1
+
+newmtl m3
+map_Kd textures/T_actor_pelica_face_01_D.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 4.963533
+d 1
+
+newmtl m4
+Ka 0 0 0
+Kd 0 0 0
+Ks 0 0 0
+Ns 4.963533
+d 0.3
+
+newmtl m5
+map_Kd textures/T_actor_pelica_face_01_D.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 4.963533
+d 1
+
+newmtl m6
+map_Kd textures/T_actor_pelica_face_01_D.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 4.963533
+d 1
+
+newmtl m7
+map_Kd textures/T_actor_pelica_hair_01_D.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 4.963533
+d 1
+
+newmtl m8
+Ka 0.2352941 0.05490196 0
+Kd 0 0 0
+Ks 0 0 0
+Ns 4.963533
+d 0.3
+
+newmtl m9
+map_Kd textures/T_actor_pelica_body_01_D.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 4.963533
+d 1
+
+newmtl m10
+map_Kd textures/T_actor_pelica_cloth_01_D.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 4.963533
+d 1
+
+newmtl m11
+map_Kd textures/T_actor_pelica_cloth_01_D.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 4.963533
+d 1
+
+newmtl m12
+map_Kd textures/T_actor_pelica_cloth_02_D.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 4.963533
+d 1
+
+newmtl m13
+map_Kd textures/T_actor_pelica_cloth_02_D.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 4.963533
+d 1
+
+newmtl m14
+map_Kd textures/T_actor_common_female_emotion_atlas_01_D.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
+Ks 0 0 0
+Ns 4.963533
+d 0
+

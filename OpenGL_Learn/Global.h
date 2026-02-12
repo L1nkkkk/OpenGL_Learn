@@ -11,31 +11,63 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-extern bool DEBUG_MODE;
+namespace ShadowProperty {
+    enum ShadowType {
+        Default = 0,
+        PCF,
+        PCSS,
+    };
+    inline const char* ShadowTypeStrs[] = {
+        "Default",
+        "PCF",
+        "PCSS",
+    };
+}
 
-extern int SCREEN_WIDTH;
-extern int SCREEN_HEIGHT;
+class SystemProperties {
+public:
+    static SystemProperties& GetInstance() {
+        static SystemProperties instance;
+        return instance;
+    }
 
-extern int USED_TEXTURE_NUM;
+    bool DEBUG_MODE = false;
 
-extern int SHADOW_WIDTH;
-extern int SHADOW_HEIGHT;
-extern bool SHADOW_MAP_SHOW;
-extern int SHADOW_PCF_SAMPLE_NUM;
-extern int SHADOW_PCF_RING_NUM;
-extern int SHADOW_TYPE;
+    int SCREEN_WIDTH = 1440;
+    int SCREEN_HEIGHT = 900;
 
-extern float GAMMA_VALUE;
-extern bool GAMMA_CORRECTION;
+    int USED_TEXTURE_NUM = 0;
 
-extern bool USE_HDR;
-extern float HDR_EXPOSURE;
+    int SHADOW_WIDTH = 1024;
+    int SHADOW_HEIGHT = 1024;
+    bool SHADOW_MAP_SHOW = false;
+    int SHADOW_PCF_SAMPLE_NUM = 16;
+    int SHADOW_PCF_RING_NUM = 10;
+    int SHADOW_TYPE = ShadowProperty::Default;
 
-extern bool BLOOM;
-extern float BLOOM_THRESHOLD;
-extern int BLOOM_BLUR_ITERATIONS;
+    bool GAMMA_CORRECTION = true;
+    float GAMMA_VALUE = 2.2f;
 
-extern bool DEFER_RENDERING;
+    bool USE_HDR = false;
+    float HDR_EXPOSURE = 1.0;
+
+    bool BLOOM = false;
+    float BLOOM_THRESHOLD = 1.0f;
+    int BLOOM_BLUR_ITERATIONS = 5;
+
+    bool DEFER_RENDERING = false;
+    bool LIGHT_VOLUME = false;
+
+private:
+    SystemProperties() = default;
+};
+
+struct GlobalVAOs {
+    unsigned int quadVAO, quadVBO;
+    unsigned int cubeVAO, cubeVBO;
+    unsigned int sphereVAO, sphereVBO;
+};
+extern GlobalVAOs globalVAOs;
 
 inline float screenVertices[] = { // vertex attributes for a quad that fills the entire screen in Normalized Device Coordinates.
 	// positions   // texCoords
@@ -474,6 +506,8 @@ public:
 		Delete();
 		Init(attr);
 	}
+private:
+	SystemProperties& properties = SystemProperties::GetInstance();
 };
 
 
@@ -490,10 +524,11 @@ public:
 
 	static FBOAttributes GenCurrentAttr() {
 		FBOAttributes attr;
+        auto& properties = SystemProperties::GetInstance();
 		attr.aaType = AntiAliasManager::GetInstance().antiAliasType;
-		attr.isGamma = GAMMA_CORRECTION;
-		attr.isHDR = USE_HDR;
-		attr.isBloom = BLOOM;
+		attr.isGamma = properties.GAMMA_CORRECTION;
+		attr.isHDR = properties.USE_HDR;
+		attr.isBloom = properties.BLOOM;
 		attr.isDefer = false;
 		return attr;
 	}
@@ -552,18 +587,7 @@ public:
 	inline static float normalLineMagnitude = 0.01;
 };
 
-namespace ShadowProperty {
-	enum ShadowType {
-		Default = 0,
-		PCF,
-		PCSS,
-	};
-	inline const char* ShadowTypeStrs[] = {
-		"Default",
-		"PCF",
-		"PCSS",
-	};
-}
+
 
 class BaseObject {
 public:
@@ -580,6 +604,22 @@ public:
 
 	void SetActiveStatus(bool val) {
 		m_active = val;
+	}
+
+    void SetScale(glm::vec3 s) {
+        scale = s;
+	}
+    
+    void SetScale(float s) {
+        scale = glm::vec3(s);
+    }
+
+    void SetPosition(glm::vec3 p) {
+        position = p;
+	}
+
+    void SetRotation(glm::vec3 r) {
+        rotation = r;
 	}
 protected:
 	glm::mat4 modelMatrix;

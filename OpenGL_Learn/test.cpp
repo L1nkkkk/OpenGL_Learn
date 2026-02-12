@@ -22,7 +22,9 @@ bool lastFrameMkeyState = false;
 int frameCount = 0;
 float lastFrameTime = 0.0f;
 
-Camera camera(5.0f, glm::vec3(0.0f, 1.0f, -3.0f), SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f);
+auto& properties = SystemProperties::GetInstance();
+
+Camera camera(5.0f, glm::vec3(0.0f, 1.0f, -3.0f), properties.SCREEN_WIDTH / 2.0f, properties.SCREEN_HEIGHT / 2.0f);
 glm::mat4 view, projection;
 
 float deltaTime = 0.0f;
@@ -67,8 +69,8 @@ void ProcessInput(GLFWwindow* window) {
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
 	glViewport(0, 0, width, height);
-	SCREEN_HEIGHT = height;
-	SCREEN_WIDTH = width;
+	properties.SCREEN_HEIGHT = height;
+	properties.SCREEN_WIDTH = width;
 
 	auto& fBuffersMgr = FramebuffersManager::GetInstance();
 	fBuffersMgr.Resize();
@@ -94,7 +96,7 @@ void SetGui() {
 
 void SetUniformBuffer() {
 	view = camera.GetViewMatrix();
-	projection = glm::perspective(glm::radians(camera.fov), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, 0.1f, 100.0f);
+	projection = glm::perspective(glm::radians(camera.fov), (float)properties.SCREEN_WIDTH / (float)properties.SCREEN_HEIGHT, 0.1f, 100.0f);
 	ShaderManager& ShaderMgr = ShaderManager::GetInstance();
 	ShaderMgr.SetUBOData(ShaderManager::Matrices, 0, sizeof(glm::mat4), &view);
 	ShaderMgr.SetUBOData(ShaderManager::Matrices, sizeof(glm::mat4), sizeof(glm::mat4), &projection);
@@ -108,7 +110,7 @@ int main() {
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	
 
-	GLFWwindow* window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Learn OpenGL", NULL, NULL);
+	GLFWwindow* window = glfwCreateWindow(properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT, "Learn OpenGL", NULL, NULL);
 	if (!window) {
 		std::cout << "Fail to create a window" << std::endl;
 		glfwTerminate();		
@@ -124,8 +126,8 @@ int main() {
 		std::cout << "Fail to initialize GLAD" << std::endl;
 		return -1;
 	}
-	glfwGetFramebufferSize(window, &SCREEN_WIDTH, &SCREEN_HEIGHT);
-	glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+	glfwGetFramebufferSize(window, &properties.SCREEN_WIDTH, &properties.SCREEN_HEIGHT);
+	glViewport(0, 0, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
 
 	InitVAOs();
 
@@ -160,7 +162,7 @@ int main() {
 	planet.Init();
 #endif
 	
-	Scene scene(&camera, SCREEN_WIDTH, SCREEN_HEIGHT);
+	Scene scene(&camera, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
 	LoadModels(scene);
 	CubeTexture skybox("materials/skybox");
 	float skyboxVertices[] = {
@@ -226,12 +228,6 @@ int main() {
 	//glCullFace(GL_BACK);
 
 	glEnable(GL_PROGRAM_POINT_SIZE);
-
-	glEnable(GL_BLEND);
-	
-	//glEnable(GL_FRAMEBUFFER_SRGB);
-
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	
 	while (!glfwWindowShouldClose(window)) {
 		++frameCount;
@@ -268,25 +264,25 @@ int main() {
 		
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-		glBindVertexArray(quadVAO);
+		glBindVertexArray(globalVAOs.quadVAO);
 		glDisable(GL_DEPTH_TEST);
 		FBO* sceneFBO = scene.GetNeedShowFramebuffer();
-		if (!DEBUG_MODE) {
+		if (!properties.DEBUG_MODE) {
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
 			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, sceneFBO->textureIDs[0]);
-			if (BLOOM) {
+			if (properties.BLOOM) {
 				glActiveTexture(GL_TEXTURE1);
 				glBindTexture(GL_TEXTURE_2D, sceneFBO->textureIDs[1]);
 			}
 			screenShader.use();
 			screenShader.setInt("screenTexture", 0);
-			screenShader.setFloat("gamma", GAMMA_VALUE);
-			screenShader.setBool("useShadowMap", SHADOW_MAP_SHOW);
-			screenShader.setBool("useGamma", GAMMA_CORRECTION);
-			screenShader.setBool("hdr", USE_HDR);
-			screenShader.setFloat("exposure", HDR_EXPOSURE);
-			screenShader.setBool("bloom", BLOOM);
+			screenShader.setFloat("gamma", properties.GAMMA_VALUE);
+			screenShader.setBool("useShadowMap", properties.SHADOW_MAP_SHOW);
+			screenShader.setBool("useGamma", properties.GAMMA_CORRECTION);
+			screenShader.setBool("hdr", properties.USE_HDR);
+			screenShader.setFloat("exposure", properties.HDR_EXPOSURE);
+			screenShader.setBool("bloom", properties.BLOOM);
 			screenShader.setInt("bloomBlur", 1);
 		}
 		else {

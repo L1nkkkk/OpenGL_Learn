@@ -216,7 +216,7 @@ public:
 	}
 
 	unsigned int GetTextureID(int index) {
-		return GAMMA_CORRECTION?textures_loaded[index].textureGammaID: textures_loaded[index].textureID;
+		return (properties.GAMMA_CORRECTION)?textures_loaded[index].textureGammaID: textures_loaded[index].textureID;
 	}
 
 	std::string GetName() {
@@ -249,6 +249,8 @@ protected:
 	std::vector<Texture> loadMaterialTextures(aiMaterial* mat, aiTextureType type, std::string typeName);
 	Material prosessMaterial(aiMaterial* mat);
 	glm::vec3 CalculateLocalCenter();
+
+	SystemProperties& properties = SystemProperties::GetInstance();
 };
 
 unsigned int TextureFromFile(const char* path, const std::string& directory,bool alpha = false ,bool gamma = false);

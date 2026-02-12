@@ -171,6 +171,8 @@
     <None Include="shaders\debugSceneFragment.glsl" />
     <None Include="shaders\debugSceneVertex.glsl" />
     <None Include="shaders\defaultFragment.glsl" />
+    <None Include="shaders\deferDirLightVolumeFragment.glsl" />
+    <None Include="shaders\deferDirLightVolumeVertex.glsl" />
     <None Include="shaders\deferFragment.glsl" />
     <None Include="shaders\deferLightFragment.glsl" />
     <None Include="shaders\deferLightVertex.glsl" />
@@ -182,6 +184,8 @@
     <None Include="shaders\diffuseGeometry.glsl" />
     <None Include="shaders\diffuseVertex.glsl" />
     <None Include="LightVertexShader.glsl" />
+    <None Include="shaders\lightVolumeFragment.glsl" />
+    <None Include="shaders\lightVolumeVertex.glsl" />
     <None Include="shaders\outlineFragment.glsl" />
     <None Include="shaders\defaultVertex.glsl" />
     <None Include="shaders\explodeFragment.glsl" />

@@ -111,6 +111,10 @@ void Shader::setVec4(const std::string& name, const glm::vec4& vec) const
 	glUniform4fv(glGetUniformLocation(ID, name.c_str()), 1, &vec[0]);
 }
 
+void Shader::setVec2(const std::string& name, const glm::vec2& vec) const
+{
+	glUniform4fv(glGetUniformLocation(ID, name.c_str()), 1, &vec[0]);
+}
 
 GeometryShader::GeometryShader(const char* vertexPath, const char* geometryPath, const char* fragmentPath)
 	: Shader(vertexPath, fragmentPath)

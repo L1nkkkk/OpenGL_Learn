@@ -99,7 +99,7 @@ public:
 
 	Scene(Camera* camera,const unsigned int& width,const unsigned int& height) {
 		camera_ptr = camera;
-		lightSource.pointLightVAO = sphereVAO;
+		lightSource.pointLightVAO = globalVAOs.sphereVAO;
 		lightSource.vertexCount = 262;
 		FBOAttributes attr;
 		fboTemp = FramebuffersManager::GetInstance().GetFBO(attr);
@@ -135,4 +135,5 @@ public:
 private:
 	glm::mat4 view;
 	glm::mat4 projection;
+	SystemProperties& properties = SystemProperties::GetInstance();
 };

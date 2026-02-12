@@ -35,6 +35,7 @@ void Mesh::setupMesh()
 
 void Mesh::Draw(Shader& shader)
 {
+	auto& properties = SystemProperties::GetInstance();
 	shader.setVec3("material.ambient", material.ambient);
 	shader.setVec3("material.diffuse", material.diffuse);
 	shader.setVec3("material.specular", material.specular);
@@ -48,31 +49,31 @@ void Mesh::Draw(Shader& shader)
 	unsigned int specularNr = 1;
 	unsigned int normalNr = 1;
 	for (unsigned int i = 0; i < material.diffuseTextures.size(); ++i) {
-		glActiveTexture(GL_TEXTURE0 + USED_TEXTURE_NUM);
+		glActiveTexture(GL_TEXTURE0 + properties.USED_TEXTURE_NUM);
 		std::string number;
 		number = std::to_string(diffuseNr++);
-		if(GAMMA_CORRECTION)
+		if(properties.GAMMA_CORRECTION)
 			glBindTexture(GL_TEXTURE_2D, material.diffuseTextures[i].textureGammaID);
 		else
 			glBindTexture(GL_TEXTURE_2D, material.diffuseTextures[i].textureID);
-		shader.setInt(("texture_diffuse" + number).c_str(), USED_TEXTURE_NUM++);
+		shader.setInt(("texture_diffuse" + number).c_str(), properties.USED_TEXTURE_NUM++);
 		shader.setBool("hasDiffuseMap", true);
 	}
 
 	for (unsigned int i = 0; i < material.specularTextures.size(); ++i) {
-		glActiveTexture(GL_TEXTURE0 + USED_TEXTURE_NUM);
+		glActiveTexture(GL_TEXTURE0 + properties.USED_TEXTURE_NUM);
 		std::string number;
 		number = std::to_string(specularNr++);
 		glBindTexture(GL_TEXTURE_2D, material.specularTextures[i].textureID);
-		shader.setInt(("texture_specular" + number).c_str(), USED_TEXTURE_NUM++);
+		shader.setInt(("texture_specular" + number).c_str(), properties.USED_TEXTURE_NUM++);
 		shader.setBool("hasSpecularMap", true);
 	}
 
 	for (unsigned int i = 0; i < material.normalTextures.size(); ++i) {
-		glActiveTexture(GL_TEXTURE0 + USED_TEXTURE_NUM);
+		glActiveTexture(GL_TEXTURE0 + properties.USED_TEXTURE_NUM);
 		std::string number = std::to_string(normalNr++);
 		glBindTexture(GL_TEXTURE_2D, material.normalTextures[i].textureID);
-		shader.setInt(("texture_normal" + number).c_str(), USED_TEXTURE_NUM++);
+		shader.setInt(("texture_normal" + number).c_str(), properties.USED_TEXTURE_NUM++);
 		shader.setBool("hasNormalMap", true);
 	}
 

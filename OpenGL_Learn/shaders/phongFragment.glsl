@@ -11,6 +11,8 @@ struct DirLight{
 	sampler2D shadowMap;
 	bool useShadowMap;
 	mat4 lightSpaceMatrix;
+
+	bool isActive;
 };
 
 struct PointLight{
@@ -27,6 +29,8 @@ struct PointLight{
 	float far_plane;
 	samplerCube shadowCubeMap;
 	bool useShadowMap;
+
+	bool isActive;
 };
 
 struct SpotLight{
@@ -40,6 +44,8 @@ struct SpotLight{
 	vec3 ambient;
 	vec3 diffuse;
 	vec3 specular;
+
+	bool isActive;
 };
 
 struct Material{
@@ -351,7 +357,8 @@ void main()
 	float shadow = 0.0;
 	
 	vec3 results = vec3(0);
-
+	float alpha = 0.0;
+	if(hasDiffuseMap) alpha = 1.0;
 	int pointLightsNum = min(MAX_POINT_LIGHTS,NR_POINT_LIGHTS);
 	int dirLightsNum =  min(MAX_DIR_LIGHTS,NR_DIR_LIGHTS);
 	int spotLightsNum = min(MAX_SPOT_LIGHTS,NR_SPOT_LIGHTS);
@@ -391,7 +398,7 @@ void main()
 	for(int i = 0;i<spotLightsNum;i++){
 		results += CalcSpotLight(spotLights[i], norm, fs_in.FragPos, viewDir,0);
 	}
-	FragColor = vec4(results, 1.0);
+	FragColor = vec4(results, alpha);
 	float brightness = dot(FragColor.rgb, vec3(0.2126, 0.7152, 0.0722));
     if(brightness > bloom_threshold)
         BrightColor = vec4(FragColor.rgb, 1.0);

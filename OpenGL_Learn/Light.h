@@ -39,7 +39,7 @@ public:
 	void DrawPointLight();
 
 	std::array<glm::mat4, 6>& GetLightSpaceMatrices() {
-		shadowProj = glm::perspective(glm::radians(90.0f), (float)SHADOW_WIDTH / (float)SHADOW_HEIGHT, near, far);
+		shadowProj = glm::perspective(glm::radians(90.0f), (float)properties.SHADOW_WIDTH / (float)properties.SHADOW_HEIGHT, near, far);
 
 		lightSpaceMatrices[0] = (shadowProj *
 			glm::lookAt(position, position + glm::vec3(1.0, 0.0, 0.0), glm::vec3(0.0, -1.0, 0.0)));

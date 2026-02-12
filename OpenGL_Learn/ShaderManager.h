@@ -26,6 +26,8 @@ public:
 		Bulr,
 		DeferProcess,
 		Defer,
+		DeferDirLightVolume,
+		LightVolume,
 		//StartGeometryShaderIndex
 		Explode,
 		NormalLines,
@@ -69,6 +71,8 @@ private:
 		"bulr",
 		"deferProcess",
 		"defer",
+		"deferDirLightVolume",
+		"lightVolume",
 	};
 	std::vector<std::string> geometryShaderNames = {
 		"explode",

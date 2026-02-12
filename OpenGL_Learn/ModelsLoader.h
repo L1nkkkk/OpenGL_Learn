@@ -11,30 +11,31 @@ glm::vec3 pointLightPositions[] = {
 };
 
 void InitVAOs() {
-	glGenVertexArrays(1, &quadVAO);
-	glGenBuffers(1, &quadVBO);
-	glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+	auto& properties = SystemProperties::GetInstance();
+	glGenVertexArrays(1, &globalVAOs.quadVAO);
+	glGenBuffers(1, &globalVAOs.quadVBO);
+	glBindBuffer(GL_ARRAY_BUFFER, globalVAOs.quadVBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(screenVertices), &screenVertices, GL_STATIC_DRAW);
-	glBindVertexArray(quadVAO);
+	glBindVertexArray(globalVAOs.quadVAO);
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
 	glEnableVertexAttribArray(1);
 	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
 	glBindVertexArray(0);
 
-	glGenVertexArrays(1, &cubeVAO);
-	glGenBuffers(1, &cubeVBO);
-	glBindVertexArray(cubeVAO);
-	glBindBuffer(GL_ARRAY_BUFFER, cubeVBO);
+	glGenVertexArrays(1, &globalVAOs.cubeVAO);
+	glGenBuffers(1, &globalVAOs.cubeVBO);
+	glBindVertexArray(globalVAOs.cubeVAO);
+	glBindBuffer(GL_ARRAY_BUFFER, globalVAOs.cubeVBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), &cubeVertices, GL_STATIC_DRAW);
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 
-	glGenVertexArrays(1, &sphereVAO);
-	glGenBuffers(1, &sphereVBO);
-	glBindBuffer(GL_ARRAY_BUFFER, sphereVBO);
+	glGenVertexArrays(1, &globalVAOs.sphereVAO);
+	glGenBuffers(1, &globalVAOs.sphereVBO);
+	glBindBuffer(GL_ARRAY_BUFFER, globalVAOs.sphereVBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(sphereVertices), &sphereVertices, GL_STATIC_DRAW);
-	glBindVertexArray(sphereVAO);
+	glBindVertexArray(globalVAOs.sphereVAO);
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 }
@@ -42,20 +43,30 @@ void InitVAOs() {
 void LoadModels(Scene& scene) {
 	auto& shaderManager = ShaderManager::GetInstance();
 
+	auto object1 = std::make_shared<Model>("models/plk/plk.obj");
+	object1->SetScale(0.1f);
+	object1->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
+	object1->AddOtherShader(OtherShaderType::normalLines, shaderManager.GetShader(ShaderManager::NormalLines));
+	scene.modelSource.AddOpaqueModel(shaderManager.GetShader(ShaderManager::Phong), object1);
+	object1->SetName("peilika");
+	object1->SetPosition(glm::vec3(-1.5f, 0.0f, 0.0f));
+
 	//Load Charactor
 	auto object = std::make_shared<Model>("models/saki/saki.obj");
-	object->scale = glm::vec3(0.1f);
+	object->SetScale(0.1f);
 	object->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
 	object->AddOtherShader(OtherShaderType::normalLines, shaderManager.GetShader(ShaderManager::NormalLines));
 	scene.modelSource.AddOpaqueModel(shaderManager.GetShader(ShaderManager::Phong), object);
 	object->SetName("saki");
+
+	
 	//Load PointLight
 	
 	//scene.lightSource.AddPointLight(PointLight(pointLightPositions[0], glm::vec3(0.05f), glm::vec3(0.8f), glm::vec3(1.0f)));
 	//scene.lightSource.AddPointLight(PointLight(pointLightPositions[1], glm::vec3(0.05f), glm::vec3(0.8f), glm::vec3(1.0f)));
 	//scene.lightSource.AddPointLight(PointLight(pointLightPositions[2], glm::vec3(0.05f), glm::vec3(0.8f), glm::vec3(1.0f)));
 	auto pointLight = PointLight(pointLightPositions[3], glm::vec3(0.05f), glm::vec3(0.8f), glm::vec3(1.0f), "models/sphere/sphere.obj");
-	pointLight.scale = glm::vec3(0.2);
+	pointLight.SetScale(0.2);
 	scene.lightSource.AddPointLight(pointLight);
 	scene.lightSource.AddDirectionLight(DirectionLight(glm::vec3(-0.2f, -1.0f, -0.3f), glm::vec3(10.f), glm::vec3(0.4f), glm::vec3(0.5f)));
 	
@@ -191,6 +202,6 @@ void LoadModels(Scene& scene) {
 	wall3->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
 	scene.modelSource.AddOpaqueModel(shaderManager.GetShader(ShaderManager::Phong), wall3);
 	wall3->SetName("wall3");
-	wall3->rotation = glm::vec3(0, -90, -90);
-	wall3->position = glm::vec3(0, 5, -5);
+	wall3->SetRotation(glm::vec3(0, -90, -90));
+	wall3->SetPosition(glm::vec3(0, 5, -5));
 }

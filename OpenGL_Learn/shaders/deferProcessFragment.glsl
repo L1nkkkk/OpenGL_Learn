@@ -43,7 +43,7 @@ void main()
 	}
 	// and the diffuse per-fragment color
 	if(!hasDiffuseMap){
-		gAlbedoSpec = vec3(0,0,0);
+		gAlbedoSpec = vec3(1,0,0);
 	}
 	else{
 		gAlbedoSpec = texture(texture_diffuse1, vec2(fs_in.TexCoords)).rgb;
