@@ -23,8 +23,8 @@ public:
 	glm::mat4 shadowProj;
 	std::array<glm::mat4, 6> lightSpaceMatrices;
 
-	PointLight(const glm::vec3& pos, const glm::vec3& amb, const glm::vec3& diff, const glm::vec3& spec, std::string path)
-		: Model(path),ambient(amb), diffuse(diff), specular(spec) {
+	PointLight(const glm::vec3& pos, const glm::vec3& amb, const glm::vec3& diff, const glm::vec3& spec, std::string path,Material* mat)
+		: Model(path,mat),ambient(amb), diffuse(diff), specular(spec) {
 		position = pos;
 		constant = 1.0f;
 		linear = 0.09f;
@@ -32,11 +32,14 @@ public:
 		FBOAttributes attr;
 		attr.isShadowMap = true;
 		attr.shadowType = FBOAttributes::FramebufferType::ShadowBox;
+		attr.textureAttrs.push_back({ GL_TEXTURE_CUBE_MAP, GL_DEPTH_COMPONENT, GL_DEPTH_COMPONENT, GL_FLOAT });
 		shadowFBO = FramebuffersManager::GetInstance().GetFBO(attr);
 		useShadowMap = false;
 	}
 
 	void DrawPointLight();
+
+	void SetLightUniforms(Shader& shader, int index);
 
 	std::array<glm::mat4, 6>& GetLightSpaceMatrices() {
 		shadowProj = glm::perspective(glm::radians(90.0f), (float)properties.SHADOW_WIDTH / (float)properties.SHADOW_HEIGHT, near, far);
@@ -82,6 +85,7 @@ public:
 		FBOAttributes attr;
 		attr.isShadowMap = true;
 		attr.shadowType = FBOAttributes::FramebufferType::ShadowMap;
+		attr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_DEPTH_COMPONENT, GL_DEPTH_COMPONENT, GL_FLOAT });
 		shadowFBO = FramebuffersManager::GetInstance().GetFBO(attr);
 		useShadowMap = false;
 	}
@@ -114,6 +118,8 @@ public:
 		);
 		return lightProjection * lightView;
 	}
+
+	void SetLightUniforms(Shader& shader, int index);
 };
 
 class SpotLight : public BaseObject{
@@ -134,4 +140,6 @@ public:
 		linear = 0.09f;
 		quadratic = 0.032f;
 	}
+
+	void SetLightUniforms(Shader& shader, int index);
 };

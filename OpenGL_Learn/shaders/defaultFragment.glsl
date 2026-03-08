@@ -5,11 +5,15 @@ layout (location = 1) out vec4 BrightColor;
 
 in vec2 TexCoords;
 
-uniform vec3 color;
+struct Material{
+	vec3 color;
+};
+
+uniform Material material;
 
 
 void main()
 {
-	FragColor = vec4(1,0,0,1.0);
+	FragColor = vec4(material.color,1.0);
 	BrightColor = vec4(0,0,0,1);
 }

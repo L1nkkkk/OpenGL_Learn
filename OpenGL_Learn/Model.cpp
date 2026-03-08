@@ -1,11 +1,12 @@
 #include "Model.h"
+#include "XmlMaterialManager.h"
 
 Mesh::Mesh(std::vector<Vertex> vertices,
 		std::vector<unsigned int> indices,
-		   Material& material)
+		   Material* material)
 {
 	this->vertices = ComputeTBNVertices(vertices,indices);
-	this->material = material;
+	this->material_ptr = material;
 	this->start_tex_index = 0;
 	setupMesh();
 }
@@ -33,50 +34,11 @@ void Mesh::setupMesh()
 	glBindVertexArray(0);
 }
 
-void Mesh::Draw(Shader& shader)
+void Mesh::Draw()
 {
+	
 	auto& properties = SystemProperties::GetInstance();
-	shader.setVec3("material.ambient", material.ambient);
-	shader.setVec3("material.diffuse", material.diffuse);
-	shader.setVec3("material.specular", material.specular);
-	shader.setFloat("material.shininess", material.shininess);
-	shader.setFloat("material.opacity", material.opacity);
-
-	shader.setBool("hasDiffuseMap", !material.diffuseTextures.empty());
-	shader.setBool("hasSpecularMap", !material.specularTextures.empty());
-	shader.setBool("hasNormalMap", !material.normalTextures.empty());
-	unsigned int diffuseNr = 1;
-	unsigned int specularNr = 1;
-	unsigned int normalNr = 1;
-	for (unsigned int i = 0; i < material.diffuseTextures.size(); ++i) {
-		glActiveTexture(GL_TEXTURE0 + properties.USED_TEXTURE_NUM);
-		std::string number;
-		number = std::to_string(diffuseNr++);
-		if(properties.GAMMA_CORRECTION)
-			glBindTexture(GL_TEXTURE_2D, material.diffuseTextures[i].textureGammaID);
-		else
-			glBindTexture(GL_TEXTURE_2D, material.diffuseTextures[i].textureID);
-		shader.setInt(("texture_diffuse" + number).c_str(), properties.USED_TEXTURE_NUM++);
-		shader.setBool("hasDiffuseMap", true);
-	}
-
-	for (unsigned int i = 0; i < material.specularTextures.size(); ++i) {
-		glActiveTexture(GL_TEXTURE0 + properties.USED_TEXTURE_NUM);
-		std::string number;
-		number = std::to_string(specularNr++);
-		glBindTexture(GL_TEXTURE_2D, material.specularTextures[i].textureID);
-		shader.setInt(("texture_specular" + number).c_str(), properties.USED_TEXTURE_NUM++);
-		shader.setBool("hasSpecularMap", true);
-	}
-
-	for (unsigned int i = 0; i < material.normalTextures.size(); ++i) {
-		glActiveTexture(GL_TEXTURE0 + properties.USED_TEXTURE_NUM);
-		std::string number = std::to_string(normalNr++);
-		glBindTexture(GL_TEXTURE_2D, material.normalTextures[i].textureID);
-		shader.setInt(("texture_normal" + number).c_str(), properties.USED_TEXTURE_NUM++);
-		shader.setBool("hasNormalMap", true);
-	}
-
+	auto materialGaurd = MaterialGaurd(*material_ptr);
 	glActiveTexture(GL_TEXTURE0);
 	glBindVertexArray(VAO);
 	glDrawArrays(GL_TRIANGLES, 0, vertices.size());
@@ -85,13 +47,18 @@ void Mesh::Draw(Shader& shader)
 
 void Model::Draw(Shader& shader, unsigned int start_tex_index )
 {
+	shader.use();
+	shader.setMat4("model", getModelMatrix());
+	auto& properties = SystemProperties::GetInstance();
+	int usedTextures = properties.USED_TEXTURE_NUM;
 	for (unsigned int i = 0; i < meshes.size(); ++i) {
 		meshes[i].start_tex_index = start_tex_index;
-		meshes[i].Draw(shader);
+		meshes[i].Draw();
+		properties.USED_TEXTURE_NUM = usedTextures;
 	}
 }
 
-void Model::loadModel(std::string path)
+void Model::loadModel(std::string path,Material* mat)
 {
 	Assimp::Importer importer;
 	const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate  | aiProcess_CalcTangentSpace | aiProcess_FlipUVs);
@@ -101,25 +68,25 @@ void Model::loadModel(std::string path)
 		return;
 	}
 	directory = path.substr(0, path.find_last_of('/'));
-	processNode(scene->mRootNode, scene);
+	processNode(scene->mRootNode, scene,mat);
 }
 
-void Model::processNode(aiNode* node, const aiScene* scene)
+void Model::processNode(aiNode* node, const aiScene* scene,Material* mat)
 {
 	for (unsigned int i = 0; i < node->mNumMeshes; ++i) {
 		aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
-		meshes.push_back(processMesh(mesh, scene));
+		meshes.push_back(processMesh(mesh, scene,mat));
 	}
 	for (unsigned int i = 0; i < node->mNumChildren; ++i) {
-		processNode(node->mChildren[i], scene);
+		processNode(node->mChildren[i], scene,mat);
 	}
 }
 
-Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene)
+Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 {
 	std::vector<Vertex> vertices;
 	std::vector<unsigned int>indices;
-	Material material;
+	Material* material = mat;
 	for (unsigned int i = 0; i < mesh->mNumVertices; ++i) {
 		Vertex vertex;
 		glm::vec3 vector;
@@ -148,34 +115,54 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene)
 			indices.push_back(face.mIndices[j]);
 		}
 	}
-	if (mesh->mMaterialIndex >= 0) {
-		material = prosessMaterial(scene->mMaterials[mesh->mMaterialIndex]);
+	if(mat) {
+		return Mesh(vertices, indices, mat);
+	}
+	else if (mesh->mMaterialIndex >= 0) {
+		aiMaterial* aiMat = scene->mMaterials[mesh->mMaterialIndex];
+
+		aiString aiName;
+		if (aiMat->Get(AI_MATKEY_NAME, aiName) == AI_SUCCESS) {
+			if (Material* xmlMat = XmlMaterialManager::GetInstance().GetMaterialRaw(aiName.C_Str())) {
+				material = xmlMat;
+			}
+		}
+
+		if (!material) {
+			material = new Material(m_shader->shaderName);
+			prosessMaterial(aiMat, material);
+		}
+	}
+	else {
+		if (Material* xmlMat = XmlMaterialManager::GetInstance().GetMaterialRaw("Default")) {
+			material = xmlMat;
+		}
+		else {
+			material = new Material(m_shader->shaderName);
+		}
 	}
 	return Mesh(vertices,indices, material);
 }
 
-Material Model::prosessMaterial(aiMaterial* mat)
+void Model::prosessMaterial(aiMaterial* mat,Material* material)
 {
-	Material material;
 	aiColor3D color(0.0f, 0.0f, 0.0f);
 	float shininess = 0.0f;
 	float opacity = 1.0f;
 	if (mat->Get(AI_MATKEY_COLOR_AMBIENT, color) == AI_SUCCESS)
-		material.ambient = glm::vec3(color.r, color.g, color.b);
+		material->AddProperty("ambient", MaterialProperty::CreateVec3(glm::vec3(color.r, color.g, color.b)));
 	if (mat->Get(AI_MATKEY_COLOR_DIFFUSE, color) == AI_SUCCESS)
-		material.diffuse = glm::vec3(color.r, color.g, color.b);
+		material->AddProperty("diffuse", MaterialProperty::CreateVec3(glm::vec3(color.r, color.g, color.b)));
 	if (mat->Get(AI_MATKEY_COLOR_SPECULAR, color) == AI_SUCCESS)
-		material.specular = glm::vec3(color.r, color.g, color.b);
+		material->AddProperty("specular", MaterialProperty::CreateVec3(glm::vec3(color.r, color.g, color.b)));
 	if (mat->Get(AI_MATKEY_SHININESS, shininess) == AI_SUCCESS)
-		material.shininess = shininess;
+		material->AddProperty("shininess", MaterialProperty::CreateFloat(shininess));
 	if (mat->Get(AI_MATKEY_OPACITY, opacity) == AI_SUCCESS)
-		material.opacity = opacity;
+		material->AddProperty("opacity", MaterialProperty::CreateFloat(opacity));
 	
-	material.diffuseTextures = loadMaterialTextures(mat, aiTextureType_DIFFUSE, "texture_diffuse");
-	material.specularTextures = loadMaterialTextures(mat, aiTextureType_SPECULAR, "texture_specular");
-	material.normalTextures = loadMaterialTextures(mat, aiTextureType_NORMALS, "texture_normal");
-	
-	return material;
+	material->AddProperty("texture_diffuse", MaterialProperty::CreateTexture(loadMaterialTextures(mat, aiTextureType_DIFFUSE, "texture_diffuse")));
+	material->AddProperty("texture_specular", MaterialProperty::CreateTexture(loadMaterialTextures(mat, aiTextureType_SPECULAR, "texture_specular")));
+	material->AddProperty("texture_normal", MaterialProperty::CreateTexture(loadMaterialTextures(mat, aiTextureType_NORMALS, "texture_normal")));
 }
 
 std::vector<Texture> Model::loadMaterialTextures(aiMaterial* mat, aiTextureType type, std::string typeName)
@@ -197,69 +184,17 @@ std::vector<Texture> Model::loadMaterialTextures(aiMaterial* mat, aiTextureType 
 			}
 		}
 		if (!skip)
-		{   // 如果纹理还没有被加载，则加载它
+		{   // ???????????锟斤拷?????????????
 			Texture texture;
 			texture.textureID = TextureFromFile(str.C_Str(), directory,false,false);
 			texture.textureGammaID = TextureFromFile(str.C_Str(), directory, false, true);
 			texture.type = typeName;
 			texture.path = str.C_Str();
 			textures.push_back(texture);
-			textures_loaded.push_back(texture); // 添加到已加载的纹理中
+			textures_loaded.push_back(texture); // ?????????????????
 		}
 	}
 	return textures;
-}
-
-unsigned int TextureFromFile(const char* path, const std::string& directory,bool alpha ,bool gamma)
-{
-	std::string filename = std::string(path);
-	filename = directory + '/' + filename;
-
-	unsigned int textureID;
-	glGenTextures(1, &textureID);
-	stbi_set_flip_vertically_on_load(true);
-	int width, height, nrComponents;
-	unsigned char* data = stbi_load(filename.c_str(), &width, &height, &nrComponents, 0);
-	if (data)
-	{
-		GLenum format;
-		GLenum internalFormat;
-		if (nrComponents == 1) {
-			internalFormat = format = GL_RED;
-		}
-		else if (nrComponents == 2) {
-			internalFormat = format = GL_RG;
-		}
-		else if (nrComponents == 3) {
-			internalFormat = gamma ? GL_SRGB : GL_RGB;
-			format = GL_RGB;
-		}
-		else if (nrComponents == 4) {
-			internalFormat = gamma ? GL_SRGB_ALPHA : GL_RGBA;
-			format = GL_RGBA;
-		}
-		glBindTexture(GL_TEXTURE_2D, textureID);
-		glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, GL_UNSIGNED_BYTE, data);
-		glGenerateMipmap(GL_TEXTURE_2D);
-
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-		if (alpha) {
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		}
-		stbi_image_free(data);
-	}
-	else
-	{
-		std::cout << "Texture failed to load at path: " << path << std::endl;
-		stbi_image_free(data);
-	}
-
-	return textureID;
 }
 
 glm::vec3 Model::CalculateLocalCenter()

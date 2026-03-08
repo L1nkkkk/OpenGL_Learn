@@ -1,164 +1,109 @@
 #include "Global.h"
 
 void FBO::Init(FBOAttributes attr) {
-	float borderColor[] = { 1.0, 1.0, 1.0, 1.0 };
-	glGenFramebuffers(1, &framebufferID);
-	glBindFramebuffer(GL_FRAMEBUFFER, framebufferID);
-	this->attr = attr;
-	if (attr.isDefer) {
-		textureIDs.resize(4);
-	}
-	else if (attr.isBloom) {
-		textureIDs.resize(2);
-	}
-	else textureIDs.resize(1);
-	//是否为阴影贴图
-	if (attr.isShadowMap) {
-		glGenTextures(textureIDs.size(), textureIDs.data());
-		switch (attr.shadowType) {
-		case FBOAttributes::ShadowMap:
-			glBindTexture(GL_TEXTURE_2D, textureIDs[0]);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, properties.SHADOW_WIDTH, properties.SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-			glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
-			glBindTexture(GL_TEXTURE_2D, 0);
+    this->attr = attr;
+    float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
 
-			glBindFramebuffer(GL_FRAMEBUFFER, framebufferID);
-			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, textureIDs[0], 0);
-			glDrawBuffer(GL_NONE);
-			glReadBuffer(GL_NONE);
-			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glGenFramebuffers(1, &framebufferID);
+    glBindFramebuffer(GL_FRAMEBUFFER, framebufferID);
 
-			if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-				std::cout << "ERROR::FRAMEBUFFER:: ShadowMap Framebuffer is not complete!" << std::endl;
-			}
-			break;
-		case FBOAttributes::ShadowBox:
-			glBindTexture(GL_TEXTURE_CUBE_MAP, textureIDs[0]);
-			for (int i = 0; i < 6; ++i) {
-				glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_DEPTH_COMPONENT, properties.SHADOW_WIDTH, properties.SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-			}
-			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    // 1. 根据 textureAttrs 的数量分配 ID
+    textureIDs.resize(attr.textureAttrs.size());
+    if (!textureIDs.empty()) {
+        glGenTextures(textureIDs.size(), textureIDs.data());
+    }
 
-			glBindFramebuffer(GL_FRAMEBUFFER, framebufferID);
-			glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, textureIDs[0], 0);
-			glDrawBuffer(GL_NONE);
-			glReadBuffer(GL_NONE);
-			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    // 2. 遍历 textureAttrs 进行数据驱动的初始化
+    std::vector<GLenum> colorAttachments;
+    for (size_t i = 0; i < attr.textureAttrs.size(); ++i) {
+        const auto& tAttr = attr.textureAttrs[i];
+        GLuint texID = textureIDs[i];
 
-			if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-				std::cout << "ERROR::FRAMEBUFFER:: ShadowBox Framebuffer is not complete!" << std::endl;
-			}
-			break;
-		}
-		this->init = true;
-		return;
-	}
-	else if(attr.isDefer){
-		glGenTextures(textureIDs.size(), textureIDs.data());
-		// - 位置颜色缓冲
-		glBindTexture(GL_TEXTURE_2D, textureIDs[0]);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureIDs[0], 0);
-		// - 法线颜色缓冲
-		glBindTexture(GL_TEXTURE_2D, textureIDs[1]);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, textureIDs[1], 0);
+        glBindTexture(tAttr.target, texID);
 
-		// - 颜色 + 镜面颜色缓冲
-		glBindTexture(GL_TEXTURE_2D, textureIDs[2]);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, textureIDs[2], 0);
-		// - Material properties buffer
-		glBindTexture(GL_TEXTURE_2D, textureIDs[3]);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, textureIDs[3], 0);
-		// - 告诉OpenGL我们将要使用(帧缓冲的)哪种颜色附件来进行渲染
-		GLuint attachments[4] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3};
-		glDrawBuffers(4, attachments);
+        // 处理多重采样 (MSAA)
+        if (tAttr.target == GL_TEXTURE_2D_MULTISAMPLE) {
+            glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, tAttr.internalFormat,
+                properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT, GL_TRUE);
+        }
+        // 处理立方体贴图 (ShadowBox)
+        else if (tAttr.target == GL_TEXTURE_CUBE_MAP) {
+            for (int j = 0; j < 6; ++j) {
+                glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + j, 0, tAttr.internalFormat,
+                    properties.SHADOW_WIDTH, properties.SHADOW_HEIGHT, 0, tAttr.format, tAttr.type, NULL);
+            }
+            // 为深度立方体阴影贴图配置采样器，否则由于默认使用 mipmap 过滤会导致纹理不 complete
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+        }
+        // 处理普通 2D 贴图 (HDR, Defer, ShadowMap 等)
+        else {
+            int w = attr.isShadowMap ? properties.SHADOW_WIDTH : properties.SCREEN_WIDTH;
+            int h = attr.isShadowMap ? properties.SHADOW_HEIGHT : properties.SCREEN_HEIGHT;
 
-		glGenRenderbuffers(1, &rboID);
-		glBindRenderbuffer(GL_RENDERBUFFER, rboID);
-		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
-		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rboID);
-		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-			std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
-		}
-		glBindRenderbuffer(GL_RENDERBUFFER, 0);
-		this->init = true;
-		return;
-	}
-	else {
-		glGenTextures(textureIDs.size(),textureIDs.data());
-		std::vector<GLenum> colorAttachments;
-		colorAttachments.reserve(textureIDs.size());
-		for (int i = 0; i < textureIDs.size(); ++i) {
-			colorAttachments.push_back(GL_COLOR_ATTACHMENT0 + i);
-		}
-		switch (attr.aaType) {
-		case AntiAliasManager::AntiAliasType::Default:
-			for (int i = 0; i < textureIDs.size(); ++i) {
-				glBindTexture(GL_TEXTURE_2D, textureIDs[i]);
-				if (attr.isHDR)
-					glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
-				else
-					glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+            glTexImage2D(GL_TEXTURE_2D, 0, tAttr.internalFormat, w, h, 0, tAttr.format, tAttr.type, NULL);
 
-				glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-				glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-				glBindTexture(GL_TEXTURE_2D, 0);
-				glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D, textureIDs[i], 0);
-			}
-			glGenRenderbuffers(1, &rboID);
-			glBindRenderbuffer(GL_RENDERBUFFER, rboID);
-			glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
-			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rboID);
+            // 采样器设置
+            GLint filter = (attr.isShadowMap) ? GL_NEAREST : GL_LINEAR;
+            glTexParameteri(tAttr.target, GL_TEXTURE_MIN_FILTER, filter);
+            glTexParameteri(tAttr.target, GL_TEXTURE_MAG_FILTER, filter);
 
-			if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-				std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
-			}
-			glBindRenderbuffer(GL_RENDERBUFFER, 0);
-			break;
-		case AntiAliasManager::AntiAliasType::MSAA:
-			for (int i = 0; i < textureIDs.size(); ++i) {
-				glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, textureIDs[i]);
-				if (attr.isHDR)
-					glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, GL_RGBA16F, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT, GL_TRUE);
-				else
-					glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, GL_RGBA, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT, GL_TRUE);
-				glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, 0);
-				glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D_MULTISAMPLE, textureIDs[i], 0);
-			}
-			glGenRenderbuffers(1, &rboID);
-			glBindRenderbuffer(GL_RENDERBUFFER, rboID);
-			glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_DEPTH24_STENCIL8, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
-			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rboID);
+            if (attr.isShadowMap) {
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+                glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+            }
+        }
 
-			if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-				std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
-			}
-			glBindRenderbuffer(GL_RENDERBUFFER, 0);
-			break;
-		}
-		glDrawBuffers(colorAttachments.size(), colorAttachments.data());
-		this->init = true;
-		return;
-	}
+        // 3. 将贴图挂载到帧缓冲
+        if (attr.isShadowMap) {
+            // 阴影贴图只需要深度附件
+            if (tAttr.target == GL_TEXTURE_CUBE_MAP) {
+                // 立方体深度贴图：使用 glFramebufferTexture 一次性附加整个 cubemap
+                glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, texID, 0);
+            }
+            else {
+                // 普通 2D 深度贴图
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, tAttr.target, texID, 0);
+            }
+        } else {
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, tAttr.target, texID, 0);
+            colorAttachments.push_back(GL_COLOR_ATTACHMENT0 + i);
+        }
+    }
+
+    // 4. 配置 DrawBuffers
+    if (attr.isShadowMap) {
+        glDrawBuffer(GL_NONE);
+        glReadBuffer(GL_NONE);
+    }
+    else {
+        if (!colorAttachments.empty()) {
+            glDrawBuffers(colorAttachments.size(), colorAttachments.data());
+        }
+
+        // 5. 只有非阴影贴图通常才需要 Depth/Stencil RBO
+        glGenRenderbuffers(1, &rboID);
+        glBindRenderbuffer(GL_RENDERBUFFER, rboID);
+        if (attr.aaType == AntiAliasManager::AntiAliasType::MSAA) {
+            glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_DEPTH24_STENCIL8, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
+        }
+        else {
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
+        }
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rboID);
+    }
+
+    // 检查状态
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        std::cerr << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    this->init = true;
 }
 
 FBO* FramebuffersManager::GetFBO(FBOAttributes attr) {
@@ -177,6 +122,7 @@ FBO* FramebuffersManager::GetFBO(FBOAttributes attr) {
 	std::cout << "Add FBO，total::" << m_hashMapFBO[attr].size() << std::endl;
 	return fboPtr;
 }
+
 void FramebuffersManager::Resize() {
 	for (auto& [attr, fbos] : m_hashMapFBO) {
 		if (attr.isShadowMap) continue;

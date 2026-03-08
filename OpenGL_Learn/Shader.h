@@ -12,7 +12,17 @@
 class Shader {
 public:
 	unsigned int ID;
-	Shader(const char* vertexPath, const char* fragmentPath);
+	std::string shaderName;
+	Shader(std::string name) {
+		shaderName = name;
+		std::string vertexPath = "shaders/" + name + "Vertex.glsl";
+		std::string fragmentPath = "shaders/" + name + "Fragment.glsl";
+		Load(vertexPath.c_str(), fragmentPath.c_str());
+	}
+	void Load(const char* vertexPath, const char* fragmentPath);
+	Shader(const char* vertexPath, const char* fragmentPath) {
+		Load(vertexPath, fragmentPath);
+	}
 	void use();
 	void setBool(const std::string& name, bool value) const;
 	void setInt(const std::string& name, int value) const;

@@ -12,8 +12,8 @@ public:
 	Model* planetModel;
 	Model* rockModel;
 
-	Shader* planetShader;
-	Shader* rockShader;
+	std::shared_ptr<Shader> planetShader;
+	std::shared_ptr<Shader> rockShader;
 
 	Planet() {
 	}

@@ -2,6 +2,7 @@
 #include "Model.h"
 #include "Scene.h"
 #include "Global.h"
+#include "XmlMaterialManager.h"
 
 glm::vec3 pointLightPositions[] = {
 	glm::vec3(0.7f,  0.2f,  2.0f),
@@ -43,7 +44,7 @@ void InitVAOs() {
 void LoadModels(Scene& scene) {
 	auto& shaderManager = ShaderManager::GetInstance();
 
-	auto object1 = std::make_shared<Model>("models/plk/plk.obj");
+	auto object1 = std::make_shared<Model>("models/plk/plk.obj",shaderManager.GetShader(ShaderManager::Phong));
 	object1->SetScale(0.1f);
 	object1->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
 	object1->AddOtherShader(OtherShaderType::normalLines, shaderManager.GetShader(ShaderManager::NormalLines));
@@ -52,7 +53,7 @@ void LoadModels(Scene& scene) {
 	object1->SetPosition(glm::vec3(-1.5f, 0.0f, 0.0f));
 
 	//Load Charactor
-	auto object = std::make_shared<Model>("models/saki/saki.obj");
+	auto object = std::make_shared<Model>("models/saki/saki.obj", shaderManager.GetShader(ShaderManager::Phong));
 	object->SetScale(0.1f);
 	object->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
 	object->AddOtherShader(OtherShaderType::normalLines, shaderManager.GetShader(ShaderManager::NormalLines));
@@ -65,7 +66,8 @@ void LoadModels(Scene& scene) {
 	//scene.lightSource.AddPointLight(PointLight(pointLightPositions[0], glm::vec3(0.05f), glm::vec3(0.8f), glm::vec3(1.0f)));
 	//scene.lightSource.AddPointLight(PointLight(pointLightPositions[1], glm::vec3(0.05f), glm::vec3(0.8f), glm::vec3(1.0f)));
 	//scene.lightSource.AddPointLight(PointLight(pointLightPositions[2], glm::vec3(0.05f), glm::vec3(0.8f), glm::vec3(1.0f)));
-	auto pointLight = PointLight(pointLightPositions[3], glm::vec3(0.05f), glm::vec3(0.8f), glm::vec3(1.0f), "models/sphere/sphere.obj");
+	auto pointLight = PointLight(pointLightPositions[3], glm::vec3(0.05f), glm::vec3(0.8f), glm::vec3(1.0f), "models/sphere/sphere.obj",XmlMaterialManager::GetInstance().GetMaterialRaw("Light"));
+	
 	pointLight.SetScale(0.2);
 	scene.lightSource.AddPointLight(pointLight);
 	scene.lightSource.AddDirectionLight(DirectionLight(glm::vec3(-0.2f, -1.0f, -0.3f), glm::vec3(10.f), glm::vec3(0.4f), glm::vec3(0.5f)));
@@ -94,8 +96,9 @@ void LoadModels(Scene& scene) {
 	grassTexture.type = "texture_diffuse";
 	grassTextures.push_back(grassTexture);
 
-	Material grassMaterial;
-	grassMaterial.diffuseTextures = grassTextures;
+	Material* grassMaterial = new Material("grass");
+	MaterialProperty grassDiffuseTextures = MaterialProperty::CreateTexture(grassTextures);
+	grassMaterial->AddProperty("texture_diffuse", grassDiffuseTextures);
 
 	std::vector<Mesh> grassMeshes;
 	grassMeshes.emplace_back(grassVertices, grassIndices, grassMaterial);
@@ -105,7 +108,8 @@ void LoadModels(Scene& scene) {
 		auto vegi = std::make_shared<Model>(grassMeshes);
 		vegi->position = pos;
 		vegi->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
-		scene.modelSource.AddTransparentModel(shaderManager.GetShader(ShaderManager::Grass), vegi);
+		vegi->SetShader(shaderManager.GetShader(ShaderManager::Grass));
+		scene.modelSource.AddTransparentModel(vegi);
 	}
 
 	//Load Plane
@@ -150,22 +154,25 @@ void LoadModels(Scene& scene) {
 	planeNormalTexture.type = "texture_normal";
 	planeNormalTextures.push_back(planeNormalTexture);
 
-	Material planeMaterial;
-	planeMaterial.diffuseTextures = planeTextures;
-	planeMaterial.normalTextures = planeNormalTextures;
-
+	Material* planeMaterial = new Material("phong");
+	MaterialProperty diffuseTextures = MaterialProperty::CreateTexture(planeTextures);
+	MaterialProperty normalTextures = MaterialProperty::CreateTexture(planeNormalTextures);
+	planeMaterial->AddProperty("texture_diffuse", diffuseTextures);
+	planeMaterial->AddProperty("texture_normal", normalTextures);
 	std::vector<Mesh> planeMeshes;
 	planeMeshes.emplace_back(planeVertices,planeIndices,planeMaterial);
 
 	auto plane = std::make_shared<Model>(planeMeshes);
 	plane->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
 	plane->AddOtherShader(OtherShaderType::normalLines, shaderManager.GetShader(ShaderManager::NormalLines));
+	plane->SetShader(shaderManager.GetShader(ShaderManager::Phong));
 	scene.modelSource.AddOpaqueModel(shaderManager.GetShader(ShaderManager::Phong), plane);
 	plane->SetName("plane");
 
 	auto ceiling = std::make_shared<Model>(planeMeshes);
 	ceiling->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
 	ceiling->AddOtherShader(OtherShaderType::normalLines, shaderManager.GetShader(ShaderManager::NormalLines));
+	ceiling->SetShader(shaderManager.GetShader(ShaderManager::Phong));
 	scene.modelSource.AddOpaqueModel(shaderManager.GetShader(ShaderManager::Phong), ceiling);
 	ceiling->SetName("ceiling");
 	ceiling->rotation = glm::vec3(0,0,180);
@@ -186,6 +193,7 @@ void LoadModels(Scene& scene) {
 	auto wall1 = std::make_shared<Model>(wallMeshes);
 	wall1->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
 	wall1->AddOtherShader(OtherShaderType::normalLines, shaderManager.GetShader(ShaderManager::NormalLines));
+	wall1->SetShader(shaderManager.GetShader(ShaderManager::Phong));
 	scene.modelSource.AddOpaqueModel(shaderManager.GetShader(ShaderManager::Phong), wall1);
 	wall1->SetName("wall1");
 	wall1->rotation.z = -90;
@@ -193,6 +201,7 @@ void LoadModels(Scene& scene) {
 
 	auto wall2 = std::make_shared<Model>(wallMeshes);
 	wall2->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
+	wall2->SetShader(shaderManager.GetShader(ShaderManager::Phong));
 	scene.modelSource.AddOpaqueModel(shaderManager.GetShader(ShaderManager::Phong), wall2);
 	wall2->SetName("wall2");
 	wall2->rotation.z = 90;
@@ -200,6 +209,7 @@ void LoadModels(Scene& scene) {
 
 	auto wall3 = std::make_shared<Model>(wallMeshes);
 	wall3->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
+	wall3->SetShader(shaderManager.GetShader(ShaderManager::Phong));
 	scene.modelSource.AddOpaqueModel(shaderManager.GetShader(ShaderManager::Phong), wall3);
 	wall3->SetName("wall3");
 	wall3->SetRotation(glm::vec3(0, -90, -90));

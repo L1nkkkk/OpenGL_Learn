@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -139,6 +139,7 @@
     <ClCompile Include="..\..\..\Downloads\src\glad.c" />
     <ClCompile Include="AntiAliasManager.cpp" />
     <ClCompile Include="callbacks.cpp" />
+    <ClCompile Include="ForwardRenderPass.cpp" />
     <ClCompile Include="FramebufferManager.cpp" />
     <ClCompile Include="Global.cpp" />
     <ClCompile Include="Learn.cpp" />
@@ -150,19 +151,26 @@
     <ClCompile Include="Light.cpp" />
     <ClCompile Include="test.cpp" />
     <ClCompile Include="Camera.cpp" />
+    <ClCompile Include="stb_image_impl.cpp" />
+    <ClCompile Include="XmlMaterialManager.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="callbacks.h" />
+    <ClInclude Include="ForwardRenderPass.h" />
     <ClInclude Include="Learn.h" />
     <ClInclude Include="Light.h" />
+    <ClInclude Include="Material.h" />
     <ClInclude Include="Model.h" />
     <ClInclude Include="ModelsLoader.h" />
     <ClInclude Include="mygui.h" />
+    <ClInclude Include="RenderPass.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="Scene.h" />
     <ClInclude Include="Shader.h" />
     <ClInclude Include="ShaderManager.h" />
     <ClInclude Include="stb_image.h" />
+    <ClInclude Include="Timer.h" />
+    <ClInclude Include="XmlMaterialManager.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="FragmentShader.fs" />

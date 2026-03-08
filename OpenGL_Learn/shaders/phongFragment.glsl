@@ -54,6 +54,12 @@ struct Material{
     vec3 specular;          // Ks：镜面反射系数
     float shininess;        // Ns：高光指数
     float opacity;          // d：透明度（1=不透明）
+	sampler2D texture_diffuse1;
+	bool use_texture_diffuse;
+	sampler2D texture_normal1;
+	bool use_texture_normal;
+	sampler2D texture_specular1;
+	bool use_texture_specular;
 };
 
 in VS_OUT {
@@ -64,12 +70,7 @@ in VS_OUT {
 } fs_in;
 
 uniform vec3 viewPos;
-uniform bool hasDiffuseMap;
-uniform sampler2D texture_diffuse1;
-uniform bool hasSpecularMap;
-uniform sampler2D texture_specular1;
-uniform bool hasNormalMap;
-uniform sampler2D texture_normal1;
+
 
 uniform Material material;
 
@@ -279,7 +280,7 @@ float ShadowCalculation(vec3 fragPos,PointLight light){
 
 vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir,float shadow)
 {
-	vec3 color = texture(texture_diffuse1, fs_in.TexCoords).rgb;
+	vec3 color = texture(material.texture_diffuse1, fs_in.TexCoords).rgb;
 	//After this below, BUG
 	
 	vec3 lightDir = normalize(-light.direction);
@@ -297,7 +298,7 @@ vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir,float shadow)
 
 vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir,float shadow)
 {
-	vec3 color = texture(texture_diffuse1, fs_in.TexCoords).rgb;
+	vec3 color = texture(material.texture_diffuse1, fs_in.TexCoords).rgb;
 	vec3 lightDir = normalize(light.position - fragPos);
 	// diffuse shading
 	float diff = max(dot(normal, lightDir), 0.0);
@@ -319,7 +320,7 @@ vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir,fl
 
 vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir,float shadow)
 {
-	vec3 color = texture(texture_diffuse1, fs_in.TexCoords).rgb;
+	vec3 color = texture(material.texture_diffuse1, fs_in.TexCoords).rgb;
 	vec3 lightDir = normalize(light.position - fragPos);
 	// diffuse shading
 	float diff = max(dot(normal, lightDir), 0.0);
@@ -346,8 +347,8 @@ vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir,floa
 void main()
 {
 	vec3 norm;
-	if(hasNormalMap){
-		norm = texture(texture_normal1,fs_in.TexCoords).rgb;
+	if(material.use_texture_normal){
+		norm = texture(material.texture_normal1,fs_in.TexCoords).rgb;
 		norm = normalize(norm * 2.0 - 1.0);  
 		norm = normalize(fs_in.TBN * norm);
 	}
@@ -358,7 +359,7 @@ void main()
 	
 	vec3 results = vec3(0);
 	float alpha = 0.0;
-	if(hasDiffuseMap) alpha = 1.0;
+	if(material.use_texture_diffuse) alpha = 1.0;
 	int pointLightsNum = min(MAX_POINT_LIGHTS,NR_POINT_LIGHTS);
 	int dirLightsNum =  min(MAX_DIR_LIGHTS,NR_DIR_LIGHTS);
 	int spotLightsNum = min(MAX_SPOT_LIGHTS,NR_SPOT_LIGHTS);

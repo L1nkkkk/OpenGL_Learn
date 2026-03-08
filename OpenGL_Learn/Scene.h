@@ -11,6 +11,7 @@
 #include <algorithm>
 #include "shaderManager.h"
 #include "Global.h"
+#include "XmlMaterialManager.h"
 #include <imgui/imgui.h>
 #include <imgui/backends/imgui_impl_opengl3.h>
 #include <imgui/backends/imgui_impl_glfw.h>
@@ -26,6 +27,18 @@ struct LightSource {
 	LightSource()
 		: pointLightShader("LightVertexShader.glsl", "LightFragmentShader.glsl") {
 	}
+	std::vector<PointLight>& GetPointLights() {
+		return pointLights;
+	}
+
+	std::vector<DirectionLight>& GetDirectionLights() {
+		return directionLights;
+	}
+
+	std::vector<SpotLight>& GetSpotLights() {
+		return spotLights;
+	}
+
 	void AddPointLight(const PointLight& pointLight) {
 		pointLights.push_back(pointLight);
 	}
@@ -37,33 +50,56 @@ struct LightSource {
 	void AddSpotLight(const SpotLight& spotLight) {
 		spotLights.push_back(spotLight);
 	}
+
+	void SetLightUniforms(Shader& shader) {
+		for (size_t i = 0; i < pointLights.size(); ++i) {
+			pointLights[i].SetLightUniforms(shader, static_cast<int>(i));
+		}
+		shader.setInt("NR_POINT_LIGHTS", static_cast<int>(pointLights.size()));
+		for (size_t i = 0; i < directionLights.size(); ++i) {
+			directionLights[i].SetLightUniforms(shader, static_cast<int>(i));
+		}
+		shader.setInt("NR_DIR_LIGHTS", static_cast<int>(directionLights.size()));
+		for (size_t i = 0; i < spotLights.size(); ++i) {
+			spotLights[i].SetLightUniforms(shader, static_cast<int>(i));
+		}
+		shader.setInt("NR_SPOT_LIGHTS", static_cast<int>(spotLights.size()));
+	}
+
 };
 
 struct ModelSource {
-	std::unordered_map<Shader*, std::vector<std::shared_ptr<Model>>> opaqueModelsMap;
-	std::vector<std::pair<std::shared_ptr<Model>,Shader*>> transparentModels;
+	std::unordered_map<std::shared_ptr<Shader>, std::vector<std::shared_ptr<Model>>> opaqueModelsMap;
+	std::vector<std::shared_ptr<Model>> transparentModels;
 	ModelSource(){
 	}
 
-	void AddOpaqueModel(Shader* shader,std::shared_ptr<Model> model) {
-		assert(shader != nullptr && "AddTransparentModel: shader ²»ÄÜÎª¿ÕÖ¸Õë£¡");
-		assert(model != nullptr && "AddTransparentModel: model ²»ÄÜÎª¿ÕÖÇÄÜÖ¸Õë£¡");
+	std::unordered_map<std::shared_ptr<Shader>, std::vector<std::shared_ptr<Model>>>& GetOpaqueModelsMap() {
+		return opaqueModelsMap;
+	}
+
+	std::vector<std::shared_ptr<Model>>& GetTransparentModels() {
+		return transparentModels;
+	}
+
+	void AddOpaqueModel(std::shared_ptr<Shader> shader,std::shared_ptr<Model> model) {
+		assert(shader != nullptr && "AddTransparentModel: shader ï¿½ï¿½ï¿½ï¿½Îªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ë£¡");
+		assert(model != nullptr && "AddTransparentModel: model ï¿½ï¿½ï¿½ï¿½Îªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ë£¡");
 		opaqueModelsMap[shader].push_back(model);
 		std::cout << "Added opaque model. Total models for this shader: " << opaqueModelsMap[shader].size() << std::endl;
 	}
 
 	void DeleteOpaqueModel(std::shared_ptr<Model> model) {
-		assert(model != nullptr && "AddTransparentModel: model ²»ÄÜÎª¿ÕÖÇÄÜÖ¸Õë£¡");
+		assert(model != nullptr && "AddTransparentModel: model ï¿½ï¿½ï¿½ï¿½Îªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ë£¡");
 		for (auto& pair : opaqueModelsMap) {
 			auto& models = pair.second;
 			models.erase(std::remove(models.begin(), models.end(), model), models.end());
 		}
 	}
 
-	void AddTransparentModel(Shader* shader, std::shared_ptr<Model> model) {
-		assert(shader != nullptr && "AddTransparentModel: shader ²»ÄÜÎª¿ÕÖ¸Õë£¡");
-		assert(model != nullptr && "AddTransparentModel: model ²»ÄÜÎª¿ÕÖÇÄÜÖ¸Õë£¡");
-		transparentModels.emplace_back(model, shader);
+	void AddTransparentModel(std::shared_ptr<Model> model) {
+		assert(model != nullptr && "AddTransparentModel: model ï¿½ï¿½ï¿½ï¿½Îªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ë£¡");
+		transparentModels.push_back(model);
 	}
 };
 
@@ -71,13 +107,13 @@ class SkyboxSource {
 public:
 	CubeTexture* textureCubeMap;
 	unsigned int cubeMapVAO;
-	Shader* skyboxShader_ptr;
+	std::shared_ptr<Shader> skyboxShader_ptr;
 	SkyboxSource(const SkyboxSource& other) {
 		textureCubeMap = other.textureCubeMap;
 		cubeMapVAO = other.cubeMapVAO;
 		skyboxShader_ptr = other.skyboxShader_ptr;
 	}
-	SkyboxSource(CubeTexture& textureid,unsigned int cubeMapVao,Shader* skyboxShader) {
+	SkyboxSource(CubeTexture& textureid,unsigned int cubeMapVao,std::shared_ptr<Shader> skyboxShader) {
 		textureCubeMap = &textureid;
 		cubeMapVAO = cubeMapVao;
 		skyboxShader_ptr = skyboxShader;
@@ -92,10 +128,10 @@ public:
 	SkyboxSource skyboxSource;
 	Camera* camera_ptr = nullptr;
 
-	FBO* fbo;
-	FBO* fboTemp;
-	FBO* deferFBO;
-	Shader* deferShader;
+	FBO* fbo = nullptr;
+	FBO* fboTemp = nullptr;
+	FBO* deferFBO = nullptr;
+	std::shared_ptr<Shader> deferShader;
 
 	Scene(Camera* camera,const unsigned int& width,const unsigned int& height) {
 		camera_ptr = camera;
@@ -104,9 +140,25 @@ public:
 		FBOAttributes attr;
 		fboTemp = FramebuffersManager::GetInstance().GetFBO(attr);
 		deferShader = ShaderManager::GetInstance().GetShader(ShaderManager::DeferProcess);
+
+		
 	}
 	void RenderScene(Shader&);
+	//new api
+	ModelSource& GetModelSource() {
+		return modelSource;
+	}
 
+	LightSource& GetLightSource() {
+		return lightSource;
+	}
+
+	SkyboxSource& GetSkyboxSource() {
+		return skyboxSource;
+	}
+	unsigned int SetShadowMap(Shader&);
+
+	//old api
 	void DrawPointLights();
 	void DrawOpaqueModels();
 	void DrawTransparentModels();
@@ -115,7 +167,7 @@ public:
 	void DrawDefferedModels();
 
 	void SetLightUniforms(Shader& shader);
-	unsigned int SetShadowMap(Shader& shader);
+
 	void DrawSkybox();
 	void DrawOutlines();
 	void DrawNormalLines();

@@ -62,22 +62,25 @@ public:
 	}
 
 	void System_UI() {
-		ImGui::Checkbox("Defer Rendering", &DEFER_RENDERING);
-		ImGui::Checkbox("Debug Mode", &DEBUG_MODE);
+		ImGui::Checkbox("Defer Rendering", &properties.DEFER_RENDERING);
+		if (properties.DEFER_RENDERING) {
+			ImGui::Checkbox("Light Volume", &properties.LIGHT_VOLUME);
+		}
+		ImGui::Checkbox("Debug Mode", &properties.DEBUG_MODE);
 	}
 
 	void Gamma_UI() {
-		ImGui::Checkbox("HDR", &USE_HDR);
-		if (HDR_EXPOSURE) {
-			ImGui::DragFloat("hdr exposure", &HDR_EXPOSURE, 0.00f, 0.01f, 100.0f, "%.2f");
+		ImGui::Checkbox("HDR", &properties.USE_HDR);
+		if (properties.HDR_EXPOSURE) {
+			ImGui::DragFloat("hdr exposure", &properties.HDR_EXPOSURE, 0.00f, 0.01f, 100.0f, "%.2f");
 		}
-		ImGui::Checkbox("gammaCorrection", &GAMMA_CORRECTION);
-		if (GAMMA_CORRECTION) {
-			ImGui::DragFloat("gamma Value", &GAMMA_VALUE, 0.01f, 1.0f, 2.6f, "%.2f");
+		ImGui::Checkbox("gammaCorrection", &properties.GAMMA_CORRECTION);
+		if (properties.GAMMA_CORRECTION) {
+			ImGui::DragFloat("gamma Value", &properties.GAMMA_VALUE, 0.01f, 1.0f, 2.6f, "%.2f");
 		}
-		ImGui::Checkbox("Bloom", &BLOOM);
-		ImGui::DragFloat("bloom threshold", &BLOOM_THRESHOLD, 0.01f, 0.0f, 10.0f, "%.2f");
-		ImGui::DragInt("bloom blur iterations", &BLOOM_BLUR_ITERATIONS, 1.0f, 1, 20);
+		ImGui::Checkbox("Bloom", &properties.BLOOM);
+		ImGui::DragFloat("bloom threshold", &properties.BLOOM_THRESHOLD, 0.01f, 0.0f, 10.0f, "%.2f");
+		ImGui::DragInt("bloom blur iterations", &properties.BLOOM_BLUR_ITERATIONS, 1.0f, 1, 20);
 	}
 
 	void Scene_UI(Scene& scene) {
@@ -92,15 +95,15 @@ public:
 			switch (selectedOption) {
 			case FBO::FrameRenderType::Default_FrameRenderType:
 				framebuffersMgr.useType = FBO::FrameRenderType::Default_FrameRenderType;
-				SHADOW_MAP_SHOW = false;
+				properties.SHADOW_MAP_SHOW = false;
 				break;
 			case FBO::FrameRenderType::ShadowMap_FrameRenderType:
 				framebuffersMgr.useType = FBO::FrameRenderType::ShadowMap_FrameRenderType;
-				SHADOW_MAP_SHOW = true;
+				properties.SHADOW_MAP_SHOW = true;
 				break;
 			case FBO::FrameRenderType::BrightColor_FrameRenderType:
 				framebuffersMgr.useType = FBO::FrameRenderType::BrightColor_FrameRenderType;
-				SHADOW_MAP_SHOW = false;
+				properties.SHADOW_MAP_SHOW = false;
 				break;
 			}
 		}
@@ -113,20 +116,21 @@ public:
 			if (ImGui::Combo("ShadowType", &selectedOption, ShadowProperty::ShadowTypeStrs, optionCount)) {
 				switch (selectedOption) {
 				case ShadowProperty::Default:
-					SHADOW_TYPE = ShadowProperty::Default;
+					properties.SHADOW_TYPE = ShadowProperty::Default;
 					break;
 				case ShadowProperty::PCF:
-					SHADOW_TYPE = ShadowProperty::PCF;				
+					properties.SHADOW_TYPE = ShadowProperty::PCF;
 					break;
 				case ShadowProperty::PCSS:
-					SHADOW_TYPE = ShadowProperty::PCSS;
+					properties.SHADOW_TYPE = ShadowProperty::PCSS;
 					break;
 				}
 			}
 		}
-		ImGui::DragInt("shadow samples", &SHADOW_PCF_SAMPLE_NUM, 1.0, 16, 512);
-		ImGui::DragInt("shadow rings", &SHADOW_PCF_RING_NUM, 1.0, 5, 20);
+		ImGui::DragInt("shadow samples", &properties.SHADOW_PCF_SAMPLE_NUM, 1.0, 16, 512);
+		ImGui::DragInt("shadow rings", &properties.SHADOW_PCF_RING_NUM, 1.0, 5, 20);
 	}
 private:
 	MyGui() = default;
+	SystemProperties& properties = SystemProperties::GetInstance();
 };

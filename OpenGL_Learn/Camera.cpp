@@ -22,12 +22,14 @@ void Camera::CameraMouseCallback(double xpos, double ypos) {
 		sin(glm::radians(pitch)),
 		cos(glm::radians(pitch)) * sin(glm::radians(yaw))
 	));
-
+	lastFrame_CameraFront = cameraFront;
 	cameraFront = -cameraDirection;
 }
 
 void Camera::SetCameraDirection(float deltapitch, float deltayaw)
 {
+	lastFrame_CameraFront = cameraFront;
+
 	pitch += deltapitch;
 	yaw += deltayaw;
 	cameraDirection = glm::normalize(glm::vec3(
@@ -50,4 +52,17 @@ void Camera::CameraSrollCallback(double xoffset, double yoffset) {
 
 glm::mat4 Camera::GetViewMatrix() {
 	return glm::lookAt(cameraPos, cameraPos - cameraDirection, up);
+}
+
+bool Camera::CheckCameraMoved() {
+	float positionDelta = glm::length(cameraPos - lastFrame_CameraPosition);
+	float frontDeltaCosin = glm::dot(cameraFront, lastFrame_CameraFront);
+	if (frontDeltaCosin <= 0) return true; //camera turned more than 90 degree, consider it as moved
+	float frontDelta = 2.0*glm::acos(frontDeltaCosin)*180.f / M_PI;
+	if (positionDelta > 0.01f || frontDelta > 0.1f) {
+		return true;
+	}
+	else {
+		return false;
+	}
 }

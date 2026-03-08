@@ -1,6 +1,9 @@
 #pragma once
 
 #include "Shader.h"
+#include "Global.h"
+#include <memory>
+#include <utility>
 #include <vector>
 #include <unordered_map>
 
@@ -12,7 +15,7 @@ struct UBOInfo {
 
 class ShaderManager {
 public:
-	static enum ShaderType{
+	static enum ShaderType {
 		Scene = 0,
 		DebugScene,
 		Phong,
@@ -45,17 +48,42 @@ public:
 	}
 
 	void Init();
-	Shader* GetShader(int index);
-	Shader* GetShaderByName(std::string name);
-	std::vector<std::string> GetNames();
-	int GetShaderIndexByShader(Shader* shaderPtr);
-	void SetUBOData(UniformBufferType uboType,unsigned int offset,size_t size,const void* dataPtr);
 
+	void LoadShader(std::string name);
+	void LoadGeometryShader(std::string name);
+	std::shared_ptr<Shader> GetShader(int index);
+	std::shared_ptr<Shader> GetShaderByName(std::string name);
+	std::vector<std::string> GetNames();
+	int GetShaderIndexByShader(std::shared_ptr<Shader> shaderPtr);
+	void SetUBOData(UniformBufferType uboType, unsigned int offset, size_t size, const void* dataPtr);
+
+	void UseShader(std::string name) {
+		if (m_shaderMap.find(name) != m_shaderMap.end()) {
+			m_shaderMap[name]->use();
+		}
+		else {
+			for(int i = 0; i < shaderNames.size(); ++i){
+				if(shaderNames[i] == name){
+					LoadShader(name);
+					m_shaderMap[name]->use();
+					return;
+				}
+			}
+			for(int i = 0; i < geometryShaderNames.size(); ++i){
+				if(geometryShaderNames[i] == name){
+					LoadGeometryShader(name);
+					m_shaderMap[name]->use();
+					return;
+				}
+			}
+			std::cout << "Shader not found: " << name << std::endl;
+		}
+	}
 	ShaderManager(const ShaderManager&) = delete;
 	ShaderManager& operator=(const ShaderManager&) = delete;
 private:
-	std::unordered_map<std::string, Shader*> shaderMap;
-	std::unordered_map<Shader*, int> shader2Idx;
+	std::unordered_map<std::string, std::shared_ptr<Shader>> m_shaderMap;
+	std::unordered_map<std::shared_ptr<Shader>, int> shader2Idx;
 	std::vector<UBOInfo> UBOInfos;
 	std::vector<std::string> shaderNames = {
 		"scene",
@@ -73,6 +101,9 @@ private:
 		"defer",
 		"deferDirLightVolume",
 		"lightVolume",
+		"explode",
+		"normal",
+		"shadowCube"
 	};
 	std::vector<std::string> geometryShaderNames = {
 		"explode",
@@ -80,4 +111,20 @@ private:
 		"shadowCube",
 	};
 	ShaderManager() = default;
+};
+
+class ShaderGaurd {
+public:
+	ShaderGaurd(std::string shaderName) {
+		ShaderManager::GetInstance().UseShader(shaderName);
+	}
+	~ShaderGaurd() {
+		//解绑所有纹理，避免对后续渲染造成干扰
+		int TextureUsedNum = SystemProperties::GetInstance().USED_TEXTURE_NUM;
+		for(int i = 0; i < TextureUsedNum; ++i) {
+			glActiveTexture(GL_TEXTURE0 + i);
+			glBindTexture(GL_TEXTURE_2D, 0);
+			glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+		}
+	}
 };

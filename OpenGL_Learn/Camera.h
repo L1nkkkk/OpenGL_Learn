@@ -4,6 +4,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#define M_PI 3.14159265358979323846
 
 class Camera {
 public:
@@ -18,7 +19,10 @@ public:
 		cameraSpeed = speed;
 		lastX = lastx;
 		lastY = lasty;
+		lastFrame_CameraFront = cameraFront;
+		lastFrame_CameraPosition = 
 		cameraPos = pos;
+		 
 	}
 	void CameraMouseCallback(double xpos, double ypos);
 	void CameraSrollCallback(double xoffset, double yoffset);
@@ -28,6 +32,13 @@ public:
 	}
 	glm::mat4 GetViewMatrix();
 	void SetCameraDirection(float pitch, float yaw);
+
+	void UpdatePositionByDelta(glm::vec3 delta) {
+		lastFrame_CameraPosition = cameraPos;
+		cameraPos += delta;
+	}
+
+	bool CheckCameraMoved();
 private:
 	
 	float yaw = -90.0f;
@@ -36,4 +47,8 @@ private:
 	float lastY;
 	
 	bool firstMouse = true;
+
+	glm::vec3 lastFrame_CameraPosition;
+	glm::vec3 lastFrame_CameraFront;
+	glm::vec3 currentFrame_CameraFront;
 };

@@ -3,23 +3,13 @@
 void ShaderManager::Init() {
 	//load Shaders
 	for (int i = 0; i < shaderNames.size(); ++i) {
-		std::string vertexPath = "shaders/" + shaderNames[i] + "Vertex.glsl";
-		std::string fragmentPath = "shaders/" + shaderNames[i] + "Fragment.glsl";
-		Shader* shader = new Shader(vertexPath.c_str(), fragmentPath.c_str());
-		shaderMap[shaderNames[i]] = shader;
-		shader2Idx[shader] = i;
-		std::cout << "Loaded shader: " << shaderNames[i] << std::endl;
+		LoadShader(shaderNames[i]);
+		shader2Idx[m_shaderMap[shaderNames[i]]] = i;
 	}
 	//load Geometry Shaders
 	for (int i = 0; i < geometryShaderNames.size(); ++i) {
-		std::string vertexPath = "shaders/" + geometryShaderNames[i] + "Vertex.glsl";
-		std::string geometryPath = "shaders/" + geometryShaderNames[i] + "Geometry.glsl";
-		std::string fragmentPath = "shaders/" + geometryShaderNames[i] + "Fragment.glsl";
-		Shader* shader = new GeometryShader(vertexPath.c_str(), geometryPath.c_str(), fragmentPath.c_str());
-		//std::cout << shader << std::endl;
-		shaderMap[geometryShaderNames[i]] = shader;
-		shader2Idx[shader] = shaderNames.size() + i;
-		std::cout << "Loaded shader: " << geometryShaderNames[i] << std::endl;
+		LoadGeometryShader(geometryShaderNames[i]);
+		shader2Idx[m_shaderMap[geometryShaderNames[i]]] = shaderNames.size() + i;
 	}
 	//bind uniform buffer objects
 	unsigned int matricesUBO;
@@ -31,6 +21,21 @@ void ShaderManager::Init() {
 	UBOInfos.push_back({ matricesUBO, UniformBufferType::Matrices, 2 * sizeof(glm::mat4) });
 }
 
+void ShaderManager::LoadShader(std::string name) {
+	m_shaderMap[name] = std::make_shared<Shader>(name);
+	m_shaderMap[name]->shaderName = name;
+	std::cout << "Loaded shader: " << name << std::endl;
+}
+
+void ShaderManager::LoadGeometryShader(std::string name) {
+	std::string vertexPath = "shaders/" + name + "Vertex.glsl";
+	std::string geometryPath = "shaders/" + name + "Geometry.glsl";
+	std::string fragmentPath = "shaders/" + name + "Fragment.glsl";
+	m_shaderMap[name] = std::make_shared<GeometryShader>(vertexPath.c_str(), geometryPath.c_str(), fragmentPath.c_str());
+	m_shaderMap[name]->shaderName = name;
+	std::cout << "Loaded shader: " << name << std::endl;
+}
+
 void ShaderManager::SetUBOData(UniformBufferType uboType, unsigned int offset, size_t size,const void* dataPtr) {
 	UBOInfo& uboInfo = UBOInfos[uboType];
 	glBindBuffer(GL_UNIFORM_BUFFER, uboInfo.UBO);
@@ -38,15 +43,14 @@ void ShaderManager::SetUBOData(UniformBufferType uboType, unsigned int offset, s
 	glBindBuffer(GL_UNIFORM_BUFFER, 0);
 }
 
-Shader* ShaderManager::GetShader(int index) {
-	assert(index < shaderMap.size() && "³¬¹ýShader·ÃÎÊ·¶Î§£¡");
+std::shared_ptr<Shader> ShaderManager::GetShader(int index) {
+	assert(index < m_shaderMap.size() && "³¬¹ýShader·ÃÎÊ·¶Î§£¡");
 	if (index < 0 || index > shaderNames.size()+geometryShaderNames.size()) return nullptr;
-	if (index < shaderNames.size()) return shaderMap[shaderNames[index]];
-	else return shaderMap[geometryShaderNames[index - shaderNames.size()]];
+	return GetShaderByName(shaderNames[index]);
 }
 
-Shader* ShaderManager::GetShaderByName(std::string name) {
-	if (shaderMap.find(name) != shaderMap.end()) return shaderMap[name];
+std::shared_ptr<Shader> ShaderManager::GetShaderByName(std::string name) {
+	if (m_shaderMap.find(name) != m_shaderMap.end()) return m_shaderMap[name];
 	else return nullptr;
 }
 
@@ -54,6 +58,6 @@ std::vector<std::string> ShaderManager::GetNames() {
 	return shaderNames;
 }
 
-int ShaderManager::GetShaderIndexByShader(Shader* shaderPtr) {
+int ShaderManager::GetShaderIndexByShader(std::shared_ptr<Shader> shaderPtr) {
 	return shader2Idx[shaderPtr];
 }

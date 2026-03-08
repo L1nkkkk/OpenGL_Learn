@@ -1,5 +1,5 @@
 #pragma once
-#define STB_IMAGE_IMPLEMENTATION
+//
 //#define USE_GEOMETRY_SHADER
 #define USE_SCENE_SHADER
 //#define USE_PLANET_SHADER
@@ -15,25 +15,27 @@
 #include "ShaderManager.h"
 #include "Global.h"
 #include "ModelsLoader.h"
+#include "Timer.h"
+#include "ForwardRenderPass.h"
+
 
 bool firstMouse = false;
 bool lastFrameMkeyState = false;
 
-int frameCount = 0;
-float lastFrameTime = 0.0f;
 
 auto& properties = SystemProperties::GetInstance();
+auto& xmlMaterialManager = XmlMaterialManager::GetInstance();
 
 Camera camera(5.0f, glm::vec3(0.0f, 1.0f, -3.0f), properties.SCREEN_WIDTH / 2.0f, properties.SCREEN_HEIGHT / 2.0f);
 glm::mat4 view, projection;
 
-float deltaTime = 0.0f;
-float lastFrame = 0.0f;
 
 glm::vec3 coral(1.0f, 0.5f, 0.31f);
 glm::vec3 lightColor(1.0f);
 glm::vec3 toyColor(1.0f, 0.5f, 0.31f);
 glm::vec3 result = lightColor * toyColor;
+
+Timer& timer = Timer::GetInstance();
 
 
 void ProcessInput(GLFWwindow* window) {
@@ -42,16 +44,16 @@ void ProcessInput(GLFWwindow* window) {
 		glfwSetWindowShouldClose(window, true);
 	}
 	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
-		camera.cameraPos += deltaTime *camera.cameraSpeed * camera.cameraFront;
+		camera.UpdatePositionByDelta(timer.GetDeltaTime() *camera.cameraSpeed * camera.cameraFront);
 	}
 	if(glfwGetKey(window,GLFW_KEY_S) == GLFW_PRESS){
-		camera.cameraPos -= deltaTime * camera.cameraSpeed * camera.cameraFront;
+		camera.UpdatePositionByDelta(-timer.GetDeltaTime() * camera.cameraSpeed * camera.cameraFront);
 	}
 	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-		camera.cameraPos += deltaTime * camera.cameraSpeed * glm::cross(camera.cameraFront, camera.up);
+		camera.UpdatePositionByDelta(timer.GetDeltaTime() * camera.cameraSpeed * glm::cross(camera.cameraFront, camera.up));
 	}
 	if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-		camera.cameraPos -= deltaTime * camera.cameraSpeed * glm::cross(camera.cameraFront, camera.up);
+		camera.UpdatePositionByDelta(-timer.GetDeltaTime() * camera.cameraSpeed * glm::cross(camera.cameraFront, camera.up));
 	}
 
 	if (currentMkeyState && !lastFrameMkeyState) {
@@ -161,7 +163,7 @@ int main() {
 	Planet planet;
 	planet.Init();
 #endif
-	
+	xmlMaterialManager.LoadFromFile("materials.xml");
 	Scene scene(&camera, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
 	LoadModels(scene);
 	CubeTexture skybox("materials/skybox");
@@ -229,20 +231,16 @@ int main() {
 
 	glEnable(GL_PROGRAM_POINT_SIZE);
 	
+	auto forwardRenderPass = new ForwardRenderPass();
+	forwardRenderPass->Init(properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
+
 	while (!glfwWindowShouldClose(window)) {
-		++frameCount;
-		float currentTime = (float)glfwGetTime();
-		deltaTime = currentTime - lastFrame;
-		lastFrame = currentTime;
 		//calculate FPS
-		if (currentTime - lastFrameTime > .1f) {
-			std::stringstream windowTitle;
-			
-			windowTitle << "OpenGL_Learn FPS:" << (float)frameCount/(currentTime-lastFrameTime);
-			lastFrameTime = currentTime;
-			frameCount = 0;
-			glfwSetWindowTitle(window, windowTitle.str().c_str());
-		}
+		timer.Tick();
+		XmlMaterialManager::GetInstance().ReloadIfFileChanged();
+		std::stringstream windowTitle;
+		windowTitle << "OpenGL_Learn FPS:" << timer.GetFPS();
+		glfwSetWindowTitle(window, windowTitle.str().c_str());
 		//set system configUI
 		SetGui();
 		mygui.Begin();
@@ -255,23 +253,30 @@ int main() {
 		mygui.End();
 		//process input
 		ProcessInput(window);
+		//reset used texture num
+		properties.ResetUsedTextureNum();
 		//before pass: set uniform buffer
 		SetUniformBuffer();
 #ifdef USE_SCENE_SHADER
 		//first pass: render scene to framebuffer
-		scene.Draw();
+		scene.DrawShadowMap();
+		forwardRenderPass->Render(&scene);
 		//second pass: render framebuffer texture to screen
 		
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 		glBindVertexArray(globalVAOs.quadVAO);
 		glDisable(GL_DEPTH_TEST);
-		FBO* sceneFBO = scene.GetNeedShowFramebuffer();
+		FBO* sceneFBO = forwardRenderPass->GetOutputFBO();
 		if (!properties.DEBUG_MODE) {
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
 			glActiveTexture(GL_TEXTURE0);
+			if (!sceneFBO || sceneFBO->textureIDs.empty()) {
+				std::cout << "no valid color attachment, skip this frame" << std::endl;
+				continue;
+			}
 			glBindTexture(GL_TEXTURE_2D, sceneFBO->textureIDs[0]);
-			if (properties.BLOOM) {
+			if (properties.BLOOM && sceneFBO->textureIDs.size() > 1) {
 				glActiveTexture(GL_TEXTURE1);
 				glBindTexture(GL_TEXTURE_2D, sceneFBO->textureIDs[1]);
 			}
@@ -316,12 +321,16 @@ int main() {
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		planet.Draw();
 #endif
-		scene.ClearFBO();
+		//scene.ClearFBO();
 		// glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
 		glfwSwapBuffers(window);
 		glfwPollEvents();
 		
 	}
+
+	forwardRenderPass->Destroy();
+	delete forwardRenderPass;
+
 	glfwTerminate();
 	return 0;
 }
