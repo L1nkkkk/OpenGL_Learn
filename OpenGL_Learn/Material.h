@@ -189,6 +189,14 @@ public:
 	Material(const std::string& shaderName) :m_shaderName(shaderName) {}
 	virtual ~Material() = default;
 
+	// 仅用于调试 / GUI：允许外部访问属性映射
+	const std::unordered_map<std::string, MaterialProperty>& GetProperties() const {
+		return m_propertiesMap;
+	}
+	std::unordered_map<std::string, MaterialProperty>& GetPropertiesMutable() {
+		return m_propertiesMap;
+	}
+
 	// 重新设置该材质所使用的 Shader 名称（用于从 XML 重新加载时更新绑定）
 	void SetShaderName(const std::string& shaderName) {
 		m_shaderName = shaderName;

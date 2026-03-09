@@ -3,10 +3,12 @@
 
 Mesh::Mesh(std::vector<Vertex> vertices,
 		std::vector<unsigned int> indices,
-		   Material* material)
+		   Material* material,
+           const std::string& materialXmlPath)
 {
 	this->vertices = ComputeTBNVertices(vertices,indices);
 	this->material_ptr = material;
+    this->materialXmlPath = materialXmlPath;
 	this->start_tex_index = 0;
 	setupMesh();
 }
@@ -36,9 +38,21 @@ void Mesh::setupMesh()
 
 void Mesh::Draw()
 {
-	
 	auto& properties = SystemProperties::GetInstance();
-	auto materialGaurd = MaterialGaurd(*material_ptr);
+    Material* runtimeMat = material_ptr;
+
+    // 如果为该 Mesh 指定了 XML 材质文件，则优先从 XmlMaterialManager 获取 / 热重载
+    if (!materialXmlPath.empty()) {
+        if (Material* xmlMat = XmlMaterialManager::GetInstance().GetOrLoadMaterialByFile(materialXmlPath)) {
+            runtimeMat = xmlMat;
+        }
+    }
+
+    if (!runtimeMat) {
+        return;
+    }
+
+	auto materialGaurd = MaterialGaurd(*runtimeMat);
 	glActiveTexture(GL_TEXTURE0);
 	glBindVertexArray(VAO);
 	glDrawArrays(GL_TRIANGLES, 0, vertices.size());
@@ -115,6 +129,7 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 			indices.push_back(face.mIndices[j]);
 		}
 	}
+	std::string xmlPath;
 	if(mat) {
 		return Mesh(vertices, indices, mat);
 	}
@@ -123,25 +138,30 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 
 		aiString aiName;
 		if (aiMat->Get(AI_MATKEY_NAME, aiName) == AI_SUCCESS) {
-			if (Material* xmlMat = XmlMaterialManager::GetInstance().GetMaterialRaw(aiName.C_Str())) {
-				material = xmlMat;
-			}
-		}
-
-		if (!material) {
+            // 约定：一个材质对应一个 xml 文件，如 materials/Wood.xml
 			material = new Material(m_shader->shaderName);
 			prosessMaterial(aiMat, material);
 		}
+
+		if (!material) {
+			xmlPath = "materials/";
+			xmlPath += aiName.C_Str();
+			xmlPath += ".xml";
+			if (Material* xmlMat = XmlMaterialManager::GetInstance().GetOrLoadMaterialByFile(xmlPath)) {
+				material = xmlMat;
+			}
+		}
 	}
 	else {
-		if (Material* xmlMat = XmlMaterialManager::GetInstance().GetMaterialRaw("Default")) {
-			material = xmlMat;
-		}
-		else {
-			material = new Material(m_shader->shaderName);
-		}
+        // 没有关联 aiMaterial，则尝试使用一个默认 XML 材质（如 materials/Default.xml）
+        xmlPath = "materials/Default.xml";
+        if (Material* xmlMat = XmlMaterialManager::GetInstance().GetOrLoadMaterialByFile(xmlPath)) {
+            material = xmlMat;
+        } else {
+		    material = new Material(m_shader->shaderName);
+        }
 	}
-	return Mesh(vertices,indices, material);
+	return Mesh(vertices,indices, material, xmlPath);
 }
 
 void Model::prosessMaterial(aiMaterial* mat,Material* material)

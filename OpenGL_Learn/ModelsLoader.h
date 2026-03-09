@@ -122,45 +122,11 @@ void LoadModels(Scene& scene) {
 		0,1,2,
 		1,3,2
 	};
-	std::vector<Texture> planeTextures;
-	std::vector<Texture> planeNormalTextures;
-	Texture planeTexture;
-	Texture planeNormalTexture;
-	planeTexture.textureID = TextureFromFile("brickwall.jpg", "materials/brickwall", true);
-	glBindTexture(GL_TEXTURE_2D, planeTexture.textureID);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	planeTexture.textureGammaID = TextureFromFile("brickwall.jpg", "materials/brickwall", true, true);
-	glBindTexture(GL_TEXTURE_2D, planeTexture.textureGammaID);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	
 
-	glBindTexture(GL_TEXTURE_2D,0);
-	planeTexture.type = "texture_diffuse";
-	planeTextures.push_back(planeTexture);
-
-	planeNormalTexture.textureID = TextureFromFile("brickwall_normal.jpg", "materials/brickwall", true);
-	glBindTexture(GL_TEXTURE_2D, planeNormalTexture.textureID);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-	glBindTexture(GL_TEXTURE_2D, 0);
-	planeNormalTexture.type = "texture_normal";
-	planeNormalTextures.push_back(planeNormalTexture);
-
-	Material* planeMaterial = new Material("phong");
-	MaterialProperty diffuseTextures = MaterialProperty::CreateTexture(planeTextures);
-	MaterialProperty normalTextures = MaterialProperty::CreateTexture(planeNormalTextures);
-	planeMaterial->AddProperty("texture_diffuse", diffuseTextures);
-	planeMaterial->AddProperty("texture_normal", normalTextures);
+	Material* planeMaterial = XmlMaterialManager::GetInstance().GetMaterialRaw("Floor");
 	std::vector<Mesh> planeMeshes;
-	planeMeshes.emplace_back(planeVertices,planeIndices,planeMaterial);
+	planeMeshes.emplace_back(planeVertices,planeIndices,planeMaterial,"materials/brickwall/brickwall.xml");
 
 	auto plane = std::make_shared<Model>(planeMeshes);
 	plane->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
@@ -189,7 +155,7 @@ void LoadModels(Scene& scene) {
 		1,3,2
 	};
 	std::vector<Mesh> wallMeshes;
-	wallMeshes.emplace_back(wallVertices, wallIndices, planeMaterial);
+	wallMeshes.emplace_back(wallVertices, wallIndices, planeMaterial, "materials/brickwall/brickwall.xml");
 	auto wall1 = std::make_shared<Model>(wallMeshes);
 	wall1->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
 	wall1->AddOtherShader(OtherShaderType::normalLines, shaderManager.GetShader(ShaderManager::NormalLines));

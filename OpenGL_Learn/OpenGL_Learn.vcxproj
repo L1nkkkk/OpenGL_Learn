@@ -105,7 +105,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\Link\Dev\OpenGL_Learn\includes</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\Link\Dev\OpenGL_Learn\includes;C:\Users\Link\Dev\imgui-docking;C:\Users\Link\Dev\imgui-docking\backends</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
@@ -130,13 +130,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\..\..\..\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\include\imgui\backends\imgui_impl_glfw.cpp" />
-    <ClCompile Include="..\..\..\..\..\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\include\imgui\backends\imgui_impl_opengl3.cpp" />
-    <ClCompile Include="..\..\..\..\..\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\include\imgui\imgui.cpp" />
-    <ClCompile Include="..\..\..\..\..\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\include\imgui\imgui_draw.cpp" />
-    <ClCompile Include="..\..\..\..\..\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\include\imgui\imgui_tables.cpp" />
-    <ClCompile Include="..\..\..\..\..\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\include\imgui\imgui_widgets.cpp" />
     <ClCompile Include="..\..\..\Downloads\src\glad.c" />
+    <ClCompile Include="..\..\imgui-docking\backends\imgui_impl_glfw.cpp" />
+    <ClCompile Include="..\..\imgui-docking\backends\imgui_impl_opengl3.cpp" />
+    <ClCompile Include="..\..\imgui-docking\imgui.cpp" />
+    <ClCompile Include="..\..\imgui-docking\imgui_draw.cpp" />
+    <ClCompile Include="..\..\imgui-docking\imgui_tables.cpp" />
+    <ClCompile Include="..\..\imgui-docking\imgui_widgets.cpp" />
     <ClCompile Include="AntiAliasManager.cpp" />
     <ClCompile Include="callbacks.cpp" />
     <ClCompile Include="ForwardRenderPass.cpp" />
@@ -228,6 +228,9 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="OpenGL_Learn.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Xml Include="materials\brickwall\brickwall.xml" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

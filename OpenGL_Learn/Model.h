@@ -36,10 +36,13 @@ public:
 
 	Material* material_ptr;
 	unsigned int start_tex_index;
+    // 可选：该 Mesh 对应的材质 XML 路径（如 "materials/Wood.xml"），用于懒加载 + 热重载
+    std::string materialXmlPath;
 
 	Mesh(std::vector<Vertex> vertices,
 		std::vector<unsigned int> indices,
-		 Material* material);
+		 Material* material,
+         const std::string& materialXmlPath = std::string());
 	void Draw();
 
 	unsigned int GetVAO() {

@@ -144,10 +144,10 @@ int main() {
 #ifdef USE_GEOMETRY_SHADER
 	GeometryShader geometryShader("shaders/geometryVertex.vs", "shaders/geometryGeometry.gs", "shaders/geometryFragment.fs");
 	float points[] = {
-	-0.5f,  0.5f, 1.0f, 0.0f, 0.0f, // 左上
-	 0.5f,  0.5f, 0.0f, 1.0f, 0.0f, // 右上
-	 0.5f, -0.5f, 0.0f, 0.0f, 1.0f, // 右下
-	-0.5f, -0.5f, 1.0f, 1.0f, 0.0f  // 左下
+	-0.5f,  0.5f, 1.0f, 0.0f, 0.0f, // ????
+	 0.5f,  0.5f, 0.0f, 1.0f, 0.0f, // ????
+	 0.5f, -0.5f, 0.0f, 0.0f, 1.0f, // ????
+	-0.5f, -0.5f, 1.0f, 1.0f, 0.0f  // ????
 	};
 	unsigned int VAO, VBO;
 	glGenVertexArrays(1, &VAO);
@@ -225,6 +225,13 @@ int main() {
 	FramebuffersManager& framebuffersMgr = FramebuffersManager::GetInstance();
 	AntiAliasManager& antiAliasMgr = AntiAliasManager::GetInstance();
 
+	// ???? FBO????????? HDR + gamma + bloom ????????????
+	FBOAttributes postAttr = FramebuffersManager::GenCurrentAttr();
+	postAttr.isHDR = false;
+	postAttr.textureAttrs.clear();
+	postAttr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE });
+	FBO* postProcessFBO = framebuffersMgr.GetFBO(postAttr);
+
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	//glEnable(GL_CULL_FACE);
 	//glCullFace(GL_BACK);
@@ -237,20 +244,29 @@ int main() {
 	while (!glfwWindowShouldClose(window)) {
 		//calculate FPS
 		timer.Tick();
-		XmlMaterialManager::GetInstance().ReloadIfFileChanged();
+		
 		std::stringstream windowTitle;
 		windowTitle << "OpenGL_Learn FPS:" << timer.GetFPS();
 		glfwSetWindowTitle(window, windowTitle.str().c_str());
-		//set system configUI
+		// NewFrame
 		SetGui();
-		mygui.Begin();
+
+		// ?? DockSpace??? Unity ?????
+		mygui.MainDockSpace();
+
+		// Settings / Scene / Materials / XML / Assets ??? Dock ? DockSpace ?
+		mygui.Begin();              // Settings ??
 		mygui.System_UI();
 		mygui.Shadow_UI();
 		mygui.Gamma_UI();
 		mygui.Framebuffers_UI();
 		mygui.Anti_Aliasing_UI();
-		mygui.Scene_UI(scene);
 		mygui.End();
+
+		mygui.Scene_UI(scene);          // Scene?Lights + Models?
+		mygui.MaterialsInspector_UI();  // ?? Inspector
+		mygui.MaterialsEditor_UI();     // XML ???
+
 		//process input
 		ProcessInput(window);
 		//reset used texture num
@@ -258,18 +274,22 @@ int main() {
 		//before pass: set uniform buffer
 		SetUniformBuffer();
 #ifdef USE_SCENE_SHADER
-		//first pass: render scene to framebuffer
+		//first pass: render scene to framebuffer (HDR)
 		scene.DrawShadowMap();
 		forwardRenderPass->Render(&scene);
-		//second pass: render framebuffer texture to screen
+		//second pass: render framebuffer texture to post-process FBO (?? HDR + gamma + bloom)
 		
+		// ???????????????????????????????????????????? UI
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
 		glBindVertexArray(globalVAOs.quadVAO);
 		glDisable(GL_DEPTH_TEST);
 		FBO* sceneFBO = forwardRenderPass->GetOutputFBO();
 		if (!properties.DEBUG_MODE) {
-			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			// ?????????? postProcessFBO
+			glBindFramebuffer(GL_FRAMEBUFFER, postProcessFBO->framebufferID);
 			glActiveTexture(GL_TEXTURE0);
 			if (!sceneFBO || sceneFBO->textureIDs.empty()) {
 				std::cout << "no valid color attachment, skip this frame" << std::endl;
@@ -308,6 +328,22 @@ int main() {
 			debugShader.setFloat("div", (float)len);
 		}
 		glDrawArrays(GL_TRIANGLES, 0, 6);
+
+		// ??????? FBO??????????????? ImGui ?????
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+		// Viewport????????? Dock ??????????? FBO ?????
+		unsigned int viewportTextureID = 0;
+		if (!properties.DEBUG_MODE && postProcessFBO && !postProcessFBO->textureIDs.empty()) {
+			viewportTextureID = postProcessFBO->textureIDs[0];
+		}
+		if (viewportTextureID != 0) {
+			mygui.Viewport_UI(viewportTextureID);
+		}
+
+		// Assets ?????? models / materials / shaders ??
+		mygui.AssetsBrowser_UI();
+
 		//Draw GUI
 		mygui.Render();
 #elif defined(USE_GEOMETRY_SHADER)
@@ -330,6 +366,8 @@ int main() {
 
 	forwardRenderPass->Destroy();
 	delete forwardRenderPass;
+
+	framebuffersMgr.ReleaseFBO(postProcessFBO);
 
 	glfwTerminate();
 	return 0;

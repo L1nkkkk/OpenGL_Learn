@@ -12,9 +12,9 @@
 #include "shaderManager.h"
 #include "Global.h"
 #include "XmlMaterialManager.h"
-#include <imgui/imgui.h>
-#include <imgui/backends/imgui_impl_opengl3.h>
-#include <imgui/backends/imgui_impl_glfw.h>
+#include <imgui.h>
+#include <backends/imgui_impl_opengl3.h>
+#include <backends/imgui_impl_glfw.h>
 
 struct LightSource {
 	unsigned int pointLightVAO;

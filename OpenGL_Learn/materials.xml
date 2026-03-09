@@ -4,12 +4,27 @@
     <Color name="color" r="1.0" g="1.0" b="1.0" />
     <!-- 如需从 XML 控制贴图，可按需取消注释并修改路径 -->
   </Material>
-    <Material name="Default" shader="phong">
+  <Material name="Default" shader="phong">
 	    <Color name="ambient" r="0.1" g="0.1" b="0.1" />
 	    <Color name="diffuse" r="1.0" g="1.0" b="1.0" />
 	    <Color name="specular" r="1.0" g="1.0" b="1.0" />
 	    <Float name="shininess" value="32.0" />
 	    <!-- 如需从 XML 控制贴图，可按需取消注释并修改路径 -->
-    </Material>
+  </Material>
+	<!-- 新增 Floor 材质 -->
+	<Material name="Floor" shader="phong">
+		<Color  name="ambient"  r="0.1" g="0.1" b="0.1" />
+		<Color  name="diffuse"  r="1.0" g="1.0" b="1.0" />
+		<Color  name="specular" r="1.0" g="1.0" b="1.0" />
+		<Float  name="shininess" value="32.0" />
+		<RenderState
+			depthTest="true"
+			depthWrite="true"
+			stencilTest="false"
+			blendMode="None"
+			cullMode="None" />
+		<Texture name="texture_diffuse"  path="materials/brickwall/brickwall.jpg" />
+		<Texture name="texture_normal"   path="materials/brickwall/brickwall_normal.jpg" />
+	</Material>
 </Materials>
 
