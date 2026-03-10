@@ -89,26 +89,19 @@ void LoadModels(Scene& scene) {
 		0,1,2,
 		1,3,2
 	};
-	std::vector<Texture> grassTextures;
-	Texture grassTexture;
-	grassTexture.textureID = TextureFromFile("blending_transparent_window.png", "models/blending_transparent_window", true);
-	grassTexture.textureGammaID = TextureFromFile("blending_transparent_window.png", "models/blending_transparent_window", true, true);
-	grassTexture.type = "texture_diffuse";
-	grassTextures.push_back(grassTexture);
 
-	Material* grassMaterial = new Material("grass");
-	MaterialProperty grassDiffuseTextures = MaterialProperty::CreateTexture(grassTextures);
-	grassMaterial->AddProperty("texture_diffuse", grassDiffuseTextures);
+	Material* grassMaterial = nullptr;
 
 	std::vector<Mesh> grassMeshes;
-	grassMeshes.emplace_back(grassVertices, grassIndices, grassMaterial);
-
+	grassMeshes.emplace_back(grassVertices, grassIndices, grassMaterial,"materials/transparent_window/transparent_window.xml");
+	int count = 0;
 	for (auto& pos : vegetation) {
 		glm::mat4 model = glm::mat4(1.0f);
 		auto vegi = std::make_shared<Model>(grassMeshes);
 		vegi->position = pos;
 		vegi->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
 		vegi->SetShader(shaderManager.GetShader(ShaderManager::Grass));
+		vegi->SetName("window"+std::to_string(count++));
 		scene.modelSource.AddTransparentModel(vegi);
 	}
 

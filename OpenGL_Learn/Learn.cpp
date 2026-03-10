@@ -69,7 +69,7 @@ void Planet::Draw() {
     model = glm::scale(model, glm::vec3(4.f, 4.f, 4.f));
     
     planetShader->setMat4("model", model);
-    planetModel->Draw(*planetShader);
+    planetModel->Draw(planetShader.get());
 
     
     auto& meshes = rockModel->GetMeshes();

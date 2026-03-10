@@ -36,7 +36,7 @@ void Mesh::setupMesh()
 	glBindVertexArray(0);
 }
 
-void Mesh::Draw()
+void Mesh::Draw(Shader* shader)
 {
 	auto& properties = SystemProperties::GetInstance();
     Material* runtimeMat = material_ptr;
@@ -51,23 +51,36 @@ void Mesh::Draw()
     if (!runtimeMat) {
         return;
     }
-
-	auto materialGaurd = MaterialGaurd(*runtimeMat);
-	glActiveTexture(GL_TEXTURE0);
-	glBindVertexArray(VAO);
-	glDrawArrays(GL_TRIANGLES, 0, vertices.size());
+	if (shader==nullptr) {
+		auto materialGaurd = MaterialGaurd(*runtimeMat);
+		glActiveTexture(GL_TEXTURE0);
+		glBindVertexArray(VAO);
+		glDrawArrays(GL_TRIANGLES, 0, vertices.size());
+	}
+	else {
+		shader->use();
+		glActiveTexture(GL_TEXTURE0);
+		glBindVertexArray(VAO);
+		glDrawArrays(GL_TRIANGLES, 0, vertices.size());
+	}
 	glBindVertexArray(0);
 }
 
-void Model::Draw(Shader& shader, unsigned int start_tex_index )
+void Model::Draw(Shader* shader, unsigned int start_tex_index )
 {
-	shader.use();
-	shader.setMat4("model", getModelMatrix());
+	if (shader) {
+		shader->use();
+		shader->setMat4("model", getModelMatrix());
+	}
+	else {
+		m_shader->use();
+		m_shader->setMat4("model", getModelMatrix());
+	}
 	auto& properties = SystemProperties::GetInstance();
 	int usedTextures = properties.USED_TEXTURE_NUM;
 	for (unsigned int i = 0; i < meshes.size(); ++i) {
 		meshes[i].start_tex_index = start_tex_index;
-		meshes[i].Draw();
+		meshes[i].Draw(shader);
 		properties.USED_TEXTURE_NUM = usedTextures;
 	}
 }

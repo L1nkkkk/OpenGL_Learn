@@ -224,13 +224,14 @@
     <None Include="VertexShader.glsl" />
   </ItemGroup>
   <ItemGroup>
-    <Image Include="models\blending_transparent_window\blending_transparent_window.png" />
+    <Image Include="materials\transparent_window\blending_transparent_window.png" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="OpenGL_Learn.rc" />
   </ItemGroup>
   <ItemGroup>
     <Xml Include="materials\brickwall\brickwall.xml" />
+    <Xml Include="materials\transparent_window\transparent_window.xml" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

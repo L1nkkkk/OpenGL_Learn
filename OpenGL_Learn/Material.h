@@ -189,6 +189,104 @@ public:
 	Material(const std::string& shaderName) :m_shaderName(shaderName) {}
 	virtual ~Material() = default;
 
+	static RenderState GetCurrentRenderState() {
+		RenderState rs;
+
+		// 深度测试开关
+		rs.depthTest = (glIsEnabled(GL_DEPTH_TEST) == GL_TRUE);
+
+		// 深度写入（Depth Mask）
+		GLboolean depthMask = GL_TRUE;
+		glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMask);
+		rs.depthWrite = (depthMask == GL_TRUE);
+
+		// 模板测试开关
+		rs.stencilTest = (glIsEnabled(GL_STENCIL_TEST) == GL_TRUE);
+
+		// 混合模式
+		if (!glIsEnabled(GL_BLEND)) {
+			rs.blendMode = BlendMode::None;
+		}
+		else {
+			GLint srcRGB = 0, dstRGB = 0;
+			glGetIntegerv(GL_BLEND_SRC_RGB, &srcRGB);
+			glGetIntegerv(GL_BLEND_DST_RGB, &dstRGB);
+
+			if (srcRGB == GL_SRC_ALPHA && dstRGB == GL_ONE_MINUS_SRC_ALPHA) {
+				rs.blendMode = BlendMode::AlphaBlend;
+			}
+			else if (srcRGB == GL_SRC_ALPHA && dstRGB == GL_ONE) {
+				rs.blendMode = BlendMode::Additive;
+			}
+			else {
+				// 不在你定义的两种里，给一个合理的默认
+				rs.blendMode = BlendMode::AlphaBlend;
+			}
+		}
+
+		// 面剔除模式
+		if (!glIsEnabled(GL_CULL_FACE)) {
+			rs.cullMode = CullMode::None;
+		}
+		else {
+			GLint mode = 0;
+			glGetIntegerv(GL_CULL_FACE_MODE, &mode);
+			if (mode == GL_FRONT) {
+				rs.cullMode = CullMode::Front;
+			}
+			else if (mode == GL_BACK) {
+				rs.cullMode = CullMode::Back;
+			}
+			else {
+				rs.cullMode = CullMode::Back;
+			}
+		}
+
+		return rs;
+	}
+
+	static void RecoverRenderState(RenderState rs) {
+		// 深度测试
+		if (rs.depthTest) glEnable(GL_DEPTH_TEST);
+		else              glDisable(GL_DEPTH_TEST);
+
+		// 深度写入
+		glDepthMask(rs.depthWrite ? GL_TRUE : GL_FALSE);
+
+		// 模板测试
+		if (rs.stencilTest) glEnable(GL_STENCIL_TEST);
+		else                glDisable(GL_STENCIL_TEST);
+
+		// 混合模式
+		switch (rs.blendMode) {
+		case BlendMode::None:
+			glDisable(GL_BLEND);
+			break;
+		case BlendMode::AlphaBlend:
+			glEnable(GL_BLEND);
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			break;
+		case BlendMode::Additive:
+			glEnable(GL_BLEND);
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+			break;
+		}
+
+		// 面剔除
+		switch (rs.cullMode) {
+		case CullMode::None:
+			glDisable(GL_CULL_FACE);
+			break;
+		case CullMode::Front:
+			glEnable(GL_CULL_FACE);
+			glCullFace(GL_FRONT);
+			break;
+		case CullMode::Back:
+			glEnable(GL_CULL_FACE);
+			glCullFace(GL_BACK);
+			break;
+		}
+	}
 	// 仅用于调试 / GUI：允许外部访问属性映射
 	const std::unordered_map<std::string, MaterialProperty>& GetProperties() const {
 		return m_propertiesMap;
@@ -320,6 +418,7 @@ protected:
 class MaterialGaurd {
 public:
 	MaterialGaurd(Material& material) :m_material(material) {
+		m_previousState = Material::GetCurrentRenderState();
 		m_material.Activate();
 	}
 	~MaterialGaurd() {
@@ -330,7 +429,9 @@ public:
 			glActiveTexture(GL_TEXTURE0 + --property.USED_TEXTURE_NUM);
 			glBindTexture(GL_TEXTURE_2D, 0);
 		}
+		Material::RecoverRenderState(m_previousState);
 	}
 private:
 	Material& m_material;
+	RenderState m_previousState;
 };

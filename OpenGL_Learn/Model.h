@@ -43,7 +43,7 @@ public:
 		std::vector<unsigned int> indices,
 		 Material* material,
          const std::string& materialXmlPath = std::string());
-	void Draw();
+	void Draw(Shader* shader = nullptr);
 
 	unsigned int GetVAO() {
 		return VAO;
@@ -105,7 +105,7 @@ public:
 		name = "model" + std::to_string(count++);
 	}
 
-	void Draw(Shader& shader, unsigned int start_tex_index = 0);
+	void Draw(Shader* shader = nullptr, unsigned int start_tex_index = 0);
 	glm::mat4 modelMatrix = glm::mat4(1.0f);
 
 	std::unordered_map<int,bool> otherShaderUse;

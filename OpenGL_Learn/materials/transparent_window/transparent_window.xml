@@ -1,0 +1,9 @@
+<Material name="TransparentWindow" shader="grass">
+	<RenderState
+		depthTest="true"
+		depthWrite="false"
+		stencilTest="false"
+		blendMode="AlphaBlend"
+		cullMode="None" />
+	<Texture name="texture_diffuse"  path="materials/transparent_window/blending_transparent_window.png" />
+</Material>

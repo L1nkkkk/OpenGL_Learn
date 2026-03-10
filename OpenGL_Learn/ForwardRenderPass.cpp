@@ -12,6 +12,7 @@ void ForwardRenderPass::Init(int width, int height)
 
 void ForwardRenderPass::Render(Scene* scene, const FBO* inputFBO)
 {
+	scene->DrawShadowMap();
 	glBindFramebuffer(GL_FRAMEBUFFER, m_outputFBO->framebufferID);
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_STENCIL_TEST);
@@ -27,19 +28,26 @@ void ForwardRenderPass::Render(Scene* scene, const FBO* inputFBO)
 	//Draw scene in the following order
 	// Draw Opacity Models (先绘制所有不透明物体，记录需要outline的物体到stencil buffer)
 	auto& opacityModels = scene->GetModelSource().GetOpaqueModelsMap();
-	auto& transparentModels = scene->GetModelSource().GetTransparentModels();
+	auto& transparentModels = scene->GetModelSource().GetTransparentModels(scene->camera_ptr);
 	auto& pointLightModels = scene->GetLightSource().GetPointLights();
 	for (auto& [shader, models] : opacityModels) {
 		shader->use();
 		scene->SetLightUniforms(*shader);
 		for (auto& model : models) {
-			model->Draw(*shader);
+			model->Draw();
 		}
 	}
 	for (auto& light : pointLightModels) {
-		auto lightShader = light.GetShader();
-		lightShader->use();
-		light.Draw(*lightShader);
+		light.Draw();
+	}
+	// Draw Skybox (使用深度测试优化，但不影响stencil buffer)
+	scene->DrawSkybox(scene->camera_ptr->GetViewMatrix());
+	// Draw Transparent Models
+	for(auto& model : transparentModels) {
+		auto shader = model->GetShader();
+		shader->use();
+		scene->SetLightUniforms(*shader);
+		model->Draw();
 	}
 	// 最后绘制outline（禁用深度测试，基于stencil buffer绘制）
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
