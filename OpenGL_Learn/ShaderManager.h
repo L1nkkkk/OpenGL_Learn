@@ -7,6 +7,24 @@
 #include <vector>
 #include <unordered_map>
 
+// std140 å¸ƒå±€ä¸ shader ä¸­ SystemProperties å—ä¸€è‡´ï¼š4*bool + 3*float + 6*intï¼Œå…± 52 å­—èŠ‚ï¼Œå¯¹é½åˆ° 64
+struct alignas(16) SystemUBOData {
+	int useBloom;
+	int useShadowMap;
+	int useGamma;
+	int useHDR;
+	float bloomThreshold;
+	float gamma;
+	float exposure;
+	int bloomBlurIterations;
+	int shadowSampleNum;
+	int shadowSampleRings;
+	int shadowType;
+	int screenWidth;
+	int screenHeight;
+	int padding[3];
+};
+
 struct UBOInfo {
 	unsigned int UBO;
 	unsigned int bindingPoint;
@@ -38,9 +56,9 @@ public:
 	};
 
 	static enum UniformBufferType {
-		Matrices = 0
+		Matrices = 0,
+		SystemProperties = 1
 	};
-
 
 	static ShaderManager& GetInstance() {
 		static ShaderManager instance;
@@ -56,6 +74,8 @@ public:
 	std::vector<std::string> GetNames();
 	int GetShaderIndexByShader(std::shared_ptr<Shader> shaderPtr);
 	void SetUBOData(UniformBufferType uboType, unsigned int offset, size_t size, const void* dataPtr);
+	/// ä» SystemProperties åŒæ­¥åˆ° SystemProperties UBOï¼Œæ¯å¸§æˆ–é…ç½®å˜æ›´æ—¶è°ƒç”¨ä¸€æ¬¡å³å¯ï¼Œæ‰€æœ‰ä½¿ç”¨è¯¥ UBO çš„ Shader è‡ªåŠ¨è·å¾—
+	void UpdateSystemUBO();
 
 	void UseShader(std::string name) {
 		if (m_shaderMap.find(name) != m_shaderMap.end()) {
@@ -81,6 +101,7 @@ public:
 	}
 	ShaderManager(const ShaderManager&) = delete;
 	ShaderManager& operator=(const ShaderManager&) = delete;
+
 private:
 	std::unordered_map<std::string, std::shared_ptr<Shader>> m_shaderMap;
 	std::unordered_map<std::shared_ptr<Shader>, int> shader2Idx;
@@ -119,7 +140,7 @@ public:
 		ShaderManager::GetInstance().UseShader(shaderName);
 	}
 	~ShaderGaurd() {
-		//½â°óËùÓĞÎÆÀí£¬±ÜÃâ¶ÔºóĞøäÖÈ¾Ôì³É¸ÉÈÅ
+		//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ôºï¿½ï¿½ï¿½ï¿½ï¿½È¾ï¿½ï¿½É¸ï¿½ï¿½ï¿½
 		int TextureUsedNum = SystemProperties::GetInstance().USED_TEXTURE_NUM;
 		for(int i = 0; i < TextureUsedNum; ++i) {
 			glActiveTexture(GL_TEXTURE0 + i);

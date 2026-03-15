@@ -145,6 +145,7 @@
     <ClCompile Include="Learn.cpp" />
     <ClCompile Include="Model.cpp" />
     <ClCompile Include="Object.cpp" />
+    <ClCompile Include="PostprocessRenderPass.cpp" />
     <ClCompile Include="Scene.cpp" />
     <ClCompile Include="Shader.cpp" />
     <ClCompile Include="ShaderManager.cpp" />
@@ -163,6 +164,7 @@
     <ClInclude Include="Model.h" />
     <ClInclude Include="ModelsLoader.h" />
     <ClInclude Include="mygui.h" />
+    <ClInclude Include="PostprocessRenderPass.h" />
     <ClInclude Include="RenderPass.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="Scene.h" />

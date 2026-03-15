@@ -15,6 +15,8 @@
 #include "Scene.h"
 #include "Global.h"
 #include "XmlMaterialManager.h"
+#include "Material.h"
+#include "Model.h"
 
 class MyGui {
 public:
@@ -386,64 +388,11 @@ public:
 		ImGui::DragInt("shadow rings", &properties.SHADOW_PCF_RING_NUM, 1.0, 5, 20);
 	}
 
-	// 材质参数调试面板：可单独停靠到 DockSpace 中
-	void MaterialsInspector_UI() {
-		auto& matMgr = XmlMaterialManager::GetInstance();
-		auto allMats = matMgr.GetAllMaterials();
-
-		if (!ImGui::Begin("Materials Inspector")) {
-			ImGui::End();
-			return;
-		}
-
-		if (allMats.empty()) {
-			ImGui::TextUnformatted("No materials loaded.");
-			ImGui::End();
-			return;
-		}
-
-		static int currentIndex = 0;
-		static std::vector<std::string> names;
-		names.clear();
-		names.reserve(allMats.size());
-		for (const auto& kv : allMats) {
-			names.push_back(kv.first);
-		}
-		if (currentIndex >= static_cast<int>(names.size())) currentIndex = 0;
-
-		// 左侧下拉选择当前材质
-		ImGui::TextUnformatted("Materials Inspector");
-		if (!names.empty()) {
-			if (ImGui::BeginCombo("Material", names[currentIndex].c_str())) {
-				for (int i = 0; i < static_cast<int>(names.size()); ++i) {
-					bool selected = (i == currentIndex);
-					if (ImGui::Selectable(names[i].c_str(), selected)) {
-						currentIndex = i;
-					}
-					if (selected) {
-						ImGui::SetItemDefaultFocus();
-					}
-				}
-				ImGui::EndCombo();
-			}
-		}
-
-		if (names.empty()) {
-			ImGui::End();
-			return;
-		}
-
-		const std::string& selectedName = names[currentIndex];
-		if (currentIndex < 0 || currentIndex >= static_cast<int>(allMats.size()) || !allMats[currentIndex].second) {
-			ImGui::TextUnformatted("Invalid material.");
-			ImGui::End();
-			return;
-		}
-
-		Material* mat = allMats[currentIndex].second.get();
+	// 绘制单个材质的 Shader / Render State / Properties（供 Materials Inspector 与 Model Materials 共用）
+	static void DrawSingleMaterialContent(Material* mat) {
+		if (!mat) return;
 		auto& props = mat->GetPropertiesMutable();
 
-		// 显示 Shader 名称与渲染状态
 		ImGui::Separator();
 		ImGui::Text("Shader: %s", mat->GetShaderName().c_str());
 
@@ -504,6 +453,110 @@ public:
 				break;
 			}
 			ImGui::PopID();
+		}
+	}
+
+	// 材质参数调试面板：可单独停靠到 DockSpace 中
+	void MaterialsInspector_UI() {
+		auto& matMgr = XmlMaterialManager::GetInstance();
+		auto allMats = matMgr.GetAllMaterials();
+
+		if (!ImGui::Begin("Materials Inspector")) {
+			ImGui::End();
+			return;
+		}
+
+		if (allMats.empty()) {
+			ImGui::TextUnformatted("No materials loaded.");
+			ImGui::End();
+			return;
+		}
+
+		static int currentIndex = 0;
+		static std::vector<std::string> names;
+		names.clear();
+		names.reserve(allMats.size());
+		for (const auto& kv : allMats) {
+			names.push_back(kv.first);
+		}
+		if (currentIndex >= static_cast<int>(names.size())) currentIndex = 0;
+
+		// 左侧下拉选择当前材质
+		ImGui::TextUnformatted("Materials Inspector");
+		if (!names.empty()) {
+			if (ImGui::BeginCombo("Material", names[currentIndex].c_str())) {
+				for (int i = 0; i < static_cast<int>(names.size()); ++i) {
+					bool selected = (i == currentIndex);
+					if (ImGui::Selectable(names[i].c_str(), selected)) {
+						currentIndex = i;
+					}
+					if (selected) {
+						ImGui::SetItemDefaultFocus();
+					}
+				}
+				ImGui::EndCombo();
+			}
+		}
+
+		if (names.empty()) {
+			ImGui::End();
+			return;
+		}
+
+		if (currentIndex < 0 || currentIndex >= static_cast<int>(allMats.size()) || !allMats[currentIndex].second) {
+			ImGui::TextUnformatted("Invalid material.");
+			ImGui::End();
+			return;
+		}
+
+		Material* mat = allMats[currentIndex].second.get();
+		DrawSingleMaterialContent(mat);
+
+		ImGui::End();
+	}
+
+	// 选中模型材质面板：在 Scene 中选中某个模型后，在此窗口查看/编辑该模型下每个 Mesh 的材质
+	void ModelMaterialsInspector_UI(Scene& scene) {
+		if (!ImGui::Begin("Model Materials")) {
+			ImGui::End();
+			return;
+		}
+
+		Model* model = scene.GetSelectedModelForMaterials();
+		if (!model) {
+			ImGui::TextUnformatted("Select a model in Scene panel:");
+			ImGui::TextUnformatted("Open 'Model Settings' -> expand a model -> click 'View Materials'.");
+			ImGui::End();
+			return;
+		}
+
+		ImGui::Text("Model: %s", model->GetName().c_str());
+		if (ImGui::Button("Clear Selection")) {
+			scene.SetSelectedModelForMaterials(nullptr);
+		}
+		ImGui::Separator();
+
+		auto& meshes = model->GetMeshes();
+		if (meshes.empty()) {
+			ImGui::TextUnformatted("No meshes.");
+			ImGui::End();
+			return;
+		}
+
+		for (size_t i = 0; i < meshes.size(); ++i) {
+			Mesh& mesh = meshes[i];
+			Material* mat = mesh.material_ptr;
+			char headerLabel[64];
+			snprintf(headerLabel, sizeof(headerLabel), "Mesh %zu", i);
+			if (ImGui::CollapsingHeader(headerLabel)) {
+				if (mat) {
+					ImGui::PushID(static_cast<int>(i));
+					DrawSingleMaterialContent(mat);
+					ImGui::PopID();
+				} else {
+					ImGui::TextUnformatted("No material.");
+				}
+			}
 		}
 
 		ImGui::End();

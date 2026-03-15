@@ -1,7 +1,23 @@
 #version 330 core
 layout (location = 0) out vec4 FragColor;
 
-uniform vec2 screenSize;
+layout(std140) uniform SystemProperties {
+    bool useBloom;
+    bool useShadowMap;
+    bool useGamma;
+    bool useHDR;
+    float bloomThreshold;
+    float gamma;
+    float exposure;
+    int bloomBlurIterations;
+    int shadowSampleNum;
+    int shadowSampleRings;
+    int shadowType;
+    int screenWidth;
+    int screenHeight;
+};
+
+vec2 screenSize = vec2(screenWidth, screenHeight);
 vec2 TexCoords;
 
 struct PointLight{
@@ -29,8 +45,6 @@ uniform sampler2D gNormal;
 uniform sampler2D gAlbedoSpec;
 uniform sampler2D gMaterial;
 
-uniform float bloom_threshold;
-
 #define EPS 1e-5
 #define PI 3.141592653589793
 #define PI2 6.283185307179586
@@ -42,10 +56,6 @@ uniform float bloom_threshold;
 #define DEFAULT_SHADOW 0
 #define PCF_SHADOW 1
 #define PCSS_SHADOW 2
-
-uniform int shadowSampleNum;
-uniform int shadowSampleRings;
-uniform int shadowType;
 
 vec2 poissonDisk[MAX_SAMPLE_NUM];
 
@@ -119,7 +129,7 @@ float PCF(vec3 fragPos,float w_penumbraSize,vec3 normal,PointLight light){
 	float shadow = 0.0;
 	float currentDepth = length(fragPos - light.position);
 	if(currentDepth>light.far_plane) {
-		return 0.0; // 超出远平面，不在阴影中
+		return 0.0; // ??????????????????
 	}
 	poissonDiskSamples(direction.xy);
 	vec2 sphericalCoords;

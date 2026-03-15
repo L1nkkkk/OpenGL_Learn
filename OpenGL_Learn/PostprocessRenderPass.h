@@ -1,18 +1,18 @@
 #pragma once
 #include "RenderPass.h"
 
-class ForwardRenderPass :
+class PostprocessRenderPass :
     public RenderPass
 {
 public:
-	ForwardRenderPass() : RenderPass("ForwardRenderPass") {}
+	PostprocessRenderPass() : RenderPass("PostprocessRenderPass") {}
 
 	void Init(int width, int height) override;
 
 	void Render(Scene* scene, const FBO* inputFBO = nullptr) override;
-	
+
 	void Destroy() override;
 protected:
-	FBOAttributes BuildAttributesFromSystemProperties() override;
-};
-
+	FBO* m_inputFBO = nullptr;
+	FBO* m_outputFBO = nullptr;
+}; 

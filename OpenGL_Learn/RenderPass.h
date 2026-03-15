@@ -29,5 +29,29 @@ protected:
 	std::string m_passName;
 	bool m_enable = true;
 	FBO* m_outputFBO = nullptr;
+
+	// 记录当前 Pass 使用的 FBO 属性，用于检测 SystemProperties 变化后是否需要重新获取 FBO
+	FBOAttributes m_lastAttr{};
+	bool m_hasAttr = false;
+
+	// 子类可重写该函数，根据当前 SystemProperties 生成自己需要的 FBOAttributes
+	virtual FBOAttributes BuildAttributesFromSystemProperties() {
+		return FramebuffersManager::GenCurrentAttr();
+	}
+
+	// 基类统一封装：根据 SystemProperties 变化，自动从 FramebuffersManager 获取 / 切换 FBO
+	void UpdateFBOFromSystemProperties() {
+		FBOAttributes attr = BuildAttributesFromSystemProperties();
+		if (!m_hasAttr || !(attr == m_lastAttr)) {
+			FramebuffersManager::GetInstance().ReleaseFBO(m_outputFBO);
+			m_lastAttr = attr;
+			m_hasAttr = true;
+			m_outputFBO = FramebuffersManager::GetInstance().GetFBO(attr);
+			if (m_outputFBO) {
+				m_outputFBO->passName = GetPassName();
+				FramebuffersManager::GetInstance().RegisterFBO(GetPassName(), m_outputFBO);
+			}
+		}
+	}
 };
 

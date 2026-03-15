@@ -2,16 +2,25 @@
 
 void ForwardRenderPass::Init(int width, int height)
 {
-	FBOAttributes attr = FramebuffersManager::GenCurrentAttr();
-	attr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_RGBA16F, GL_RGBA, GL_FLOAT });
-	m_outputFBO = FramebuffersManager::GetInstance().GetFBO(attr);
-	m_outputFBO->passName = GetPassName();
+	// 初始化时根据当前 SystemProperties 构建并获取合适的 FBO
+	UpdateFBOFromSystemProperties();
+}
 
-	FramebuffersManager::GetInstance().RegisterFBO(GetPassName(), m_outputFBO);
+FBOAttributes ForwardRenderPass::BuildAttributesFromSystemProperties()
+{
+	// 基于当前全局配置生成 Forward 渲染需要的 FBOAttributes
+	FBOAttributes attr = FramebuffersManager::GenCurrentAttr();
+	// ForwardPass 输出一个 HDR 颜色附件，是否 Bloom / HDR / Gamma 等由 attr 内部标志控制
+	attr.textureAttrs.clear();
+	attr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_RGBA16F, GL_RGBA, GL_FLOAT });
+	return attr;
 }
 
 void ForwardRenderPass::Render(Scene* scene, const FBO* inputFBO)
 {
+	// 每帧渲染前，根据 SystemProperties 变化自动切换 / 重建 FBO
+	UpdateFBOFromSystemProperties();
+
 	scene->DrawShadowMap();
 	glBindFramebuffer(GL_FRAMEBUFFER, m_outputFBO->framebufferID);
 	glEnable(GL_DEPTH_TEST);

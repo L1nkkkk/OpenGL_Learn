@@ -23,11 +23,23 @@ struct DirLight{
 
 
 
-uniform vec3 viewPos;
+layout(std140) uniform SystemProperties {
+    bool useBloom;
+    bool useShadowMap;
+    bool useGamma;
+    bool useHDR;
+    float bloomThreshold;
+    float gamma;
+    float exposure;
+    int bloomBlurIterations;
+    int shadowSampleNum;
+    int shadowSampleRings;
+    int shadowType;
+    int screenWidth;
+    int screenHeight;
+};
 
-uniform int shadowSampleNum;
-uniform int shadowSampleRings;
-uniform int shadowType;
+uniform vec3 viewPos;
 
 #define EPS 1e-5
 #define PI 3.141592653589793
@@ -92,7 +104,7 @@ float PCF(vec4 coords,float w_penumbraSize,vec3 normal,DirLight light){
 	projCoords = (projCoords+1.0)* 0.5;
 
 	if(projCoords.z >= 1.0) {
-		return 0.0; // 超出远平面，不在阴影中
+		return 0.0; // 锟斤拷锟斤拷远平锟芥，锟斤拷锟斤拷锟斤拷影锟斤拷
 	}
 
 	float currentDepth = projCoords.z;

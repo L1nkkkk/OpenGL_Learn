@@ -102,6 +102,7 @@ void SetUniformBuffer() {
 	ShaderManager& ShaderMgr = ShaderManager::GetInstance();
 	ShaderMgr.SetUBOData(ShaderManager::Matrices, 0, sizeof(glm::mat4), &view);
 	ShaderMgr.SetUBOData(ShaderManager::Matrices, sizeof(glm::mat4), sizeof(glm::mat4), &projection);
+	ShaderMgr.UpdateSystemUBO();
 }
 
 int main() {
@@ -263,9 +264,10 @@ int main() {
 		mygui.Anti_Aliasing_UI();
 		mygui.End();
 
-		mygui.Scene_UI(scene);          // Scene?Lights + Models?
-		mygui.MaterialsInspector_UI();  // ?? Inspector
-		mygui.MaterialsEditor_UI();     // XML ???
+		mygui.Scene_UI(scene);          // Scene：Lights + Models
+		mygui.ModelMaterialsInspector_UI(scene);  // 选中模型的材质查看/编辑
+		mygui.MaterialsInspector_UI();  // 全局材质 Inspector
+		mygui.MaterialsEditor_UI();     // XML 编辑器
 
 		//process input
 		ProcessInput(window);
@@ -279,7 +281,6 @@ int main() {
 		forwardRenderPass->Render(&scene);
 		//second pass: render framebuffer texture to post-process FBO (?? HDR + gamma + bloom)
 		
-		// ???????????????????????????????????????????? UI
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
@@ -288,7 +289,6 @@ int main() {
 		glDisable(GL_DEPTH_TEST);
 		FBO* sceneFBO = forwardRenderPass->GetOutputFBO();
 		if (!properties.DEBUG_MODE) {
-			// ?????????? postProcessFBO
 			glBindFramebuffer(GL_FRAMEBUFFER, postProcessFBO->framebufferID);
 			glActiveTexture(GL_TEXTURE0);
 			if (!sceneFBO || sceneFBO->textureIDs.empty()) {
@@ -302,12 +302,6 @@ int main() {
 			}
 			screenShader.use();
 			screenShader.setInt("screenTexture", 0);
-			screenShader.setFloat("gamma", properties.GAMMA_VALUE);
-			screenShader.setBool("useShadowMap", properties.SHADOW_MAP_SHOW);
-			screenShader.setBool("useGamma", properties.GAMMA_CORRECTION);
-			screenShader.setBool("hdr", properties.USE_HDR);
-			screenShader.setFloat("exposure", properties.HDR_EXPOSURE);
-			screenShader.setBool("bloom", properties.BLOOM);
 			screenShader.setInt("bloomBlur", 1);
 		}
 		else {

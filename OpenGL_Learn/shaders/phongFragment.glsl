@@ -49,17 +49,18 @@ struct SpotLight{
 };
 
 struct Material{
-	vec3 ambient;           // Ka：环境光反射系数
-    vec3 diffuse;           // Kd：漫反射基础色
-    vec3 specular;          // Ks：镜面反射系数
-    float shininess;        // Ns：高光指数
-    float opacity;          // d：透明度（1=不透明）
+	vec3 ambient;           // Ka?????????????
+    vec3 diffuse;           // Kd????????????
+    vec3 specular;          // Ks??????X?????
+    float shininess;        // Ns????????
+    float opacity;          // d????????1=???????
 	sampler2D texture_diffuse1;
 	bool use_texture_diffuse;
 	sampler2D texture_normal1;
 	bool use_texture_normal;
 	sampler2D texture_specular1;
 	bool use_texture_specular;
+	bool hasBloom;
 };
 
 in VS_OUT {
@@ -71,12 +72,23 @@ in VS_OUT {
 
 uniform vec3 viewPos;
 
-
 uniform Material material;
 
-uniform int shadowSampleNum;
-uniform int shadowSampleRings;
-uniform int shadowType;
+layout(std140) uniform SystemProperties {
+    bool useBloom;
+    bool useShadowMap;
+    bool useGamma;
+    bool useHDR;
+    float bloomThreshold;
+    float gamma;
+    float exposure;
+    int bloomBlurIterations;
+    int shadowSampleNum;
+    int shadowSampleRings;
+    int shadowType;
+    int screenWidth;
+    int screenHeight;
+};
 
 #define EPS 1e-5
 #define PI 3.141592653589793
@@ -96,7 +108,6 @@ uniform int NR_SPOT_LIGHTS;
 uniform PointLight pointLights[MAX_POINT_LIGHTS];
 uniform DirLight dirLights[MAX_DIR_LIGHTS];
 uniform SpotLight spotLights[MAX_SPOT_LIGHTS];
-uniform float bloom_threshold;
 
 
 vec2 poissonDisk[MAX_SAMPLE_NUM];
@@ -149,7 +160,7 @@ float PCF(vec4 coords,float w_penumbraSize,vec3 normal,DirLight light){
 	projCoords = (projCoords+1.0)* 0.5;
 
 	if(projCoords.z >= 1.0) {
-		return 0.0; // 超出远平面，不在阴影中
+		return 0.0; // ??????????????????
 	}
 
 	float currentDepth = projCoords.z;
@@ -172,7 +183,7 @@ float PCF(vec3 fragPos,float w_penumbraSize,vec3 normal,PointLight light){
 	float shadow = 0.0;
 	float currentDepth = length(fragPos - light.position);
 	if(currentDepth>light.far_plane) {
-		return 0.0; // 超出远平面，不在阴影中
+		return 0.0; // ??????????????????
 	}
 	poissonDiskSamples(direction.xy);
 	vec2 sphericalCoords;
@@ -401,7 +412,7 @@ void main()
 	}
 	FragColor = vec4(results, alpha);
 	float brightness = dot(FragColor.rgb, vec3(0.2126, 0.7152, 0.0722));
-    if(brightness > bloom_threshold)
+    if(brightness > bloomThreshold)
         BrightColor = vec4(FragColor.rgb, 1.0);
 	else BrightColor = vec4(0,0,0,1);
 	return;

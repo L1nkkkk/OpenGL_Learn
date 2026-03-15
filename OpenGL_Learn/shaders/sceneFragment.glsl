@@ -3,15 +3,23 @@ out vec4 FragColor;
 
 in vec2 TexCoords;
 
+layout(std140) uniform SystemProperties {
+    bool useBloom;
+    bool useShadowMap;
+    bool useGamma;
+    bool useHDR;
+    float bloomThreshold;
+    float gamma;
+    float exposure;
+    int bloomBlurIterations;
+    int shadowSampleNum;
+    int shadowSampleRings;
+    int shadowType;
+    int screenWidth;
+    int screenHeight;
+};
+
 uniform sampler2D screenTexture;
-uniform float gamma;
-uniform bool useGamma;
-uniform bool useShadowMap;
-
-uniform bool hdr;
-uniform float exposure;
-
-uniform bool bloom;
 uniform sampler2D bloomBlur;
 
 const float offset = 1.0 / 300.0;  
@@ -19,15 +27,15 @@ const float offset = 1.0 / 300.0;
 void main()
 {
     vec2 offsets[9] = vec2[](
-        vec2(-offset,  offset), // 左上
-        vec2( 0.0f,    offset), // 正上
-        vec2( offset,  offset), // 右上
-        vec2(-offset,  0.0f),   // 左
-        vec2( 0.0f,    0.0f),   // 中
-        vec2( offset,  0.0f),   // 右
-        vec2(-offset, -offset), // 左下
-        vec2( 0.0f,   -offset), // 正下
-        vec2( offset, -offset)  // 右下
+        vec2(-offset,  offset), // ????
+        vec2( 0.0f,    offset), // ????
+        vec2( offset,  offset), // ????
+        vec2(-offset,  0.0f),   // ??
+        vec2( 0.0f,    0.0f),   // ??
+        vec2( offset,  0.0f),   // ??
+        vec2(-offset, -offset), // ????
+        vec2( 0.0f,   -offset), // ????
+        vec2( offset, -offset)  // ????
     );
 
     float kernel[9] = float[](
@@ -36,11 +44,11 @@ void main()
         0,0,0
     );
     FragColor = vec4(vec3(texture(screenTexture, TexCoords)), 1.0);
-    if(bloom){
+    if(useBloom){
         vec3 bloomColor = texture(bloomBlur, TexCoords).rgb;
         FragColor.rgb += bloomColor;
     }
-    if(hdr){
+    if(useHDR){
         FragColor.rgb = vec3(1.0) - exp(-FragColor.rgb * exposure);
     }
     if(useGamma){

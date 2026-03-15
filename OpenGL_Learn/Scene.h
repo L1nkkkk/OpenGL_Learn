@@ -149,6 +149,11 @@ public:
 	FBO* deferFBO = nullptr;
 	std::shared_ptr<Shader> deferShader;
 
+	// 当前在 UI 中选中用于查看/编辑材质的模型（可为空）
+	Model* selectedModelForMaterials = nullptr;
+	void SetSelectedModelForMaterials(Model* model) { selectedModelForMaterials = model; }
+	Model* GetSelectedModelForMaterials() const { return selectedModelForMaterials; }
+
 	Scene(Camera* camera,const unsigned int& width,const unsigned int& height) {
 		camera_ptr = camera;
 		lightSource.pointLightVAO = globalVAOs.sphereVAO;
