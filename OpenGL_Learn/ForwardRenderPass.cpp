@@ -13,6 +13,9 @@ FBOAttributes ForwardRenderPass::BuildAttributesFromSystemProperties()
 	// ForwardPass 输出一个 HDR 颜色附件，是否 Bloom / HDR / Gamma 等由 attr 内部标志控制
 	attr.textureAttrs.clear();
 	attr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_RGBA16F, GL_RGBA, GL_FLOAT });
+	if (attr.isBloom) {
+		attr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_RGBA16F, GL_RGBA, GL_FLOAT });
+	}
 	return attr;
 }
 
@@ -36,28 +39,42 @@ void ForwardRenderPass::Render(Scene* scene, const FBO* inputFBO)
 	glStencilMask(0x00);
 	//Draw scene in the following order
 	// Draw Opacity Models (先绘制所有不透明物体，记录需要outline的物体到stencil buffer)
-	auto& opacityModels = scene->GetModelSource().GetOpaqueModelsMap();
-	auto& transparentModels = scene->GetModelSource().GetTransparentModels(scene->camera_ptr);
+	auto& opaqueList = scene->GetOpaqueMeshes();
+	auto& transparentList = scene->GetTransparentMeshes();
 	auto& pointLightModels = scene->GetLightSource().GetPointLights();
-	for (auto& [shader, models] : opacityModels) {
-		shader->use();
-		scene->SetLightUniforms(*shader);
-		for (auto& model : models) {
-			model->Draw();
+	Shader* lastShader = nullptr;
+	for (const auto& item : opaqueList) {
+		if (!item.shader || !item.model || !item.mesh) continue;
+		if (item.shader != lastShader) {
+			lastShader = item.shader;
+			lastShader->use();
+			scene->SetLightUniforms(*lastShader);
 		}
+		lastShader->setMat4("model", item.model->getModelMatrix());
+		item.mesh->Draw();
 	}
 	for (auto& light : pointLightModels) {
 		light.Draw();
 	}
 	// Draw Skybox (使用深度测试优化，但不影响stencil buffer)
 	scene->DrawSkybox(scene->camera_ptr->GetViewMatrix());
-	// Draw Transparent Models
-	for(auto& model : transparentModels) {
-		auto shader = model->GetShader();
-		shader->use();
-		scene->SetLightUniforms(*shader);
-		model->Draw();
+	// Draw Transparent Meshes
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glDepthMask(GL_FALSE);
+	lastShader = nullptr;
+	for (const auto& item : transparentList) {
+		if (!item.shader || !item.model || !item.mesh) continue;
+		if (item.shader != lastShader) {
+			lastShader = item.shader;
+			lastShader->use();
+			scene->SetLightUniforms(*lastShader);
+		}
+		lastShader->setMat4("model", item.model->getModelMatrix());
+		item.mesh->Draw();
 	}
+	glDepthMask(GL_TRUE);
+	glDisable(GL_BLEND);
 	// 最后绘制outline（禁用深度测试，基于stencil buffer绘制）
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }

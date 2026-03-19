@@ -11,8 +11,11 @@ public:
 
 	void Render(Scene* scene, const FBO* inputFBO = nullptr) override;
 
-	void Destroy() override;
+	void ProcessBloom(FBO* input);
+
+	void Destroy() override;    
 protected:
-	FBO* m_inputFBO = nullptr;
-	FBO* m_outputFBO = nullptr;
+	FBO* m_bloomBlurFBO = nullptr;
+    FBOAttributes BuildAttributesFromSystemProperties() override;
+    void Blur(int times, unsigned int& textureID);
 }; 

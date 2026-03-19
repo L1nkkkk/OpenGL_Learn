@@ -48,7 +48,7 @@ void LoadModels(Scene& scene) {
 	object1->SetScale(0.1f);
 	object1->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
 	object1->AddOtherShader(OtherShaderType::normalLines, shaderManager.GetShader(ShaderManager::NormalLines));
-	scene.modelSource.AddOpaqueModel(shaderManager.GetShader(ShaderManager::Phong), object1);
+	scene.modelSource.AddModel(object1);
 	object1->SetName("peilika");
 	object1->SetPosition(glm::vec3(-1.5f, 0.0f, 0.0f));
 
@@ -57,7 +57,7 @@ void LoadModels(Scene& scene) {
 	object->SetScale(0.1f);
 	object->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
 	object->AddOtherShader(OtherShaderType::normalLines, shaderManager.GetShader(ShaderManager::NormalLines));
-	scene.modelSource.AddOpaqueModel(shaderManager.GetShader(ShaderManager::Phong), object);
+	scene.modelSource.AddModel(object);
 	object->SetName("saki");
 
 	
@@ -102,7 +102,7 @@ void LoadModels(Scene& scene) {
 		vegi->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
 		vegi->SetShader(shaderManager.GetShader(ShaderManager::Grass));
 		vegi->SetName("window"+std::to_string(count++));
-		scene.modelSource.AddTransparentModel(vegi);
+		scene.modelSource.AddModel(vegi);
 	}
 
 	//Load Plane
@@ -117,7 +117,7 @@ void LoadModels(Scene& scene) {
 	};
 	
 
-	Material* planeMaterial = XmlMaterialManager::GetInstance().GetMaterialRaw("Floor");
+	Material* planeMaterial = nullptr;
 	std::vector<Mesh> planeMeshes;
 	planeMeshes.emplace_back(planeVertices,planeIndices,planeMaterial,"materials/brickwall/brickwall.xml");
 
@@ -125,14 +125,14 @@ void LoadModels(Scene& scene) {
 	plane->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
 	plane->AddOtherShader(OtherShaderType::normalLines, shaderManager.GetShader(ShaderManager::NormalLines));
 	plane->SetShader(shaderManager.GetShader(ShaderManager::Phong));
-	scene.modelSource.AddOpaqueModel(shaderManager.GetShader(ShaderManager::Phong), plane);
+	scene.modelSource.AddModel(plane);
 	plane->SetName("plane");
 
 	auto ceiling = std::make_shared<Model>(planeMeshes);
 	ceiling->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
 	ceiling->AddOtherShader(OtherShaderType::normalLines, shaderManager.GetShader(ShaderManager::NormalLines));
 	ceiling->SetShader(shaderManager.GetShader(ShaderManager::Phong));
-	scene.modelSource.AddOpaqueModel(shaderManager.GetShader(ShaderManager::Phong), ceiling);
+	scene.modelSource.AddModel(ceiling);
 	ceiling->SetName("ceiling");
 	ceiling->rotation = glm::vec3(0,0,180);
 	ceiling->position = glm::vec3(0, 5, 0);
@@ -153,7 +153,7 @@ void LoadModels(Scene& scene) {
 	wall1->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
 	wall1->AddOtherShader(OtherShaderType::normalLines, shaderManager.GetShader(ShaderManager::NormalLines));
 	wall1->SetShader(shaderManager.GetShader(ShaderManager::Phong));
-	scene.modelSource.AddOpaqueModel(shaderManager.GetShader(ShaderManager::Phong), wall1);
+	scene.modelSource.AddModel(wall1);
 	wall1->SetName("wall1");
 	wall1->rotation.z = -90;
 	wall1->position = glm::vec3(-5.0, 5.0, 0);
@@ -161,7 +161,7 @@ void LoadModels(Scene& scene) {
 	auto wall2 = std::make_shared<Model>(wallMeshes);
 	wall2->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
 	wall2->SetShader(shaderManager.GetShader(ShaderManager::Phong));
-	scene.modelSource.AddOpaqueModel(shaderManager.GetShader(ShaderManager::Phong), wall2);
+	scene.modelSource.AddModel(wall2);
 	wall2->SetName("wall2");
 	wall2->rotation.z = 90;
 	wall2->position = glm::vec3(5.0, 0, 0);
@@ -169,7 +169,7 @@ void LoadModels(Scene& scene) {
 	auto wall3 = std::make_shared<Model>(wallMeshes);
 	wall3->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
 	wall3->SetShader(shaderManager.GetShader(ShaderManager::Phong));
-	scene.modelSource.AddOpaqueModel(shaderManager.GetShader(ShaderManager::Phong), wall3);
+	scene.modelSource.AddModel(wall3);
 	wall3->SetName("wall3");
 	wall3->SetRotation(glm::vec3(0, -90, -90));
 	wall3->SetPosition(glm::vec3(0, 5, -5));

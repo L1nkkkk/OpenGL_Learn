@@ -369,8 +369,8 @@ void main()
 	float shadow = 0.0;
 	
 	vec3 results = vec3(0);
-	float alpha = 0.0;
-	if(material.use_texture_diffuse) alpha = 1.0;
+	float alpha = 1.0;
+	if(material.use_texture_diffuse) alpha = texture(material.texture_diffuse1,fs_in.TexCoords).a;
 	int pointLightsNum = min(MAX_POINT_LIGHTS,NR_POINT_LIGHTS);
 	int dirLightsNum =  min(MAX_DIR_LIGHTS,NR_DIR_LIGHTS);
 	int spotLightsNum = min(MAX_SPOT_LIGHTS,NR_SPOT_LIGHTS);

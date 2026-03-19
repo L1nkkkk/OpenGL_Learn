@@ -10,6 +10,7 @@
 #include <string>
 #include <fstream>
 #include <sstream>
+#include <unordered_map>
 #include <filesystem>
 
 #include "Scene.h"
@@ -364,6 +365,55 @@ public:
 				break;
 			}
 		}
+		// Viewport：默认显示最终渲染结果；下拉先选 FBO（首项为“最终图”），再选该 FBO 的 color/depth 附件
+		std::vector<FBO*> busyFBOs = framebuffersMgr.GetBusyFBOs();
+		static std::vector<std::string> fboNames;
+		static std::vector<const char*> fboNamesPtrs;
+		fboNames.clear();
+		fboNamesPtrs.clear();
+		fboNames.push_back("Final (default)");  // index 0 = 延迟+正向+后处理后的最终图
+
+		// 用 FBO 的 passName 做显示名；若重复则追加数字去重（default1/default2）
+		std::unordered_map<std::string, int> totalCountByBaseName;
+		for (FBO* fbo : busyFBOs) {
+			std::string base = (fbo && !fbo->passName.empty()) ? fbo->passName : "default";
+			++totalCountByBaseName[base];
+		}
+		std::unordered_map<std::string, int> seenCountByBaseName;
+		for (size_t i = 0; i < busyFBOs.size(); ++i) {
+			FBO* fbo = busyFBOs[i];
+			std::string base = (fbo && !fbo->passName.empty()) ? fbo->passName : "default";
+			int idx = ++seenCountByBaseName[base];
+			if (totalCountByBaseName[base] > 1) {
+				fboNames.push_back(base + std::to_string(idx));
+			} else {
+				fboNames.push_back(base);
+			}
+		}
+		for (const auto& s : fboNames)
+			fboNamesPtrs.push_back(s.c_str());
+		int nFbo = static_cast<int>(fboNames.size());
+		if (properties.VIEWPORT_DEBUG_FBO_INDEX >= nFbo) properties.VIEWPORT_DEBUG_FBO_INDEX = nFbo - 1;
+		if (properties.VIEWPORT_DEBUG_FBO_INDEX < 0) properties.VIEWPORT_DEBUG_FBO_INDEX = 0;
+		ImGui::Combo("Viewport FBO", &properties.VIEWPORT_DEBUG_FBO_INDEX, fboNamesPtrs.data(), nFbo);
+		// 只有选了具体 FBO（非“Final”）时才显示附件下拉
+		if (properties.VIEWPORT_DEBUG_FBO_INDEX >= 1 && (size_t)(properties.VIEWPORT_DEBUG_FBO_INDEX - 1) < busyFBOs.size()) {
+			FBO* selectedFBO = busyFBOs[properties.VIEWPORT_DEBUG_FBO_INDEX - 1];
+			int nAtt = static_cast<int>(selectedFBO->textureIDs.size());
+			if (nAtt > 0) {
+				static std::vector<std::string> attNames;
+				static std::vector<const char*> attNamesPtrs;
+				attNames.clear();
+				attNamesPtrs.clear();
+				for (int i = 0; i < nAtt; ++i)
+					attNames.push_back(selectedFBO->attr.isShadowMap && i == 0 ? "Depth" : "Color " + std::to_string(i));
+				for (const auto& s : attNames)
+					attNamesPtrs.push_back(s.c_str());
+				if (properties.VIEWPORT_DEBUG_ATTACHMENT_INDEX >= nAtt) properties.VIEWPORT_DEBUG_ATTACHMENT_INDEX = nAtt - 1;
+				if (properties.VIEWPORT_DEBUG_ATTACHMENT_INDEX < 0) properties.VIEWPORT_DEBUG_ATTACHMENT_INDEX = 0;
+				ImGui::Combo("Viewport Attachment", &properties.VIEWPORT_DEBUG_ATTACHMENT_INDEX, attNamesPtrs.data(), nAtt);
+			}
+		}
 	}
 
 	void Shadow_UI() {
@@ -549,13 +599,18 @@ public:
 			char headerLabel[64];
 			snprintf(headerLabel, sizeof(headerLabel), "Mesh %zu", i);
 			if (ImGui::CollapsingHeader(headerLabel)) {
+				ImGui::PushID(static_cast<int>(i));
+				bool active = mesh.GetActiveStatus();
+				if (ImGui::Checkbox("Active", &active)) {
+					mesh.SetActiveStatus(active);
+				}
+				ImGui::Separator();
 				if (mat) {
-					ImGui::PushID(static_cast<int>(i));
 					DrawSingleMaterialContent(mat);
-					ImGui::PopID();
 				} else {
 					ImGui::TextUnformatted("No material.");
 				}
+				ImGui::PopID();
 			}
 		}
 

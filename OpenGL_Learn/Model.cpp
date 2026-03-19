@@ -1,15 +1,113 @@
 #include "Model.h"
 #include "XmlMaterialManager.h"
 
+void Mesh::ReleaseGL()
+{
+	if (VAO) {
+		glDeleteVertexArrays(1, &VAO);
+		VAO = 0;
+	}
+	if (VBO) {
+		glDeleteBuffers(1, &VBO);
+		VBO = 0;
+	}
+	if (EBO) {
+		glDeleteBuffers(1, &EBO);
+		EBO = 0;
+	}
+}
+
+Mesh::~Mesh()
+{
+	ReleaseGL();
+}
+
+Mesh::Mesh(const Mesh& other)
+	: vertices(other.vertices)
+	, material_ptr(other.material_ptr)
+	, start_tex_index(other.start_tex_index)
+	, materialXmlPath(other.materialXmlPath)
+	, m_active(other.m_active)
+	, VAO(0)
+	, VBO(0)
+	, EBO(0)
+{
+	setupMesh();
+}
+
+Mesh& Mesh::operator=(const Mesh& other)
+{
+	if (this == &other) {
+		return *this;
+	}
+	ReleaseGL();
+	vertices = other.vertices;
+	material_ptr = other.material_ptr;
+	start_tex_index = other.start_tex_index;
+	materialXmlPath = other.materialXmlPath;
+	m_active = other.m_active;
+	setupMesh();
+	return *this;
+}
+
+Mesh::Mesh(Mesh&& other) noexcept
+	: vertices(std::move(other.vertices))
+	, material_ptr(other.material_ptr)
+	, start_tex_index(other.start_tex_index)
+	, materialXmlPath(std::move(other.materialXmlPath))
+	, m_active(other.m_active)
+	, VAO(other.VAO)
+	, VBO(other.VBO)
+	, EBO(other.EBO)
+{
+	other.material_ptr = nullptr;
+	other.start_tex_index = 0;
+	other.VAO = 0;
+	other.VBO = 0;
+	other.EBO = 0;
+	other.m_active = true;
+}
+
+Mesh& Mesh::operator=(Mesh&& other) noexcept
+{
+	if (this == &other) {
+		return *this;
+	}
+	ReleaseGL();
+	vertices = std::move(other.vertices);
+	material_ptr = other.material_ptr;
+	start_tex_index = other.start_tex_index;
+	materialXmlPath = std::move(other.materialXmlPath);
+	m_active = other.m_active;
+	VAO = other.VAO;
+	VBO = other.VBO;
+	EBO = other.EBO;
+
+	other.material_ptr = nullptr;
+	other.start_tex_index = 0;
+	other.VAO = 0;
+	other.VBO = 0;
+	other.EBO = 0;
+	other.m_active = true;
+	return *this;
+}
+
 Mesh::Mesh(std::vector<Vertex> vertices,
 		std::vector<unsigned int> indices,
 		   Material* material,
-           const std::string& materialXmlPath)
+           const std::string& materialXmlPathIn)
 {
 	this->vertices = ComputeTBNVertices(vertices,indices);
-	this->material_ptr = material;
-    this->materialXmlPath = materialXmlPath;
+	if(material) {
+		this->material_ptr = material;
+	}
+	else {
+		this->material_ptr = XmlMaterialManager::GetInstance().GetOrLoadMaterialByFile(materialXmlPathIn);
+	}
+    this->materialXmlPath = materialXmlPathIn;
 	this->start_tex_index = 0;
+	// 默认：Mesh 可见 / 可绘制
+	SetActiveStatus(true);
 	setupMesh();
 }
 
@@ -21,7 +119,12 @@ void Mesh::setupMesh()
 
 	glBindVertexArray(VAO);
 	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-	glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), &vertices[0], GL_STATIC_DRAW);
+	glBufferData(
+		GL_ARRAY_BUFFER,
+		vertices.size() * sizeof(Vertex),
+		vertices.empty() ? nullptr : vertices.data(),
+		GL_STATIC_DRAW
+	);
 
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
@@ -51,18 +154,15 @@ void Mesh::Draw(Shader* shader)
     if (!runtimeMat) {
         return;
     }
-	if (shader==nullptr) {
-		auto materialGaurd = MaterialGaurd(*runtimeMat);
-		glActiveTexture(GL_TEXTURE0);
-		glBindVertexArray(VAO);
-		glDrawArrays(GL_TRIANGLES, 0, vertices.size());
-	}
-	else {
+	// 始终激活材质：绑定纹理、设置渲染状态与材质参数（包括 sampler uniform）
+	auto materialGaurd = MaterialGaurd(*runtimeMat);
+	// 如外部传入 shader（例如渲染队列希望统一 use），则保持它为当前 program
+	if (shader) {
 		shader->use();
-		glActiveTexture(GL_TEXTURE0);
-		glBindVertexArray(VAO);
-		glDrawArrays(GL_TRIANGLES, 0, vertices.size());
 	}
+	glActiveTexture(GL_TEXTURE0);
+	glBindVertexArray(VAO);
+	glDrawArrays(GL_TRIANGLES, 0, vertices.size());
 	glBindVertexArray(0);
 }
 
@@ -79,6 +179,9 @@ void Model::Draw(Shader* shader, unsigned int start_tex_index )
 	auto& properties = SystemProperties::GetInstance();
 	int usedTextures = properties.USED_TEXTURE_NUM;
 	for (unsigned int i = 0; i < meshes.size(); ++i) {
+		if (!meshes[i].GetActiveStatus()) {
+			continue;
+		}
 		meshes[i].start_tex_index = start_tex_index;
 		meshes[i].Draw(shader);
 		properties.USED_TEXTURE_NUM = usedTextures;
@@ -94,6 +197,9 @@ void Model::loadModel(std::string path,Material* mat)
 		std::cout << "ERROR::ASSIMP:: " << importer.GetErrorString() << std::endl;
 		return;
 	}
+	// 防止 meshes 在 push_back 时多次扩容触发移动/销毁链，先按 Assimp 总 mesh 数预留容量
+	meshes.clear();
+	meshes.reserve(scene->mNumMeshes);
 	directory = path.substr(0, path.find_last_of('/'));
 	processNode(scene->mRootNode, scene,mat);
 }
@@ -102,10 +208,34 @@ void Model::processNode(aiNode* node, const aiScene* scene,Material* mat)
 {
 	for (unsigned int i = 0; i < node->mNumMeshes; ++i) {
 		aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
-		meshes.push_back(processMesh(mesh, scene,mat));
+		meshes.emplace_back(processMesh(mesh, scene,mat));
 	}
 	for (unsigned int i = 0; i < node->mNumChildren; ++i) {
 		processNode(node->mChildren[i], scene,mat);
+	}
+}
+
+void Model::BuildMeshLists()
+{
+	m_opaqueMeshes.clear();
+	m_transparentMeshes.clear();
+
+	for (auto& mesh : meshes) {
+		Material* mat = mesh.material_ptr;
+		bool isTransparent = false;
+
+		if (mat) {
+			const auto& props = mat->GetProperties();
+			auto it = props.find("opacity");
+			if (it != props.end() && it->second.type == MaterialPropertyType::Float) {
+				float op = it->second.scalarValue.floatValue;
+				if (op < 0.999f) isTransparent = true;
+			}
+		}
+		if (isTransparent) mat->SetRenderState({ true,false,false,BlendMode::AlphaBlend,CullMode::None});
+		MeshEntry entry{ &mesh, mat };
+		if (isTransparent) m_transparentMeshes.push_back(entry);
+		else m_opaqueMeshes.push_back(entry);
 	}
 }
 
@@ -114,6 +244,8 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 	std::vector<Vertex> vertices;
 	std::vector<unsigned int>indices;
 	Material* material = mat;
+	vertices.reserve(mesh->mNumVertices);
+	indices.reserve(static_cast<size_t>(mesh->mNumFaces) * 3);
 	for (unsigned int i = 0; i < mesh->mNumVertices; ++i) {
 		Vertex vertex;
 		glm::vec3 vector;
@@ -142,6 +274,9 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 			indices.push_back(face.mIndices[j]);
 		}
 	}
+	std::cout << "[Mesh Debug] Name: " << mesh->mName.C_Str()
+		<< " | Vertices: " << mesh->mNumVertices
+		<< " | MatID: " << mesh->mMaterialIndex << std::endl;
 	std::string xmlPath;
 	if(mat) {
 		return Mesh(vertices, indices, mat);
@@ -196,6 +331,8 @@ void Model::prosessMaterial(aiMaterial* mat,Material* material)
 	material->AddProperty("texture_diffuse", MaterialProperty::CreateTexture(loadMaterialTextures(mat, aiTextureType_DIFFUSE, "texture_diffuse")));
 	material->AddProperty("texture_specular", MaterialProperty::CreateTexture(loadMaterialTextures(mat, aiTextureType_SPECULAR, "texture_specular")));
 	material->AddProperty("texture_normal", MaterialProperty::CreateTexture(loadMaterialTextures(mat, aiTextureType_NORMALS, "texture_normal")));
+
+	material->AddProperty("useBloom", MaterialProperty::CreateBool(false));
 }
 
 std::vector<Texture> Model::loadMaterialTextures(aiMaterial* mat, aiTextureType type, std::string typeName)
@@ -258,17 +395,31 @@ glm::vec3 Model::CalculateLocalCenter()
 	return glm::vec3((minX+maxX)/2.f, (minY+maxY)/2.f, (minZ+maxZ) / 2.f);
 }
 
-std::vector<Vertex> ComputeTBNVertices(std::vector<Vertex>& vertices,std::vector<unsigned int> indices) {
-	std::vector<Vertex> ret;
-	if (indices.size() % 3) {
-		std::cout << "this model has a non-multiple-of-three number of points" << std::endl;
-		return ret;
+std::vector<Vertex> ComputeTBNVertices(std::vector<Vertex>& vertices, std::vector<unsigned int> indices) {
+	// Assimp Triangulate 理论上应满足 size%3==0，但仍做防御：
+	// - 若 indices 不合法/为空，则保持原 vertices，避免生成空数组触发后续 UB。
+	if (vertices.empty() || indices.empty()) {
+		return vertices;
 	}
-	for (int i = 0; i < indices.size(); i += 3) {
+	if (indices.size() % 3 != 0) {
+		std::cout << "warning: indices size is not multiple of 3, skip TBN recompute" << std::endl;
+		return vertices;
+	}
+
+	for (unsigned int idx : indices) {
+		if (idx >= vertices.size()) {
+			std::cout << "warning: index out of range, skip TBN recompute" << std::endl;
+			return vertices;
+		}
+	}
+
+	std::vector<Vertex> ret;
+	ret.reserve(indices.size());
+	for (size_t i = 0; i < indices.size(); i += 3) {
 		auto aPoint = vertices[indices[i]];
 		auto bPoint = vertices[indices[i + 1]];
 		auto cPoint = vertices[indices[i + 2]];
-		ComputeTBN(aPoint,bPoint,cPoint);
+		ComputeTBN(aPoint, bPoint, cPoint);
 		ret.push_back(aPoint);
 		ret.push_back(bPoint);
 		ret.push_back(cPoint);

@@ -25,6 +25,8 @@ namespace ShadowProperty {
     };
 }
 
+// Viewport 调试：从 FramebuffersManager 中当前 isBusy 的 FBO 里选一个，再选其某个 color/depth 附件展示
+
 class SystemProperties {
 public:
     SystemProperties(const SystemProperties&) = delete;
@@ -38,6 +40,10 @@ public:
     }
 
     bool DEBUG_MODE = false;
+
+    // Viewport ???????е? FBO ?? GetBusyFBOs() ?е??±???е??????? FBO textureIDs ?е??±?
+    int VIEWPORT_DEBUG_FBO_INDEX = 0;
+    int VIEWPORT_DEBUG_ATTACHMENT_INDEX = 0;
 
     int SCREEN_WIDTH = 1440;
     int SCREEN_HEIGHT = 900;
@@ -135,7 +141,7 @@ inline float cubeVertices[] = {
 };
 
 inline float sphereVertices[] = {
-    // 顶点坐标 x, y, z
+    // ???????? x, y, z
     0.0000f,  0.5000f,  0.0000f,
     0.0975f,  0.4903f,  0.0000f,
     0.0935f,  0.4903f,  0.0309f,
@@ -448,7 +454,7 @@ struct TextureAttributes {
 template <class T>
 inline void hash_combine(std::size_t& seed, const T& v) {
     std::hash<T> hasher;
-    // 这里的 0x9e3779b9 是黄金分割比的固定常数，用来打乱位分布，减少碰撞
+    // ????? 0x9e3779b9 ??????????????????????????????????????
     seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
 
@@ -625,6 +631,11 @@ public:
 	FBO* GetFBO(FBOAttributes);
 
 	void Resize();
+
+	// ?????????? isBusy ?? FBO ?????????? Viewport ??????? FBO ????????????
+	std::vector<FBO*> GetBusyFBOs() const;
+	// ???? FBO ?? attr ?????????????????????????? UI ??????
+	static std::string GetFBODisplayName(const FBOAttributes& attr, int indexInList);
 private:
 	inline static FBOAttributes::FramebufferType FBOResizeableTpye[] = {
 		FBOAttributes::FramebufferType::Framebuffer,

@@ -1,4 +1,5 @@
 #include "Global.h"
+#include <sstream>
 
 void FBO::Init(FBOAttributes attr) {
     this->attr = attr;
@@ -7,13 +8,13 @@ void FBO::Init(FBOAttributes attr) {
     glGenFramebuffers(1, &framebufferID);
     glBindFramebuffer(GL_FRAMEBUFFER, framebufferID);
 
-    // 1. 根据 textureAttrs 的数量分配 ID
+    // 1. ???? textureAttrs ?????????? ID
     textureIDs.resize(attr.textureAttrs.size());
     if (!textureIDs.empty()) {
         glGenTextures(textureIDs.size(), textureIDs.data());
     }
 
-    // 2. 遍历 textureAttrs 进行数据驱动的初始化
+    // 2. ???? textureAttrs ??????????????????
     std::vector<GLenum> colorAttachments;
     for (size_t i = 0; i < attr.textureAttrs.size(); ++i) {
         const auto& tAttr = attr.textureAttrs[i];
@@ -21,32 +22,32 @@ void FBO::Init(FBOAttributes attr) {
 
         glBindTexture(tAttr.target, texID);
 
-        // 处理多重采样 (MSAA)
+        // ??????????? (MSAA)
         if (tAttr.target == GL_TEXTURE_2D_MULTISAMPLE) {
             glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, tAttr.internalFormat,
                 properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT, GL_TRUE);
         }
-        // 处理立方体贴图 (ShadowBox)
+        // ????????????? (ShadowBox)
         else if (tAttr.target == GL_TEXTURE_CUBE_MAP) {
             for (int j = 0; j < 6; ++j) {
                 glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + j, 0, tAttr.internalFormat,
                     properties.SHADOW_WIDTH, properties.SHADOW_HEIGHT, 0, tAttr.format, tAttr.type, NULL);
             }
-            // 为深度立方体阴影贴图配置采样器，否则由于默认使用 mipmap 过滤会导致纹理不 complete
+            // ???????????????????貌????????????????????? mipmap ????????????? complete
             glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
             glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
             glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
             glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
             glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
         }
-        // 处理普通 2D 贴图 (HDR, Defer, ShadowMap 等)
+        // ??????? 2D ??? (HDR, Defer, ShadowMap ??)
         else {
             int w = attr.isShadowMap ? properties.SHADOW_WIDTH : properties.SCREEN_WIDTH;
             int h = attr.isShadowMap ? properties.SHADOW_HEIGHT : properties.SCREEN_HEIGHT;
 
             glTexImage2D(GL_TEXTURE_2D, 0, tAttr.internalFormat, w, h, 0, tAttr.format, tAttr.type, NULL);
 
-            // 采样器设置
+            // ??????????
             GLint filter = (attr.isShadowMap) ? GL_NEAREST : GL_LINEAR;
             glTexParameteri(tAttr.target, GL_TEXTURE_MIN_FILTER, filter);
             glTexParameteri(tAttr.target, GL_TEXTURE_MAG_FILTER, filter);
@@ -58,15 +59,15 @@ void FBO::Init(FBOAttributes attr) {
             }
         }
 
-        // 3. 将贴图挂载到帧缓冲
+        // 3. ???????????????
         if (attr.isShadowMap) {
-            // 阴影贴图只需要深度附件
+            // ????????????????
             if (tAttr.target == GL_TEXTURE_CUBE_MAP) {
-                // 立方体深度贴图：使用 glFramebufferTexture 一次性附加整个 cubemap
+                // ????????????????? glFramebufferTexture ???????????? cubemap
                 glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, texID, 0);
             }
             else {
-                // 普通 2D 深度贴图
+                // ??? 2D ??????
                 glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, tAttr.target, texID, 0);
             }
         } else {
@@ -75,7 +76,7 @@ void FBO::Init(FBOAttributes attr) {
         }
     }
 
-    // 4. 配置 DrawBuffers
+    // 4. ???? DrawBuffers
     if (attr.isShadowMap) {
         glDrawBuffer(GL_NONE);
         glReadBuffer(GL_NONE);
@@ -85,7 +86,7 @@ void FBO::Init(FBOAttributes attr) {
             glDrawBuffers(colorAttachments.size(), colorAttachments.data());
         }
 
-        // 5. 只有非阴影贴图通常才需要 Depth/Stencil RBO
+        // 5. ??蟹??????????????? Depth/Stencil RBO
         glGenRenderbuffers(1, &rboID);
         glBindRenderbuffer(GL_RENDERBUFFER, rboID);
         if (attr.aaType == AntiAliasManager::AntiAliasType::MSAA) {
@@ -97,7 +98,7 @@ void FBO::Init(FBOAttributes attr) {
         glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rboID);
     }
 
-    // 检查状态
+    // ?????
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
         std::cerr << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
     }
@@ -119,7 +120,7 @@ FBO* FramebuffersManager::GetFBO(FBOAttributes attr) {
 	FBO* fboPtr = new FBO(attr);
 	fboPtr->isBusy = true;
 	m_hashMapFBO[attr].push_back(fboPtr);
-	std::cout << "Add FBO，total::" << m_hashMapFBO[attr].size() << std::endl;
+	std::cout << "Add FBO??total::" << m_hashMapFBO[attr].size() << std::endl;
 	return fboPtr;
 }
 
@@ -130,4 +131,35 @@ void FramebuffersManager::Resize() {
 			fbo->Resize();
 		}
 	}
+}
+
+std::vector<FBO*> FramebuffersManager::GetBusyFBOs() const {
+	std::vector<FBO*> out;
+	for (const auto& [attr, fbos] : m_hashMapFBO) {
+		for (FBO* fbo : fbos) {
+			if (fbo && fbo->isBusy)
+				out.push_back(fbo);
+		}
+	}
+	return out;
+}
+
+std::string FramebuffersManager::GetFBODisplayName(const FBOAttributes& attr, int indexInList) {
+	std::ostringstream ss;
+	if (attr.isShadowMap) {
+		if (attr.shadowType == FBOAttributes::ShadowBox)
+			ss << "ShadowBox";
+		else
+			ss << "ShadowMap";
+	} else if (attr.isDefer) {
+		ss << "Defer";
+	} else {
+		ss << "Forward";
+		if (attr.isHDR) ss << "+HDR";
+		if (attr.isBloom) ss << "+Bloom";
+		if (attr.isGamma) ss << "+Gamma";
+		if (attr.aaType == AntiAliasManager::AntiAliasType::MSAA) ss << "+MSAA";
+	}
+	ss << " [" << indexInList << "]";
+	return ss.str();
 }

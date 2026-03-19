@@ -17,6 +17,7 @@
 #include "ModelsLoader.h"
 #include "Timer.h"
 #include "ForwardRenderPass.h"
+#include "PostprocessRenderPass.h"
 
 
 bool firstMouse = false;
@@ -139,7 +140,6 @@ int main() {
 
 	ShaderManager& shaderManager = ShaderManager::GetInstance();
 	shaderManager.Init();
-	Shader& screenShader = *(shaderManager.GetShader(ShaderManager::Scene));
 	Shader& debugShader = *(shaderManager.GetShader(ShaderManager::DebugScene));
 
 #ifdef USE_GEOMETRY_SHADER
@@ -226,13 +226,6 @@ int main() {
 	FramebuffersManager& framebuffersMgr = FramebuffersManager::GetInstance();
 	AntiAliasManager& antiAliasMgr = AntiAliasManager::GetInstance();
 
-	// ???? FBO????????? HDR + gamma + bloom ????????????
-	FBOAttributes postAttr = FramebuffersManager::GenCurrentAttr();
-	postAttr.isHDR = false;
-	postAttr.textureAttrs.clear();
-	postAttr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE });
-	FBO* postProcessFBO = framebuffersMgr.GetFBO(postAttr);
-
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	//glEnable(GL_CULL_FACE);
 	//glCullFace(GL_BACK);
@@ -241,6 +234,9 @@ int main() {
 	
 	auto forwardRenderPass = new ForwardRenderPass();
 	forwardRenderPass->Init(properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
+	// PostprocessRenderPass 当前主循环未使用（最终图直接画到 postProcessFBO），若 Init 会多占一个同类型 FBO，导致列表里多一个 Forward+Gamma
+	auto postprocessRenderPass = new PostprocessRenderPass();
+	postprocessRenderPass->Init(properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
 
 	while (!glfwWindowShouldClose(window)) {
 		//calculate FPS
@@ -279,30 +275,19 @@ int main() {
 		//first pass: render scene to framebuffer (HDR)
 		scene.DrawShadowMap();
 		forwardRenderPass->Render(&scene);
-		//second pass: render framebuffer texture to post-process FBO (?? HDR + gamma + bloom)
+		//second pass: postprocess (HDR + gamma + bloom) -> LDR texture (inside postprocessRenderPass)
 		
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
-		glBindVertexArray(globalVAOs.quadVAO);
-		glDisable(GL_DEPTH_TEST);
 		FBO* sceneFBO = forwardRenderPass->GetOutputFBO();
 		if (!properties.DEBUG_MODE) {
-			glBindFramebuffer(GL_FRAMEBUFFER, postProcessFBO->framebufferID);
-			glActiveTexture(GL_TEXTURE0);
 			if (!sceneFBO || sceneFBO->textureIDs.empty()) {
 				std::cout << "no valid color attachment, skip this frame" << std::endl;
 				continue;
 			}
-			glBindTexture(GL_TEXTURE_2D, sceneFBO->textureIDs[0]);
-			if (properties.BLOOM && sceneFBO->textureIDs.size() > 1) {
-				glActiveTexture(GL_TEXTURE1);
-				glBindTexture(GL_TEXTURE_2D, sceneFBO->textureIDs[1]);
-			}
-			screenShader.use();
-			screenShader.setInt("screenTexture", 0);
-			screenShader.setInt("bloomBlur", 1);
+			postprocessRenderPass->Render(&scene, sceneFBO);
 		}
 		else {
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -320,20 +305,33 @@ int main() {
 				debugShader.setInt(uniformName, i);
 			}
 			debugShader.setFloat("div", (float)len);
+			glBindVertexArray(globalVAOs.quadVAO);
+			glDisable(GL_DEPTH_TEST);
+			glDrawArrays(GL_TRIANGLES, 0, 6);
 		}
-		glDrawArrays(GL_TRIANGLES, 0, 6);
 
 		// ??????? FBO??????????????? ImGui ?????
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-		// Viewport????????? Dock ??????????? FBO ?????
+		// Viewport：默认(INDEX==0)显示最终渲染结果；否则显示所选 FBO 的指定 color/depth 附件
 		unsigned int viewportTextureID = 0;
-		if (!properties.DEBUG_MODE && postProcessFBO && !postProcessFBO->textureIDs.empty()) {
-			viewportTextureID = postProcessFBO->textureIDs[0];
+		if (properties.VIEWPORT_DEBUG_FBO_INDEX == 0) {
+			// 最终图（延迟+正向+后处理后的结果）
+			FBO* finalFBO = postprocessRenderPass->GetOutputFBO();
+			if (finalFBO && !finalFBO->textureIDs.empty())
+				viewportTextureID = finalFBO->textureIDs[0];
+		} else {
+			std::vector<FBO*> busyFBOs = FramebuffersManager::GetInstance().GetBusyFBOs();
+			int fboIdx = properties.VIEWPORT_DEBUG_FBO_INDEX - 1;
+			if (fboIdx >= 0 && fboIdx < (int)busyFBOs.size()) {
+				FBO* fbo = busyFBOs[fboIdx];
+				if (!fbo->textureIDs.empty()
+					&& properties.VIEWPORT_DEBUG_ATTACHMENT_INDEX >= 0
+					&& properties.VIEWPORT_DEBUG_ATTACHMENT_INDEX < (int)fbo->textureIDs.size())
+					viewportTextureID = fbo->textureIDs[properties.VIEWPORT_DEBUG_ATTACHMENT_INDEX];
+			}
 		}
-		if (viewportTextureID != 0) {
-			mygui.Viewport_UI(viewportTextureID);
-		}
+		mygui.Viewport_UI(viewportTextureID);
 
 		// Assets ?????? models / materials / shaders ??
 		mygui.AssetsBrowser_UI();
@@ -360,8 +358,8 @@ int main() {
 
 	forwardRenderPass->Destroy();
 	delete forwardRenderPass;
-
-	framebuffersMgr.ReleaseFBO(postProcessFBO);
+	postprocessRenderPass->Destroy();
+	delete postprocessRenderPass;
 
 	glfwTerminate();
 	return 0;

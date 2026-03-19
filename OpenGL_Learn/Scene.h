@@ -69,53 +69,20 @@ struct LightSource {
 };
 
 struct ModelSource {
-	std::unordered_map<std::shared_ptr<Shader>, std::vector<std::shared_ptr<Model>>> opaqueModelsMap;
-	std::vector<std::shared_ptr<Model>> transparentModels;
-	ModelSource(){}
-	std::unordered_map<std::shared_ptr<Shader>, std::vector<std::shared_ptr<Model>>>& GetOpaqueModelsMap() {
-		return opaqueModelsMap;
+	std::vector<std::shared_ptr<Model>> models;
+	ModelSource() {}
+
+	std::vector<std::shared_ptr<Model>>& GetModels() { return models; }
+	const std::vector<std::shared_ptr<Model>>& GetModels() const { return models; }
+
+	void AddModel(const std::shared_ptr<Model>& model) {
+		assert(model != nullptr && "AddModel: model is null");
+		models.push_back(model);
 	}
 
-	std::vector<std::shared_ptr<Model>>& GetTransparentModels() {
-		return transparentModels;
-	}
-
-	void AddOpaqueModel(std::shared_ptr<Shader> shader,std::shared_ptr<Model> model) {
-		assert(shader != nullptr && "AddTransparentModel: shader ����Ϊ������ָ�룡");
-		assert(model != nullptr && "AddTransparentModel: model ����Ϊ������ָ�룡");
-		opaqueModelsMap[shader].push_back(model);
-		std::cout << "Added opaque model. Total models for this shader: " << opaqueModelsMap[shader].size() << std::endl;
-	}
-
-	void DeleteOpaqueModel(std::shared_ptr<Model> model) {
-		assert(model != nullptr && "AddTransparentModel: model ����Ϊ������ָ�룡");
-		for (auto& pair : opaqueModelsMap) {
-			auto& models = pair.second;
-			models.erase(std::remove(models.begin(), models.end(), model), models.end());
-		}
-	}
-
-	void AddTransparentModel(std::shared_ptr<Model> model) {
-		assert(model != nullptr && "AddTransparentModel: model ����Ϊ������ָ�룡");
-		transparentModels.push_back(model);
-	}
-
-	std::vector<std::shared_ptr<Model>>& GetTransparentModels(Camera* cam_ptr) {
-		if(cam_ptr->CheckCameraMoved()) {
-			SortTransparentModels(cam_ptr->cameraPos);
-		}
-		return transparentModels;
-	}
-
-	void SortTransparentModels(const glm::vec3& cameraPos) {
-		std::sort(transparentModels.begin(), transparentModels.end(),
-			[&cameraPos](const std::shared_ptr<Model>& a, const std::shared_ptr<Model>& b) {
-				// 用 position 而不是 GetWorldPosition()：modelMatrix 只在 getModelMatrix() 时更新，
-				// 而排序发生在绘制之前，此时 modelMatrix 可能未初始化，导致所有距离相同、排序无效
-				float distanceA = glm::length(a->position - cameraPos);
-				float distanceB = glm::length(b->position - cameraPos);
-				return distanceA > distanceB; 
-			});
+	void DeleteModel(const std::shared_ptr<Model>& model) {
+		assert(model != nullptr && "DeleteModel: model is null");
+		models.erase(std::remove(models.begin(), models.end(), model), models.end());
 	}
 };
 
@@ -139,6 +106,12 @@ public:
 
 class Scene {
 public:
+	struct MeshDrawItem {
+		Model* model = nullptr;
+		Mesh* mesh = nullptr;
+		Shader* shader = nullptr;
+	};
+
 	LightSource lightSource;
 	ModelSource modelSource;
 	SkyboxSource skyboxSource;
@@ -205,7 +178,15 @@ public:
 	FBO* GetDebugFramebuffer() {
 		return deferFBO;
 	}
+
+	// Mesh-level draw lists (built on demand each call)
+	const std::vector<MeshDrawItem>& GetOpaqueMeshes();
+	const std::vector<MeshDrawItem>& GetTransparentMeshes();
+
 private:
+	void BuildMeshDrawLists();
+	std::vector<MeshDrawItem> m_opaqueMeshList;
+	std::vector<MeshDrawItem> m_transparentMeshList;
 	glm::mat4 view;
 	glm::mat4 projection;
 	SystemProperties& properties = SystemProperties::GetInstance();

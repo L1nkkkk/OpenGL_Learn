@@ -13,6 +13,7 @@
 #include <vector>
 #include <tuple>
 #include <unordered_map>
+#include <utility>
 #include "Global.h"
 #include "Shader.h"
 #include "Material.h"
@@ -42,24 +43,47 @@ public:
 	Mesh(std::vector<Vertex> vertices,
 		std::vector<unsigned int> indices,
 		 Material* material,
-         const std::string& materialXmlPath = std::string());
+         const std::string& materialXmlPathIn = std::string());
+
+	Mesh(const Mesh& other);
+	Mesh& operator=(const Mesh& other);
+	Mesh(Mesh&& other) noexcept;
+	Mesh& operator=(Mesh&& other) noexcept;
+	~Mesh();
+
 	void Draw(Shader* shader = nullptr);
 
 	unsigned int GetVAO() {
 		return VAO;
 	}
 
+	bool GetActiveStatus() const {
+		return m_active;
+	}
+
+	void SetActiveStatus(bool value) {
+		m_active = value;
+	}
+
 private:
+	bool m_active = true;
 	unsigned int VAO, VBO, EBO;
+	void ReleaseGL();
 	void setupMesh();
 };
 
 class Model : public BaseObject {
 public:
+	struct MeshEntry {
+		Mesh* mesh = nullptr;
+		Material* material = nullptr;
+	};
+
 	Model(std::string path) {
 		position = glm::vec3(0.0f);
 		rotation = glm::vec3(0.0f);
 		loadModel(path);
+		BuildMeshLists();
 		localCenter = CalculateLocalCenter();
 		name = "model" + std::to_string(count++);
 	}
@@ -68,6 +92,7 @@ public:
 		rotation = glm::vec3(0.0f);
 		m_shader = shader;
 		loadModel(path);
+		BuildMeshLists();
 		localCenter = CalculateLocalCenter();
 		name = "model" + std::to_string(count++);
 	}
@@ -75,6 +100,7 @@ public:
 		position = glm::vec3(0.0f);
 		rotation = glm::vec3(0.0f);
 		loadModel(path);
+		BuildMeshLists();
 		localCenter = CalculateLocalCenter();
 		setModelMatrix(matrix);
 		name = "model" + std::to_string(count++);
@@ -82,14 +108,16 @@ public:
 	Model(std::vector<Mesh> inputMeshes) {
 		position = glm::vec3(0.0f);
 		rotation = glm::vec3(0.0f);
-		meshes = inputMeshes;
+		meshes = std::move(inputMeshes);
+		BuildMeshLists();
 		localCenter = CalculateLocalCenter();
 		name = "model" + std::to_string(count++);
 	}
 	Model(std::vector<Mesh> inputMeshes, glm::mat4 matrix) {
 		position = glm::vec3(0.0f);
 		rotation = glm::vec3(0.0f);
-		meshes = inputMeshes;
+		meshes = std::move(inputMeshes);
+		BuildMeshLists();
 		localCenter = CalculateLocalCenter();
 		setModelMatrix(matrix);
 		name = "model" + std::to_string(count++);
@@ -101,6 +129,7 @@ public:
 		
 		m_shader = ShaderManager::GetInstance().GetShaderByName(mat->GetShaderName());
 		loadModel(path,mat);
+		BuildMeshLists();
 		localCenter = CalculateLocalCenter();
 		name = "model" + std::to_string(count++);
 	}
@@ -146,6 +175,9 @@ public:
 		return meshes;
 	}
 
+	const std::vector<MeshEntry>& GetOpaqueMeshEntries() const { return m_opaqueMeshes; }
+	const std::vector<MeshEntry>& GetTransparentMeshEntries() const { return m_transparentMeshes; }
+
 	unsigned int GetTextureID(int index) {
 		return (properties.GAMMA_CORRECTION)?textures_loaded[index].textureGammaID: textures_loaded[index].textureID;
 	}
@@ -174,9 +206,12 @@ private:
 	inline static unsigned int count = 0;
 protected:
 	std::vector<Mesh> meshes;
+	std::vector<MeshEntry> m_opaqueMeshes;
+	std::vector<MeshEntry> m_transparentMeshes;
 	void loadModel(std::string path,Material* mat = nullptr);
 	Mesh processMesh(aiMesh* mesh, const aiScene* scene, Material* mat = nullptr);
 	void processNode(aiNode* node, const aiScene* scene, Material* mat = nullptr);
+	void BuildMeshLists();
 	std::vector<Texture> loadMaterialTextures(aiMaterial* mat, aiTextureType type, std::string typeName);
 	void prosessMaterial(aiMaterial* mat,Material* material);
 	glm::vec3 CalculateLocalCenter();

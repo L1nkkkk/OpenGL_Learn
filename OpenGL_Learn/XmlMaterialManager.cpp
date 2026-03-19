@@ -299,7 +299,13 @@ void XmlMaterialManager::ParseMaterialBlock(const std::string& materialBlock) {
                 material->AddProperty(propName, MaterialProperty::CreateTexture(texs));
             }
         }
-
+        else if (tag.find("Bool") != std::string::npos) {
+            std::string propName = GetAttribute(tag, "name");
+            if (!propName.empty()) {
+                bool value = ParseBoolAttr(tag, "value", false);
+                material->AddProperty(propName, MaterialProperty::CreateBool(value));
+            }
+		}
         pos = tagEnd + 1;
     }
 
@@ -438,6 +444,13 @@ bool XmlMaterialManager::ParseSingleMaterial(const std::string& xmlContent, Mate
                 std::vector<Texture> texs;
                 texs.push_back(tex);
                 material->AddProperty(propName, MaterialProperty::CreateTexture(texs));
+            }
+        }
+        else if (tag.find("Bool") != std::string::npos) {
+            std::string propName = GetAttribute(tag, "name");
+            if (!propName.empty()) {
+                bool value = ParseBoolAttr(tag, "value", false);
+                material->AddProperty(propName, MaterialProperty::CreateBool(value));
             }
         }
 
