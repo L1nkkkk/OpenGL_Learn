@@ -154,12 +154,9 @@ void Mesh::Draw(Shader* shader)
     if (!runtimeMat) {
         return;
     }
-	// 始终激活材质：绑定纹理、设置渲染状态与材质参数（包括 sampler uniform）
-	auto materialGaurd = MaterialGaurd(*runtimeMat);
-	// 如外部传入 shader（例如渲染队列希望统一 use），则保持它为当前 program
-	if (shader) {
-		shader->use();
-	}
+	// 材质参数绑定统一放在 MaterialGaurd 内处理，外部 shader（含 deferProcess）作为 override 传入。
+	auto materialGaurd = MaterialGaurd(*runtimeMat, shader);
+	if (shader) shader->use();
 	glActiveTexture(GL_TEXTURE0);
 	glBindVertexArray(VAO);
 	glDrawArrays(GL_TRIANGLES, 0, vertices.size());

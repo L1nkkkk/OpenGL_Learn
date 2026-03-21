@@ -13,11 +13,11 @@ in VS_OUT {
 } fs_in;
 
 struct Material{
-	vec3 ambient;           // Ka£º»·¾³¹â·´ÉäÏµÊý
-    vec3 diffuse;           // Kd£ºÂþ·´Éä»ù´¡É«
-    vec3 specular;          // Ks£º¾µÃæ·´ÉäÏµÊý
-    float shininess;        // Ns£º¸ß¹âÖ¸Êý
-    float opacity;          // d£ºÍ¸Ã÷¶È£¨1=²»Í¸Ã÷£©
+	vec3 ambient;           // Kaï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½â·´ï¿½ï¿½Ïµï¿½ï¿½
+    vec3 diffuse;           // Kdï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½É«
+    vec3 specular;          // Ksï¿½ï¿½ï¿½ï¿½ï¿½æ·´ï¿½ï¿½Ïµï¿½ï¿½
+    float shininess;        // Nsï¿½ï¿½ï¿½ß¹ï¿½Ö¸ï¿½ï¿½
+    float opacity;          // dï¿½ï¿½Í¸ï¿½ï¿½ï¿½È£ï¿½1=ï¿½ï¿½Í¸ï¿½ï¿½ï¿½ï¿½
 };
 
 uniform sampler2D texture_diffuse1;
@@ -43,15 +43,22 @@ void main()
 	}
 	// and the diffuse per-fragment color
 	if(!hasDiffuseMap){
-		gAlbedoSpec = vec3(1,0,0);
+		// Fallback to material diffuse color when no texture is bound.
+		gAlbedoSpec = material.diffuse;
 	}
 	else{
-		gAlbedoSpec = texture(texture_diffuse1, vec2(fs_in.TexCoords)).rgb;
+		vec4 diffuseSample = texture(texture_diffuse1, vec2(fs_in.TexCoords));
+		// Alpha-cutout support for deferred geometry pass:
+		// avoid writing depth/GBuffer for nearly transparent texels.
+		if (diffuseSample.a < 0.1) {
+			discard;
+		}
+		gAlbedoSpec = diffuseSample.rgb;
 	}
 
-	// store material properties
-	gMaterial.r = material.ambient.r;
-	gMaterial.g = material.diffuse.r;
-	gMaterial.b = material.specular.r;
+	// Store scalar factors for deferred lighting (use channel average instead of only .r).
+	gMaterial.r = (material.ambient.r + material.ambient.g + material.ambient.b) / 3.0;
+	gMaterial.g = (material.diffuse.r + material.diffuse.g + material.diffuse.b) / 3.0;
+	gMaterial.b = (material.specular.r + material.specular.g + material.specular.b) / 3.0;
 	gMaterial.a = material.shininess;
 }

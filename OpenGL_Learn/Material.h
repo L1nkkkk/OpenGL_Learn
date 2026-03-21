@@ -87,10 +87,10 @@ enum class MaterialPropertyType {
 	Vec2,
 	Vec3,
 	Vec4,
-	Color, // µÈÍ¬ÓÚVec3£¬µ«ImGuiÓÃColorEdit3
+	Color, // ï¿½ï¿½Í¬ï¿½ï¿½Vec3ï¿½ï¿½ï¿½ï¿½ImGuiï¿½ï¿½ColorEdit3
 	Int,
 	Bool,
-	Texture // ÎÆÀíID
+	Texture // ï¿½ï¿½ï¿½ï¿½ID
 };
 
 struct MaterialProperty {
@@ -104,14 +104,14 @@ struct MaterialProperty {
 	glm::vec3 vec3Value = glm::vec3(0);
 	glm::vec4 vec4Value = glm::vec4(0);
 
-	std::vector<Texture> textures; // ÓÃÓÚ´æ´¢ÎÆÀíÊôÐÔ£¨¿ÉÀ©Õ¹Îª¶àÎÆÀí£©
+	std::vector<Texture> textures; // ï¿½ï¿½ï¿½Ú´æ´¢ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô£ï¿½ï¿½ï¿½ï¿½ï¿½Õ¹Îªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 
-	// ImGui¿Ø¼þÓÃµÄ·¶Î§
+	// ImGuiï¿½Ø¼ï¿½ï¿½ÃµÄ·ï¿½Î§
 	float minVal = 0.0f;
 	float maxVal = 100.0f;
 	float step = 0.1f;
 
-	// ¹¹Ôìº¯Êý£º²»Í¬ÀàÐÍµÄ±ã½Ý³õÊ¼»¯
+	// ï¿½ï¿½ï¿½ìº¯ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¬ï¿½ï¿½ï¿½ÍµÄ±ï¿½Ý³ï¿½Ê¼ï¿½ï¿½
 	static MaterialProperty CreateTexture(const std::vector<Texture>& texs) {
 		MaterialProperty p;
 		p.type = MaterialPropertyType::Texture;
@@ -171,17 +171,17 @@ struct MaterialProperty {
 	}
 };
 
-// Material.h£º²ÄÖÊ»ùÀà£¬¶¨ÒåÍ³Ò»½Ó¿Ú
-enum class BlendMode { None, AlphaBlend, Additive }; // »ìºÏÄ£Ê½£¨Í¸Ã÷/²»Í¸Ã÷£©
-enum class CullMode { None, Front, Back };           // ÌÞ³ýÄ£Ê½
+// Material.hï¿½ï¿½ï¿½ï¿½ï¿½Ê»ï¿½ï¿½à£¬ï¿½ï¿½ï¿½ï¿½Í³Ò»ï¿½Ó¿ï¿½
+enum class BlendMode { None, AlphaBlend, Additive }; // ï¿½ï¿½ï¿½Ä£Ê½ï¿½ï¿½Í¸ï¿½ï¿½/ï¿½ï¿½Í¸ï¿½ï¿½ï¿½ï¿½
+enum class CullMode { None, Front, Back };           // ï¿½Þ³ï¿½Ä£Ê½
 
 struct RenderState {
-	bool depthTest = true;    // ÊÇ·ñ¿ªÆôÉî¶È²âÊÔ
-	bool depthWrite = true;   // ÊÇ·ñÐ´ÈëÉî¶È»º³å
-	bool stencilTest = false; // ÊÇ·ñ¿ªÆôÄ£°å²âÊÔ
-	BlendMode blendMode = BlendMode::None; // »ìºÏÄ£Ê½
-	CullMode cullMode = CullMode::Back;    // ÌÞ³ýÄ£Ê½
-	// ¿ÉÀ©Õ¹£ºÄ£°å²âÊÔ²ÎÊý¡¢Éî¶È²âÊÔº¯ÊýµÈ
+	bool depthTest = true;    // ï¿½Ç·ï¿½ï¿½ï¿½ï¿½ï¿½È²ï¿½ï¿½ï¿½
+	bool depthWrite = true;   // ï¿½Ç·ï¿½Ð´ï¿½ï¿½ï¿½ï¿½È»ï¿½ï¿½ï¿½
+	bool stencilTest = false; // ï¿½Ç·ï¿½ï¿½ï¿½Ä£ï¿½ï¿½ï¿½ï¿½ï¿½
+	BlendMode blendMode = BlendMode::None; // ï¿½ï¿½ï¿½Ä£Ê½
+	CullMode cullMode = CullMode::Back;    // ï¿½Þ³ï¿½Ä£Ê½
+	// ï¿½ï¿½ï¿½ï¿½Õ¹ï¿½ï¿½Ä£ï¿½ï¿½ï¿½ï¿½Ô²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È²ï¿½ï¿½Ôºï¿½ï¿½ï¿½ï¿½ï¿½
 };
 
 class Material {
@@ -192,18 +192,18 @@ public:
 	static RenderState GetCurrentRenderState() {
 		RenderState rs;
 
-		// Éî¶È²âÊÔ¿ª¹Ø
+		// ï¿½ï¿½È²ï¿½ï¿½Ô¿ï¿½ï¿½ï¿½
 		rs.depthTest = (glIsEnabled(GL_DEPTH_TEST) == GL_TRUE);
 
-		// Éî¶ÈÐ´Èë£¨Depth Mask£©
+		// ï¿½ï¿½ï¿½Ð´ï¿½ë£¨Depth Maskï¿½ï¿½
 		GLboolean depthMask = GL_TRUE;
 		glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMask);
 		rs.depthWrite = (depthMask == GL_TRUE);
 
-		// Ä£°å²âÊÔ¿ª¹Ø
+		// Ä£ï¿½ï¿½ï¿½ï¿½Ô¿ï¿½ï¿½ï¿½
 		rs.stencilTest = (glIsEnabled(GL_STENCIL_TEST) == GL_TRUE);
 
-		// »ìºÏÄ£Ê½
+		// ï¿½ï¿½ï¿½Ä£Ê½
 		if (!glIsEnabled(GL_BLEND)) {
 			rs.blendMode = BlendMode::None;
 		}
@@ -219,12 +219,12 @@ public:
 				rs.blendMode = BlendMode::Additive;
 			}
 			else {
-				// ²»ÔÚÄã¶¨ÒåµÄÁ½ÖÖÀï£¬¸øÒ»¸öºÏÀíµÄÄ¬ÈÏ
+				// ï¿½ï¿½ï¿½ï¿½ï¿½ã¶¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï£¬ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¬ï¿½ï¿½
 				rs.blendMode = BlendMode::AlphaBlend;
 			}
 		}
 
-		// ÃæÌÞ³ýÄ£Ê½
+		// ï¿½ï¿½ï¿½Þ³ï¿½Ä£Ê½
 		if (!glIsEnabled(GL_CULL_FACE)) {
 			rs.cullMode = CullMode::None;
 		}
@@ -246,18 +246,18 @@ public:
 	}
 
 	static void RecoverRenderState(RenderState rs) {
-		// Éî¶È²âÊÔ
+		// ï¿½ï¿½È²ï¿½ï¿½ï¿½
 		if (rs.depthTest) glEnable(GL_DEPTH_TEST);
 		else              glDisable(GL_DEPTH_TEST);
 
-		// Éî¶ÈÐ´Èë
+		// ï¿½ï¿½ï¿½Ð´ï¿½ï¿½
 		glDepthMask(rs.depthWrite ? GL_TRUE : GL_FALSE);
 
-		// Ä£°å²âÊÔ
+		// Ä£ï¿½ï¿½ï¿½ï¿½ï¿½
 		if (rs.stencilTest) glEnable(GL_STENCIL_TEST);
 		else                glDisable(GL_STENCIL_TEST);
 
-		// »ìºÏÄ£Ê½
+		// ï¿½ï¿½ï¿½Ä£Ê½
 		switch (rs.blendMode) {
 		case BlendMode::None:
 			glDisable(GL_BLEND);
@@ -272,7 +272,7 @@ public:
 			break;
 		}
 
-		// ÃæÌÞ³ý
+		// ï¿½ï¿½ï¿½Þ³ï¿½
 		switch (rs.cullMode) {
 		case CullMode::None:
 			glDisable(GL_CULL_FACE);
@@ -287,7 +287,7 @@ public:
 			break;
 		}
 	}
-	// ½öÓÃÓÚµ÷ÊÔ / GUI£ºÔÊÐíÍâ²¿·ÃÎÊÊôÐÔÓ³Éä
+	// ï¿½ï¿½ï¿½ï¿½ï¿½Úµï¿½ï¿½ï¿½ / GUIï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½â²¿ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ó³ï¿½ï¿½
 	const std::unordered_map<std::string, MaterialProperty>& GetProperties() const {
 		return m_propertiesMap;
 	}
@@ -295,12 +295,12 @@ public:
 		return m_propertiesMap;
 	}
 
-	// ÖØÐÂÉèÖÃ¸Ã²ÄÖÊËùÊ¹ÓÃµÄ Shader Ãû³Æ£¨ÓÃÓÚ´Ó XML ÖØÐÂ¼ÓÔØÊ±¸üÐÂ°ó¶¨£©
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã¸Ã²ï¿½ï¿½ï¿½ï¿½ï¿½Ê¹ï¿½Ãµï¿½ Shader ï¿½ï¿½ï¿½Æ£ï¿½ï¿½ï¿½ï¿½Ú´ï¿½ XML ï¿½ï¿½ï¿½Â¼ï¿½ï¿½ï¿½Ê±ï¿½ï¿½ï¿½Â°ó¶¨£ï¿½
 	void SetShaderName(const std::string& shaderName) {
 		m_shaderName = shaderName;
 	}
 
-	// Çå¿Õµ±Ç°ËùÓÐÊôÐÔ£¬±ãÓÚ´Ó XML »òÆäËûÊý¾ÝÔ´ÖØÐÂÌî³ä
+	// ï¿½ï¿½Õµï¿½Ç°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô£ï¿½ï¿½ï¿½ï¿½Ú´ï¿½ XML ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	void ClearProperties() {
 		m_propertiesMap.clear();
 	}
@@ -309,19 +309,41 @@ public:
 		m_propertiesMap[uniformName] = param;
 	}
 
-	// ¼¤»î²ÄÖÊ£¨°ó¶¨Shader + ÉèÖÃäÖÈ¾×´Ì¬ + ´«µÝ²ÄÖÊ²ÎÊý£©
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê£ï¿½ï¿½ï¿½Shader + ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¾×´Ì¬ + ï¿½ï¿½ï¿½Ý²ï¿½ï¿½Ê²ï¿½ï¿½ï¿½ï¿½ï¿½
 	virtual void Activate() {
-		// 1. °ó¶¨¸Ã²ÄÖÊµÄShader
+		// 1. ï¿½ó¶¨¸Ã²ï¿½ï¿½Êµï¿½Shader
 		ShaderManager::GetInstance().UseShader(m_shaderName);
-		// 2. ÉèÖÃäÖÈ¾×´Ì¬
+		// 2. ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¾×´Ì¬
 		ApplyRenderState();
-		// 3. ´«µÝ²ÄÖÊ²ÎÊý£¨ÓÉ×ÓÀàÊµÏÖ£©
-		SetMaterialParams();
+		// 3. ï¿½ï¿½ï¿½Ý²ï¿½ï¿½Ê²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Êµï¿½Ö£ï¿½
+		auto shaderPtr = ShaderManager::GetInstance().GetShaderByName(m_shaderName);
+		if (shaderPtr) {
+			SetMaterialParamsToShader(*shaderPtr, shaderPtr->shaderName == "deferProcess");
+		}
 	}
 
-	// »ñÈ¡²ÄÖÊ¶ÔÓ¦µÄShaderÃû³Æ
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Êµï¿½ï¿½â²¿Ö¸ï¿½ï¿½ shaderï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ deferred geometry pass ï¿½ï¿½ override shaderï¿½ï¿½
+	virtual void Activate(Shader* overrideShader) {
+		if (!overrideShader) {
+			Activate();
+			return;
+		}
+		overrideShader->use();
+		if (overrideShader->shaderName == "shadow" || overrideShader->shaderName == "shadowCube") {
+			// Transparent materials often use depthWrite=false; shadow pass must still
+			// write depth, otherwise transparent meshes disappear from shadow maps.
+			glEnable(GL_DEPTH_TEST);
+			glDepthMask(GL_TRUE);
+			glDisable(GL_BLEND);
+			return;
+		}
+		ApplyRenderState();
+		SetMaterialParamsToShader(*overrideShader, overrideShader->shaderName == "deferProcess");
+	}
+
+	// ï¿½ï¿½È¡ï¿½ï¿½ï¿½Ê¶ï¿½Ó¦ï¿½ï¿½Shaderï¿½ï¿½ï¿½ï¿½
 	std::string GetShaderName() const { return m_shaderName; }
-	// ÉèÖÃ/»ñÈ¡äÖÈ¾×´Ì¬
+	// ï¿½ï¿½ï¿½ï¿½/ï¿½ï¿½È¡ï¿½ï¿½È¾×´Ì¬
 	void SetRenderState(const RenderState& state) { m_renderState = state; }
 	RenderState GetRenderState() const { return m_renderState; }
 
@@ -340,14 +362,14 @@ private:
 	std::unordered_map<std::string, MaterialProperty> m_propertiesMap;
 	RenderState m_renderState;
 protected:
-	// Ó¦ÓÃäÖÈ¾×´Ì¬£¨×ÓÀà¿ÉÖØÐ´£©
+	// Ó¦ï¿½ï¿½ï¿½ï¿½È¾×´Ì¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð´ï¿½ï¿½
 	virtual void ApplyRenderState() {
-		// Éî¶È²âÊÔ
+		// ï¿½ï¿½È²ï¿½ï¿½ï¿½
 		if (m_renderState.depthTest) glEnable(GL_DEPTH_TEST);
 		else glDisable(GL_DEPTH_TEST);
-		// Éî¶ÈÐ´Èë
+		// ï¿½ï¿½ï¿½Ð´ï¿½ï¿½
 		glDepthMask(m_renderState.depthWrite ? GL_TRUE : GL_FALSE);
-		// »ìºÏÄ£Ê½
+		// ï¿½ï¿½ï¿½Ä£Ê½
 		if (m_renderState.blendMode != BlendMode::None) {
 			glEnable(GL_BLEND);
 			if (m_renderState.blendMode == BlendMode::AlphaBlend) {
@@ -360,7 +382,7 @@ protected:
 		else {
 			glDisable(GL_BLEND);
 		}
-		// ÌÞ³ýÄ£Ê½
+		// ï¿½Þ³ï¿½Ä£Ê½
 		glEnable(GL_CULL_FACE);
 		switch (m_renderState.cullMode) {
 		case CullMode::Front: glCullFace(GL_FRONT); break;
@@ -370,44 +392,79 @@ protected:
 
 	};
 
-	virtual void SetMaterialParams() {
-		auto shaderPtr = ShaderManager::GetInstance().GetShaderByName(m_shaderName);
+	virtual void SetMaterialParamsToShader(Shader& shader, bool deferProcessMode = false) {
 		auto& properties = SystemProperties::GetInstance();
-		if (!shaderPtr) {
-			std::cout << "Shader not found for material: " << m_shaderName << std::endl;
-			return;
+
+		// deferred geometry pass uses simplified sampler names.
+		if (deferProcessMode) {
+			shader.setBool("hasDiffuseMap", false);
+			shader.setBool("hasSpecularMap", false);
+			shader.setBool("hasNormalMap", false);
 		}
+
 		for (auto& [propertyName, property] : m_propertiesMap) {
 			switch (property.type) {
 			case MaterialPropertyType::Float:
-				shaderPtr->setFloat("material."+propertyName, property.scalarValue.floatValue);
+				shader.setFloat("material."+propertyName, property.scalarValue.floatValue);
 				break;
 			case MaterialPropertyType::Vec2:
-				shaderPtr->setVec2("material."+propertyName, property.vec2Value);
+				shader.setVec2("material."+propertyName, property.vec2Value);
 				break;
 			case MaterialPropertyType::Vec3:
-			case MaterialPropertyType::Color: // ColorÒ²µ±×÷Vec3´¦Àí
-				shaderPtr->setVec3("material." + propertyName, property.vec3Value);
+			case MaterialPropertyType::Color: // ColorÒ²ï¿½ï¿½ï¿½ï¿½Vec3ï¿½ï¿½ï¿½ï¿½
+				shader.setVec3("material." + propertyName, property.vec3Value);
 				break;
 			case MaterialPropertyType::Vec4:
-				shaderPtr->setVec4("material." + propertyName, property.vec4Value);
+				shader.setVec4("material." + propertyName, property.vec4Value);
 				break;
 			case MaterialPropertyType::Bool:
-				shaderPtr->setBool("material." + propertyName, property.scalarValue.boolValue);
+				shader.setBool("material." + propertyName, property.scalarValue.boolValue);
 				break;
 			case MaterialPropertyType::Int:
-				shaderPtr->setInt("material." + propertyName, property.scalarValue.intValue);
+				shader.setInt("material." + propertyName, property.scalarValue.intValue);
 				break;
 			case MaterialPropertyType::Texture:
-				shaderPtr->setBool("material.use_" + propertyName, false);
-				for(int i = 0; i < property.textures.size(); ++i) {
-					glActiveTexture(GL_TEXTURE0 + properties.USED_TEXTURE_NUM);
-					if (properties.GAMMA_CORRECTION)
-						glBindTexture(GL_TEXTURE_2D, property.textures[i].textureGammaID);
-					else
-						glBindTexture(GL_TEXTURE_2D, property.textures[i].textureID);
-					shaderPtr->setInt("material." + propertyName + std::to_string(i+1), properties.USED_TEXTURE_NUM++); // ÎÆÀíµ¥Ôª
-					shaderPtr->setBool("material.use_" + propertyName, true);
+				if (!deferProcessMode) {
+					shader.setBool("material.use_" + propertyName, false);
+					for(int i = 0; i < property.textures.size(); ++i) {
+						glActiveTexture(GL_TEXTURE0 + properties.USED_TEXTURE_NUM);
+						if (properties.GAMMA_CORRECTION)
+							glBindTexture(GL_TEXTURE_2D, property.textures[i].textureGammaID);
+						else
+							glBindTexture(GL_TEXTURE_2D, property.textures[i].textureID);
+						shader.setInt("material." + propertyName + std::to_string(i+1), properties.USED_TEXTURE_NUM++); // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ôª
+						shader.setBool("material.use_" + propertyName, true);
+					}
+				}
+				else if (!property.textures.empty()) {
+					unsigned int slot = 0;
+					const std::string* samplerName = nullptr;
+					const std::string* hasMapName = nullptr;
+					static const std::string kDiffuseSampler = "texture_diffuse1";
+					static const std::string kSpecSampler = "texture_specular1";
+					static const std::string kNormalSampler = "texture_normal1";
+					static const std::string kHasDiffuse = "hasDiffuseMap";
+					static const std::string kHasSpec = "hasSpecularMap";
+					static const std::string kHasNormal = "hasNormalMap";
+					if (propertyName == "texture_diffuse") {
+						slot = 0; samplerName = &kDiffuseSampler; hasMapName = &kHasDiffuse;
+					}
+					else if (propertyName == "texture_specular") {
+						slot = 1; samplerName = &kSpecSampler; hasMapName = &kHasSpec;
+					}
+					else if (propertyName == "texture_normal") {
+						slot = 2; samplerName = &kNormalSampler; hasMapName = &kHasNormal;
+					}
+
+					if (samplerName && hasMapName) {
+						glActiveTexture(GL_TEXTURE0 + slot);
+						if (properties.GAMMA_CORRECTION)
+							glBindTexture(GL_TEXTURE_2D, property.textures[0].textureGammaID);
+						else
+							glBindTexture(GL_TEXTURE_2D, property.textures[0].textureID);
+						shader.setInt(*samplerName, slot);
+						shader.setBool(*hasMapName, true);
+					}
 				}
 				break;
 			}
@@ -417,12 +474,12 @@ protected:
 
 class MaterialGaurd {
 public:
-	MaterialGaurd(Material& material) :m_material(material) {
+	MaterialGaurd(Material& material, Shader* overrideShader = nullptr) :m_material(material) {
 		m_previousState = Material::GetCurrentRenderState();
-		m_material.Activate();
+		m_material.Activate(overrideShader);
 	}
 	~MaterialGaurd() {
-		// ½â°óÎÆÀí
+		// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		auto& property = SystemProperties::GetInstance();
 		int TextureUsedNum = m_material.GetTextureCount();
 		for(int i = 0; i < TextureUsedNum; ++i) {

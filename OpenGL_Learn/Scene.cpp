@@ -320,14 +320,32 @@ void Scene::DrawTransparentModels()
 
 	auto& list = GetTransparentMeshes();
 	Shader* lastShader = nullptr;
+	int usedTexes = properties.USED_TEXTURE_NUM;
 	for (const auto& item : list) {
 		if (!item.shader || !item.model || !item.mesh) continue;
 
 		if (item.shader != lastShader) {
 			lastShader = item.shader;
 			lastShader->use();
+			properties.USED_TEXTURE_NUM = SetShadowMap(*lastShader);
+			glActiveTexture(GL_TEXTURE0 + properties.USED_TEXTURE_NUM++);
+			usedTexes = properties.USED_TEXTURE_NUM;
+			if (skyboxSource.textureCubeMap) {
+				if (properties.GAMMA_CORRECTION) {
+					glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxSource.textureCubeMap->textureGammaID);
+				}
+				else {
+					glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxSource.textureCubeMap->textureID);
+				}
+			}
+			glActiveTexture(GL_TEXTURE0);
+			lastShader->setFloat("time", glfwGetTime());
+			if (camera_ptr) {
+				lastShader->setVec3("viewPos", camera_ptr->cameraPos);
+			}
 			SetLightUniforms(*lastShader);
 		}
+		properties.USED_TEXTURE_NUM = usedTexes;
 
 		if (item.model->IsOtherShaderUsed(OtherShaderType::outline)) {
 			glStencilMask(0xFF);

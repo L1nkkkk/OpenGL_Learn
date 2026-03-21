@@ -17,6 +17,7 @@
 #include "ModelsLoader.h"
 #include "Timer.h"
 #include "ForwardRenderPass.h"
+#include "DeferRenderPass.h"
 #include "PostprocessRenderPass.h"
 
 
@@ -234,6 +235,8 @@ int main() {
 	
 	auto forwardRenderPass = new ForwardRenderPass();
 	forwardRenderPass->Init(properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
+	auto deferRenderPass = new DeferRenderPass();
+	deferRenderPass->Init(properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
 	// PostprocessRenderPass 当前主循环未使用（最终图直接画到 postProcessFBO），若 Init 会多占一个同类型 FBO，导致列表里多一个 Forward+Gamma
 	auto postprocessRenderPass = new PostprocessRenderPass();
 	postprocessRenderPass->Init(properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
@@ -273,15 +276,20 @@ int main() {
 		SetUniformBuffer();
 #ifdef USE_SCENE_SHADER
 		//first pass: render scene to framebuffer (HDR)
-		scene.DrawShadowMap();
-		forwardRenderPass->Render(&scene);
+		FBO* sceneFBO = nullptr;
+		if (properties.DEFER_RENDERING) {
+			deferRenderPass->Render(&scene);
+			sceneFBO = deferRenderPass->GetOutputFBO();
+		}
+		else {
+			forwardRenderPass->Render(&scene);
+			sceneFBO = forwardRenderPass->GetOutputFBO();
+		}
 		//second pass: postprocess (HDR + gamma + bloom) -> LDR texture (inside postprocessRenderPass)
 		
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-
-		FBO* sceneFBO = forwardRenderPass->GetOutputFBO();
 		if (!properties.DEBUG_MODE) {
 			if (!sceneFBO || sceneFBO->textureIDs.empty()) {
 				std::cout << "no valid color attachment, skip this frame" << std::endl;
@@ -358,6 +366,8 @@ int main() {
 
 	forwardRenderPass->Destroy();
 	delete forwardRenderPass;
+	deferRenderPass->Destroy();
+	delete deferRenderPass;
 	postprocessRenderPass->Destroy();
 	delete postprocessRenderPass;
 
