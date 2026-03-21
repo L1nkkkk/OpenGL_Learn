@@ -199,6 +199,8 @@
     <None Include="shaders\diffuseVertex.glsl" />
     <None Include="LightVertexShader.glsl" />
     <None Include="shaders\lightVolumeFragment.glsl" />
+    <None Include="shaders\lightVolumeFullscreenFragment.glsl" />
+    <None Include="shaders\lightVolumeFullscreenVertex.glsl" />
     <None Include="shaders\lightVolumeVertex.glsl" />
     <None Include="shaders\outlineFragment.glsl" />
     <None Include="shaders\defaultVertex.glsl" />

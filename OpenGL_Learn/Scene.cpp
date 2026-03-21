@@ -104,10 +104,14 @@ void Scene::DrawDefferedModels()
     glBindFramebuffer(GL_READ_FRAMEBUFFER, deferFBO->framebufferID);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo->framebufferID);
     glBlitFramebuffer(
-        0, 0, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT, 0, 0, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT, GL_DEPTH_BUFFER_BIT, GL_NEAREST
+        0, 0, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT, 0, 0, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT,
+        GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT, GL_NEAREST
     );
 
     glBindFramebuffer(GL_FRAMEBUFFER, fbo->framebufferID);
+    glStencilMask(0xFF);
+    glClearStencil(0);
+    glClear(GL_STENCIL_BUFFER_BIT);
     if (!properties.LIGHT_VOLUME) {
         //默认光照计算
         glDisable(GL_DEPTH_TEST);
@@ -173,46 +177,43 @@ void Scene::DrawDefferedModels()
         glBindTexture(GL_TEXTURE_2D, deferFBO->textureIDs[3]);
         lightVolumeShader->setInt("gMaterial", 3);
         glEnable(GL_DEPTH_TEST);
-        //glEnable(GL_BLEND);
-        // 设置混合函数：最终颜色 = 源颜色 * 1 + 目标颜色 * 1
-        //glBlendFunc(GL_ONE, GL_ONE);
-        // 确保方程式是加法（默认就是加法，写出来更保险）
+        glEnable(GL_STENCIL_TEST);
         glBlendEquation(GL_FUNC_ADD);
-        for (auto pointLight : lightSource.pointLights) {
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_ONE, GL_ONE);
+        for (auto& pointLight : lightSource.pointLights) {
             if (!pointLight.GetActiveStatus()) continue;
-            // 绘制光体积到模板缓冲
+            float radius = ComputePointLightStencilVolumeRadius(
+                pointLight.constant, pointLight.linear, pointLight.quadratic, pointLight.diffuse,
+                properties.LIGHT_VOLUME_CUTOFF_SCALE, properties.LIGHT_VOLUME_RADIUS_SCALE);
+            const glm::vec3 savedScale = pointLight.scale;
+            pointLight.SetScale(glm::vec3(radius));
+
+            glDisable(GL_BLEND);
             glStencilMask(0xFF);
             glClear(GL_STENCIL_BUFFER_BIT);
             glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-            glDepthMask(GL_FALSE); // 不写深度
+            glDepthMask(GL_FALSE);
             glEnable(GL_DEPTH_TEST);
             glDepthFunc(GL_LESS);
-            glDisable(GL_CULL_FACE); // 关键：关闭面剔除
-
+            glDisable(GL_CULL_FACE);
             glStencilFunc(GL_ALWAYS, 0, 0xFF);
-            // 经典双面增减算法：
-            // 如果背面深度测试失败（在物体后面），增加模板值
-            // 如果正面深度测试失败（在物体后面），减少模板值
-            // 最终模板值不为 0 的像素，说明像素点在光球几何体内部
             glStencilOpSeparate(GL_BACK, GL_KEEP, GL_INCR_WRAP, GL_KEEP);
             glStencilOpSeparate(GL_FRONT, GL_KEEP, GL_DECR_WRAP, GL_KEEP);
-            GLfloat lightMax = std::fmaxf(std::fmaxf(pointLight.diffuse.r, pointLight.diffuse.g), pointLight.diffuse.b);
-            float radius = (-pointLight.linear + std::sqrtf(pointLight.linear * pointLight.linear - 4 * pointLight.quadratic * (pointLight.constant - (256.0 / 5.0) * lightMax)))
-                / (2 * pointLight.quadratic);
 
-            pointLight.SetScale(glm::vec3(radius));
             defaultShader->use();
             defaultShader->setMat4("model", pointLight.getModelMatrix());
             pointLight.DrawPointLight();
-            // 绘制光照（仅限模板值为1的像素）
+
             lightVolumeShader->use();
-            glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE); // 启用颜色输出
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_ONE, GL_ONE);
+            glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
             glStencilFunc(GL_NOTEQUAL, 0, 0xFF);
             glStencilMask(0x00);
             glEnable(GL_CULL_FACE);
-            glCullFace(GL_FRONT); // 剔除正面，渲染背面
+            glCullFace(GL_FRONT);
             glDepthFunc(GL_GEQUAL);
-            // 设置点光源uniforms
 
             lightVolumeShader->setVec3("pointLight.position", pointLight.position);
             lightVolumeShader->setFloat("pointLight.constant", pointLight.constant);
@@ -221,14 +222,25 @@ void Scene::DrawDefferedModels()
             lightVolumeShader->setVec3("pointLight.ambient", pointLight.ambient);
             lightVolumeShader->setVec3("pointLight.diffuse", pointLight.diffuse);
             lightVolumeShader->setVec3("pointLight.specular", pointLight.specular);
-            lightVolumeShader->setFloat("far_plane", pointLight.far);
+            lightVolumeShader->setFloat("pointLight.far_plane", pointLight.far);
             glActiveTexture(GL_TEXTURE4);
             glBindTexture(GL_TEXTURE_CUBE_MAP, pointLight.shadowFBO->textureIDs[0]);
-            lightVolumeShader->setInt("shadowCubeMap", 4);
-            lightVolumeShader->setBool("useShadowMap", pointLight.useShadowMap);
+            lightVolumeShader->setInt("pointLight.shadowCubeMap", 4);
+            lightVolumeShader->setBool("pointLight.useShadowMap", pointLight.useShadowMap);
             lightVolumeShader->setMat4("model", pointLight.getModelMatrix());
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, deferFBO->textureIDs[0]);
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, deferFBO->textureIDs[1]);
+            glActiveTexture(GL_TEXTURE2);
+            glBindTexture(GL_TEXTURE_2D, deferFBO->textureIDs[2]);
+            glActiveTexture(GL_TEXTURE3);
+            glBindTexture(GL_TEXTURE_2D, deferFBO->textureIDs[3]);
+
             pointLight.DrawPointLight();
-            pointLight.SetScale(glm::vec3(1.0f)); // 恢复原始缩放
+
+            pointLight.SetScale(savedScale);
+            glDisable(GL_BLEND);
             glStencilMask(0xff);
             glClear(GL_STENCIL_BUFFER_BIT);
             glStencilMask(0x00);
@@ -240,6 +252,8 @@ void Scene::DrawDefferedModels()
         glDisable(GL_BLEND);
         glDisable(GL_STENCIL_TEST);
         glDepthMask(GL_TRUE);
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LESS);
         glDisable(GL_CULL_FACE);
     }
     glBindFramebuffer(GL_FRAMEBUFFER, fbo->framebufferID);

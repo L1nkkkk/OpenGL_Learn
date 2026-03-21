@@ -7,7 +7,8 @@
 #include <unordered_map>
 #include <vector>
 #include <functional>
-#include <tuple> 
+#include <tuple>
+#include <cmath>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -25,7 +26,7 @@ namespace ShadowProperty {
     };
 }
 
-// Viewport µ÷ÊÔ£º´Ó FramebuffersManager ÖÐµ±Ç° isBusy µÄ FBO ÀïÑ¡Ò»¸ö£¬ÔÙÑ¡ÆäÄ³¸ö color/depth ¸½¼þÕ¹Ê¾
+// Viewport ??????? FramebuffersManager ????? isBusy ?? FBO ???????????????? color/depth ??????
 
 class SystemProperties {
 public:
@@ -41,7 +42,7 @@ public:
 
     bool DEBUG_MODE = false;
 
-    // Viewport ???????§Ö? FBO ?? GetBusyFBOs() ?§Ö??¡À???§Ö??????? FBO textureIDs ?§Ö??¡À?
+    // Viewport ?????????? FBO ?? GetBusyFBOs() ??????????????????? FBO textureIDs ????????
     int VIEWPORT_DEBUG_FBO_INDEX = 0;
     int VIEWPORT_DEBUG_ATTACHMENT_INDEX = 0;
 
@@ -69,6 +70,10 @@ public:
 
     bool DEFER_RENDERING = false;
     bool LIGHT_VOLUME = false;
+    /// ??????? = ?????? ?? ???????????/??????????????
+    float LIGHT_VOLUME_RADIUS_SCALE = 1.0f;
+    /// ?????????? (256/5)*diffuseMax ?????????????????????????
+    float LIGHT_VOLUME_CUTOFF_SCALE = 1.0f;
 
     void ResetUsedTextureNum() {
         USED_TEXTURE_NUM = 0;
@@ -77,6 +82,23 @@ public:
 private:
     SystemProperties() = default;
 };
+
+/// ???????????????? defer / lightVolume ?????????
+inline float ComputePointLightStencilVolumeRadius(
+	float constantTerm, float linearTerm, float quadraticTerm,
+	const glm::vec3& diffuse,
+	float cutoffScale, float radiusScale)
+{
+	const float lightMax = std::fmaxf(std::fmaxf(diffuse.r, diffuse.g), diffuse.b);
+	const float threshold = (256.0f / 5.0f) * cutoffScale * lightMax;
+	const float discriminant = linearTerm * linearTerm
+		- 4.0f * quadraticTerm * (constantTerm - threshold);
+	float radius = 1.0f;
+	if (discriminant >= 0.0f && std::fabs(quadraticTerm) > 1e-6f) {
+		radius = (-linearTerm + std::sqrt(discriminant)) / (2.0f * quadraticTerm);
+	}
+	return radius * radiusScale;
+}
 
 struct GlobalVAOs {
     unsigned int quadVAO, quadVBO;
@@ -405,6 +427,17 @@ inline float sphereVertices[] = {
     0.0000f,  -0.4619f,  -0.0618f,
     0.0000f,  -0.5000f,  0.0000f
 };
+
+/// ï¿½ï¿½ InitVAOs ï¿½ï¿½ sphereVAO Ò»ï¿½Â£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô­ï¿½ã£¬Ä£ï¿½Í¿Õ¼ï¿½ë¾¶ 0.5ï¿½ï¿½Ö±ï¿½ï¿½ 1ï¿½ï¿½
+inline GLsizei GetUnitSphereVertexCount() {
+	return static_cast<GLsizei>(sizeof(sphereVertices) / (sizeof(float) * 3u));
+}
+
+inline glm::mat4 MakePointLightVolumeModelMatrix(const glm::vec3& worldCenter, float worldRadius) {
+	constexpr float kMeshRadius = 0.5f;
+	const float s = worldRadius / kMeshRadius;
+	return glm::translate(glm::mat4(1.0f), worldCenter) * glm::scale(glm::mat4(1.0f), glm::vec3(s));
+}
 
 extern unsigned int quadVAO, quadVBO;
 extern unsigned int cubeVAO, cubeVBO;

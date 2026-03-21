@@ -216,6 +216,18 @@ public:
 		ImGui::Checkbox("Defer Rendering", &properties.DEFER_RENDERING);
 		if (properties.DEFER_RENDERING) {
 			ImGui::Checkbox("Light Volume", &properties.LIGHT_VOLUME);
+			if (properties.LIGHT_VOLUME) {
+				ImGui::Indent();
+				ImGui::DragFloat("Light volume radius scale", &properties.LIGHT_VOLUME_RADIUS_SCALE, 0.02f, 0.1f, 8.0f, "%.2f");
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+					ImGui::SetTooltip("Scales the stencil sphere radius after attenuation-based solve.");
+				}
+				ImGui::DragFloat("Light volume cutoff scale", &properties.LIGHT_VOLUME_CUTOFF_SCALE, 0.02f, 0.05f, 20.0f, "%.2f");
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+					ImGui::SetTooltip("Higher = tighter cutoff vs diffuse intensity (smaller effective volume).");
+				}
+				ImGui::Unindent();
+			}
 		}
 		ImGui::Checkbox("Debug Mode", &properties.DEBUG_MODE);
 	}

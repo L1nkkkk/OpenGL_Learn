@@ -49,6 +49,7 @@ public:
 		Defer,
 		DeferDirLightVolume,
 		LightVolume,
+		LightVolumeFullscreen,
 		//StartGeometryShaderIndex
 		Explode,
 		NormalLines,
@@ -122,6 +123,7 @@ private:
 		"defer",
 		"deferDirLightVolume",
 		"lightVolume",
+		"lightVolumeFullscreen",
 		"explode",
 		"normal",
 		"shadowCube"
