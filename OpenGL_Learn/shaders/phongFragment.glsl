@@ -54,6 +54,8 @@ struct Material{
     vec3 specular;          // Ks??????X?????
     float shininess;        // Ns????????
     float opacity;          // d????????1=???????
+	float alphaCutoff;
+	bool useAlphaCutoff;
 	sampler2D texture_diffuse1;
 	bool use_texture_diffuse;
 	sampler2D texture_normal1;
@@ -371,6 +373,9 @@ void main()
 	vec3 results = vec3(0);
 	float alpha = 1.0;
 	if(material.use_texture_diffuse) alpha = texture(material.texture_diffuse1,fs_in.TexCoords).a;
+	if (material.useAlphaCutoff && alpha < material.alphaCutoff) {
+		discard;
+	}
 	int pointLightsNum = min(MAX_POINT_LIGHTS,NR_POINT_LIGHTS);
 	int dirLightsNum =  min(MAX_DIR_LIGHTS,NR_DIR_LIGHTS);
 	int spotLightsNum = min(MAX_SPOT_LIGHTS,NR_SPOT_LIGHTS);

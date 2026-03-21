@@ -18,6 +18,8 @@ struct Material{
     vec3 specular;          // Ks�����淴��ϵ��
     float shininess;        // Ns���߹�ָ��
     float opacity;          // d��͸���ȣ�1=��͸����
+	float alphaCutoff;
+	bool useAlphaCutoff;
 };
 
 uniform sampler2D texture_diffuse1;
@@ -48,9 +50,9 @@ void main()
 	}
 	else{
 		vec4 diffuseSample = texture(texture_diffuse1, vec2(fs_in.TexCoords));
-		// Alpha-cutout support for deferred geometry pass:
-		// avoid writing depth/GBuffer for nearly transparent texels.
-		if (diffuseSample.a < 0.1) {
+		// Material-driven cutout for cloth/card-like geometry.
+		float cutoff = material.useAlphaCutoff ? material.alphaCutoff : 0.1;
+		if (diffuseSample.a < cutoff) {
 			discard;
 		}
 		gAlbedoSpec = diffuseSample.rgb;

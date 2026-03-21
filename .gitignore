@@ -361,3 +361,9 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# Ignore x64 debug/release folders
+x64
+
+# Runtime scene save (loaded on startup)
+OpenGL_Learn/saved/

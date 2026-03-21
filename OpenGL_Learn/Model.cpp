@@ -220,16 +220,31 @@ void Model::BuildMeshLists()
 	for (auto& mesh : meshes) {
 		Material* mat = mesh.material_ptr;
 		bool isTransparent = false;
+		bool isCutout = false;
 
 		if (mat) {
 			const auto& props = mat->GetProperties();
+			auto itUseCutout = props.find("useAlphaCutoff");
+			if (itUseCutout != props.end() && itUseCutout->second.type == MaterialPropertyType::Bool) {
+				isCutout = itUseCutout->second.scalarValue.boolValue;
+			}
+			auto itCutoff = props.find("alphaCutoff");
+			if (itCutoff != props.end() && itCutoff->second.type == MaterialPropertyType::Float) {
+				isCutout = isCutout || (itCutoff->second.scalarValue.floatValue > 0.0f);
+			}
 			auto it = props.find("opacity");
 			if (it != props.end() && it->second.type == MaterialPropertyType::Float) {
 				float op = it->second.scalarValue.floatValue;
 				if (op < 0.999f) isTransparent = true;
 			}
 		}
-		if (isTransparent) mat->SetRenderState({ true,false,false,BlendMode::AlphaBlend,CullMode::None});
+		if (isCutout) {
+			isTransparent = false;
+			mat->SetRenderState({ true,true,false,BlendMode::None,CullMode::Back });
+		}
+		else if (isTransparent) {
+			mat->SetRenderState({ true,false,false,BlendMode::AlphaBlend,CullMode::None});
+		}
 		MeshEntry entry{ &mesh, mat };
 		if (isTransparent) m_transparentMeshes.push_back(entry);
 		else m_opaqueMeshes.push_back(entry);
@@ -328,6 +343,10 @@ void Model::prosessMaterial(aiMaterial* mat,Material* material)
 	material->AddProperty("texture_diffuse", MaterialProperty::CreateTexture(loadMaterialTextures(mat, aiTextureType_DIFFUSE, "texture_diffuse")));
 	material->AddProperty("texture_specular", MaterialProperty::CreateTexture(loadMaterialTextures(mat, aiTextureType_SPECULAR, "texture_specular")));
 	material->AddProperty("texture_normal", MaterialProperty::CreateTexture(loadMaterialTextures(mat, aiTextureType_NORMALS, "texture_normal")));
+	// For cloth/card-like alpha textures use cutout by default to avoid transparent sorting artifacts.
+	bool autoCutout = opacity < 0.999f;
+	material->AddProperty("useAlphaCutoff", MaterialProperty::CreateBool(autoCutout));
+	material->AddProperty("alphaCutoff", MaterialProperty::CreateFloat(autoCutout ? 0.4f : 0.0f, 0.0f, 1.0f, 0.01f));
 
 	material->AddProperty("useBloom", MaterialProperty::CreateBool(false));
 }

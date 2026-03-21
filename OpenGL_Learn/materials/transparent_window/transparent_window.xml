@@ -1,4 +1,5 @@
 <Material name="TransparentWindow" shader="grass">
+	<Float name="opacity" value="0.5" />
 	<RenderState
 		depthTest="true"
 		depthWrite="false"

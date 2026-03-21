@@ -19,6 +19,7 @@
 #include "ForwardRenderPass.h"
 #include "DeferRenderPass.h"
 #include "PostprocessRenderPass.h"
+#include "SceneStateIO.h"
 
 
 bool firstMouse = false;
@@ -168,6 +169,10 @@ int main() {
 	xmlMaterialManager.LoadFromFile("materials.xml");
 	Scene scene(&camera, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
 	LoadModels(scene);
+	const std::string sceneStatePath = "saved/last_scene.json";
+	if (SceneStateIO::Exists(sceneStatePath)) {
+		SceneStateIO::Load(scene, camera, sceneStatePath);
+	}
 	CubeTexture skybox("materials/skybox");
 	float skyboxVertices[] = {
 		// positions          
@@ -370,6 +375,7 @@ int main() {
 	delete deferRenderPass;
 	postprocessRenderPass->Destroy();
 	delete postprocessRenderPass;
+	SceneStateIO::Save(scene, camera, sceneStatePath);
 
 	glfwTerminate();
 	return 0;

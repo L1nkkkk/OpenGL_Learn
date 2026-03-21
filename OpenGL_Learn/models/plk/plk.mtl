@@ -31,8 +31,9 @@ Ns 4.963533
 d 1
 
 newmtl m4
-Ka 0 0 0
-Kd 0 0 0
+map_Kd textures/black_a_512.png
+Ka 0.7529412 0.7529412 0.7529412
+Kd 1 1 1
 Ks 0 0 0
 Ns 4.963533
 d 0.3
@@ -62,8 +63,9 @@ Ns 4.963533
 d 1
 
 newmtl m8
+map_Kd textures/black_a_512.png
 Ka 0.2352941 0.05490196 0
-Kd 0 0 0
+Kd 1 1 1
 Ks 0 0 0
 Ns 4.963533
 d 0.3

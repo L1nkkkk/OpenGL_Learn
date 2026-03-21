@@ -139,6 +139,7 @@
     <ClCompile Include="..\..\imgui-docking\imgui_widgets.cpp" />
     <ClCompile Include="AntiAliasManager.cpp" />
     <ClCompile Include="callbacks.cpp" />
+    <ClCompile Include="DeferRenderPass.cpp" />
     <ClCompile Include="ForwardRenderPass.cpp" />
     <ClCompile Include="FramebufferManager.cpp" />
     <ClCompile Include="Global.cpp" />
@@ -146,6 +147,7 @@
     <ClCompile Include="Model.cpp" />
     <ClCompile Include="Object.cpp" />
     <ClCompile Include="PostprocessRenderPass.cpp" />
+    <ClCompile Include="SceneStateIO.cpp" />
     <ClCompile Include="Scene.cpp" />
     <ClCompile Include="Shader.cpp" />
     <ClCompile Include="ShaderManager.cpp" />
@@ -157,6 +159,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="callbacks.h" />
+    <ClInclude Include="DeferRenderPass.h" />
     <ClInclude Include="ForwardRenderPass.h" />
     <ClInclude Include="Learn.h" />
     <ClInclude Include="Light.h" />
@@ -167,6 +170,7 @@
     <ClInclude Include="PostprocessRenderPass.h" />
     <ClInclude Include="RenderPass.h" />
     <ClInclude Include="resource.h" />
+    <ClInclude Include="SceneStateIO.h" />
     <ClInclude Include="Scene.h" />
     <ClInclude Include="Shader.h" />
     <ClInclude Include="ShaderManager.h" />
@@ -223,9 +227,12 @@
     <None Include="shaders\shadowVertex.glsl" />
     <None Include="shaders\skyboxFragment.glsl" />
     <None Include="shaders\skyboxVertex.glsl" />
+    <None Include="shaders\transparentFragment.glsl" />
+    <None Include="shaders\transparentVertex.glsl" />
     <None Include="VertexShader.glsl" />
   </ItemGroup>
   <ItemGroup>
+    <Image Include="..\..\Utils\ImageAlphaChecker\black_a0.2_512.png" />
     <Image Include="materials\transparent_window\blending_transparent_window.png" />
   </ItemGroup>
   <ItemGroup>
