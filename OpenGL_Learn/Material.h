@@ -338,6 +338,19 @@ public:
 			return;
 		}
 		ApplyRenderState();
+
+		// Special-case: AOInfo pass needs stable depth testing to avoid overdraw/ghosting
+		// in the normal attachment (Color2).
+		if (overrideShader->shaderName == "aoInfo") {
+			glEnable(GL_DEPTH_TEST);
+			glDepthMask(GL_FALSE); // normal-only pass: don't modify depth buffer
+			glDisable(GL_BLEND);
+			glDisable(GL_STENCIL_TEST);
+			glStencilFunc(GL_ALWAYS, 0, 0xFF);
+			glStencilMask(0x00);
+			glCullFace(GL_BACK); // keep default culling behavior
+		}
+
 		SetMaterialParamsToShader(*overrideShader, overrideShader->shaderName == "deferProcess");
 	}
 

@@ -1,6 +1,7 @@
 #version 330 core
 layout (location = 0) out vec4 FragColor;
 layout (location = 1) out vec4 BrightColor;
+layout (location = 2) out vec4 NormalOut;
 
 struct DirLight{
 	vec3 direction;
@@ -90,6 +91,11 @@ layout(std140) uniform SystemProperties {
     int shadowType;
     int screenWidth;
     int screenHeight;
+};
+
+layout(std140) uniform Matrices{
+    mat4 view;
+    mat4 projection;
 };
 
 #define EPS 1e-5
@@ -376,6 +382,9 @@ void main()
 	if (material.useAlphaCutoff && alpha < material.alphaCutoff) {
 		discard;
 	}
+	// Write view-space normal into attachment2 for MRT debug/AO input.
+	vec3 nVS = normalize(mat3(transpose(inverse(view))) * norm);
+	NormalOut = vec4(nVS * 0.5 + 0.5, 1.0);
 	int pointLightsNum = min(MAX_POINT_LIGHTS,NR_POINT_LIGHTS);
 	int dirLightsNum =  min(MAX_DIR_LIGHTS,NR_DIR_LIGHTS);
 	int spotLightsNum = min(MAX_SPOT_LIGHTS,NR_SPOT_LIGHTS);

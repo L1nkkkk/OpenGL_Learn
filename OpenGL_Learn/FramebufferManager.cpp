@@ -4,6 +4,7 @@
 void FBO::Init(FBOAttributes attr) {
     this->attr = attr;
     float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    depthTextureID = 0;
 
     glGenFramebuffers(1, &framebufferID);
     glBindFramebuffer(GL_FRAMEBUFFER, framebufferID);
@@ -76,6 +77,29 @@ void FBO::Init(FBOAttributes attr) {
         }
     }
 
+    // If needed (forward/AO): create a depth texture that can be sampled in later passes.
+    // IMPORTANT: we DO NOT attach this texture to GL_DEPTH_ATTACHMENT on the main FBO,
+    // otherwise some drivers may reject the framebuffer configuration.
+    // Instead, ForwardRenderPass will blit depth into this texture after opaque rendering.
+    if (attr.hasDepthTexture && !attr.isShadowMap) {
+        glGenTextures(1, &depthTextureID);
+        glBindTexture(GL_TEXTURE_2D, depthTextureID);
+        glTexImage2D(
+            GL_TEXTURE_2D, 0,
+            GL_DEPTH_COMPONENT32F,
+            properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT,
+            0,
+            GL_DEPTH_COMPONENT, GL_FLOAT,
+            NULL
+        );
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        // For sampling: don't use hardware depth compare mode
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_NONE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    }
+
     // 4. ???? DrawBuffers
     if (attr.isShadowMap) {
         glDrawBuffer(GL_NONE);
@@ -86,14 +110,22 @@ void FBO::Init(FBOAttributes attr) {
             glDrawBuffers(colorAttachments.size(), colorAttachments.data());
         }
 
-        // 5. ??з??????????????? Depth/Stencil RBO
+        // 5. Depth/Stencil storage (keep the original robust setup)
         glGenRenderbuffers(1, &rboID);
         glBindRenderbuffer(GL_RENDERBUFFER, rboID);
         if (attr.aaType == AntiAliasManager::AntiAliasType::MSAA) {
-            glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_DEPTH24_STENCIL8, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
+            glRenderbufferStorageMultisample(
+                GL_RENDERBUFFER, 4,
+                GL_DEPTH24_STENCIL8,
+                properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT
+            );
         }
         else {
-            glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
+            glRenderbufferStorage(
+                GL_RENDERBUFFER,
+                GL_DEPTH24_STENCIL8,
+                properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT
+            );
         }
         glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rboID);
     }

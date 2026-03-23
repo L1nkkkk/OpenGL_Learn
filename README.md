@@ -19,6 +19,10 @@
 - 伽马校正
 - 泛光（Bloom）
 - 抗锯齿（Default / MSAA）
+- AO（Ambient Occlusion）
+  - 当前实现思路：在正向渲染的主 FBO 里通过 MRT 输出用于后处理的场景信息（depth + normal）。
+  - `ForwardRenderPass` 的 `attachment2 (Color 2)` 作为 normal buffer，供后续 SSAO/GTAO 等屏幕空间 AO 采样使用。
+  - 透明物体在需要后处理时也会参与 normal 输出，以保证同屏法线一致性。
 
 ### 编辑器界面（ImGui + Docking）
 - 场景面板：光源、模型、材质管理

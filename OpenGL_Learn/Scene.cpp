@@ -428,6 +428,8 @@ unsigned int Scene::SetShadowMap(Shader& shader) {
 void Scene::DrawSkybox(glm::mat4 view)
 {
     glDepthFunc(GL_LEQUAL);
+    // Skybox 只影响颜色，不参与深度信息（否则会污染 SSAO 这类基于 depth 的后处理结果）
+    glDepthMask(GL_FALSE);
     glStencilMask(0x00); // Disable writing to stencil buffer for skybox
     skyboxSource.skyboxShader_ptr->use();
     glBindVertexArray(skyboxSource.cubeMapVAO);
@@ -443,6 +445,7 @@ void Scene::DrawSkybox(glm::mat4 view)
 
     glBindVertexArray(0);
     glDepthFunc(GL_LESS);
+    glDepthMask(GL_TRUE);
     glStencilMask(0xFF); // Re-enable stencil mask
 }
 

@@ -507,12 +507,14 @@ struct FBOAttributes {
 	FramebufferType shadowType = FramebufferType::ShadowMap;
 	bool isBloom = false;
 	bool isDefer = false;
+	// For forward/AO 等后处理：需要把深度作为 texture 供采样。
+	bool hasDepthTexture = false;
 	std::vector<TextureAttributes> textureAttrs;
 
 
     bool operator==(const FBOAttributes& other) const {
-        return std::tie(aaType, isHDR, isGamma, isShadowMap, shadowType, isBloom, isDefer) ==
-            std::tie(other.aaType, other.isHDR, other.isGamma, other.isShadowMap, other.shadowType, other.isBloom, other.isDefer)
+        return std::tie(aaType, isHDR, isGamma, isShadowMap, shadowType, isBloom, isDefer, hasDepthTexture) ==
+            std::tie(other.aaType, other.isHDR, other.isGamma, other.isShadowMap, other.shadowType, other.isBloom, other.isDefer, other.hasDepthTexture)
             && textureAttrs == other.textureAttrs;
     }
 };
@@ -539,6 +541,7 @@ namespace std {
             hash_combine(seed, static_cast<int>(attr.shadowType));
             hash_combine(seed, attr.isBloom);
             hash_combine(seed, attr.isDefer);
+            hash_combine(seed, attr.hasDepthTexture);
 
             for (const auto& tex : attr.textureAttrs) {
                 hash_combine(seed, tex);
@@ -566,6 +569,8 @@ public:
 	unsigned int framebufferID;
 	std::vector<unsigned int> textureIDs;
 	unsigned int rboID;
+	// When attr.hasDepthTexture == true, depth is stored in this texture.
+	unsigned int depthTextureID = 0;
 	bool init = false;
     std::string passName;
     int width;
@@ -598,6 +603,10 @@ public:
 		glDeleteFramebuffers(1, &framebufferID);
 		glDeleteTextures(textureIDs.size(), textureIDs.data());
 		glDeleteRenderbuffers(1, &rboID);
+		if (depthTextureID != 0) {
+			glDeleteTextures(1, &depthTextureID);
+			depthTextureID = 0;
+		}
 	}
 	void Init(FBOAttributes attr);
 
