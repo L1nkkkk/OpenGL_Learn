@@ -168,10 +168,28 @@ int main() {
 #endif
 	xmlMaterialManager.LoadFromFile("materials.xml");
 	Scene scene(&camera, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
-	LoadModels(scene);
 	const std::string sceneStatePath = "saved/last_scene.json";
 	if (SceneStateIO::Exists(sceneStatePath)) {
-		SceneStateIO::Load(scene, camera, sceneStatePath);
+		// 有存档：只初始化默认灯光占位，其它由 SceneStateIO 恢复，避免默认模型+存档模型双加载。
+		LoadDefaultLights(scene);
+		const bool loaded = SceneStateIO::LoadAsync(scene, camera, sceneStatePath);
+		// 兼容兜底：若存档损坏/旧格式导致没有任何模型，则回退到默认场景，避免“模型全没了”。
+		if (!loaded) {
+			scene.lightSource.pointLights.clear();
+			scene.lightSource.directionLights.clear();
+			scene.lightSource.spotLights.clear();
+			LoadModels(scene);
+		}
+		// 额外兜底：某些旧/异常存档可能把 lights 写成空数组，导致场景几乎全黑。
+		if (scene.lightSource.pointLights.empty() &&
+			scene.lightSource.directionLights.empty() &&
+			scene.lightSource.spotLights.empty()) {
+			LoadDefaultLights(scene);
+		}
+	}
+	else {
+		// 无存档：走默认场景。
+		LoadModels(scene);
 	}
 	CubeTexture skybox("materials/skybox");
 	float skyboxVertices[] = {
@@ -247,11 +265,20 @@ int main() {
 	postprocessRenderPass->Init(properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
 
 	while (!glfwWindowShouldClose(window)) {
+		// 分帧异步恢复存档里的文件模型，减少单帧加载峰值。
+		SceneStateIO::UpdateAsyncLoads(scene, 1);
+
 		//calculate FPS
 		timer.Tick();
 		
 		std::stringstream windowTitle;
 		windowTitle << "OpenGL_Learn FPS:" << timer.GetFPS();
+		if (SceneStateIO::HasPendingAsyncLoads()) {
+			const int pending = SceneStateIO::GetPendingAsyncLoadCount();
+			const int total = SceneStateIO::GetTotalAsyncLoadCount();
+			const int done = (total >= pending) ? (total - pending) : 0;
+			windowTitle << " [Loading " << done << "/" << total << "]";
+		}
 		glfwSetWindowTitle(window, windowTitle.str().c_str());
 		// NewFrame
 		SetGui();

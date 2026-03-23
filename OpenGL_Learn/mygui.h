@@ -12,12 +12,16 @@
 #include <sstream>
 #include <unordered_map>
 #include <filesystem>
+#include <cstring>
+#include <windows.h>
+#include <commdlg.h>
 
 #include "Scene.h"
 #include "Global.h"
 #include "XmlMaterialManager.h"
 #include "Material.h"
 #include "Model.h"
+#include "SceneStateIO.h"
 
 class MyGui {
 public:
@@ -27,6 +31,22 @@ public:
 	}
 	MyGui(const MyGui&) = delete;
 	MyGui& operator=(const MyGui&) = delete;
+
+	static bool PickTextureFileWithDialog(std::string& outPath) {
+		char fileBuf[MAX_PATH] = { 0 };
+		OPENFILENAMEA ofn = {};
+		ofn.lStructSize = sizeof(ofn);
+		ofn.lpstrFile = fileBuf;
+		ofn.nMaxFile = MAX_PATH;
+		ofn.lpstrFilter = "Image Files\0*.png;*.jpg;*.jpeg;*.bmp;*.tga;*.dds\0All Files\0*.*\0";
+		ofn.nFilterIndex = 1;
+		ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+		if (GetOpenFileNameA(&ofn) == TRUE) {
+			outPath = fileBuf;
+			return true;
+		}
+		return false;
+	}
 
 	void Init(GLFWwindow* window) {
 		IMGUI_CHECKVERSION();
@@ -213,6 +233,14 @@ public:
 	}
 
 	void System_UI() {
+		if (SceneStateIO::HasPendingAsyncLoads()) {
+			const int pending = SceneStateIO::GetPendingAsyncLoadCount();
+			const int total = SceneStateIO::GetTotalAsyncLoadCount();
+			const int done = (total >= pending) ? (total - pending) : 0;
+			ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.2f, 1.0f), "Loading models... %d/%d", done, total);
+			ImGui::ProgressBar(total > 0 ? (float)done / (float)total : 0.0f, ImVec2(-1.0f, 0.0f));
+			ImGui::Separator();
+		}
 		ImGui::Checkbox("Defer Rendering", &properties.DEFER_RENDERING);
 		if (properties.DEFER_RENDERING) {
 			ImGui::Checkbox("Light Volume", &properties.LIGHT_VOLUME);
@@ -511,8 +539,35 @@ public:
 				ImGui::ColorEdit3(propName.c_str(), &prop.vec3Value.x);
 				break;
 			case MaterialPropertyType::Texture:
+			{
 				ImGui::Text("%s (Texture x%d)", propName.c_str(), static_cast<int>(prop.textures.size()));
+				for (size_t texIdx = 0; texIdx < prop.textures.size(); ++texIdx) {
+					Texture& tex = prop.textures[texIdx];
+
+					ImGui::PushID(static_cast<int>(texIdx));
+					ImGui::Text("Current: %s", tex.path.C_Str());
+					if (ImGui::Button("Browse...")) {
+						std::string selectedPath;
+						if (PickTextureFileWithDialog(selectedPath)) {
+							std::filesystem::path p(selectedPath);
+						std::string file = p.filename().string();
+						std::string dir = p.parent_path().string();
+						if (dir.empty()) dir = ".";
+
+						if (!file.empty()) {
+							Texture newTex{};
+							newTex.type = tex.type;
+							newTex.path = file.c_str();
+							newTex.textureID = TextureFromFile(file.c_str(), dir, false, false);
+							newTex.textureGammaID = TextureFromFile(file.c_str(), dir, false, true);
+							tex = newTex;
+						}
+						}
+					}
+					ImGui::PopID();
+				}
 				break;
+			}
 			}
 			ImGui::PopID();
 		}

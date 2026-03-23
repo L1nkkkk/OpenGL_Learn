@@ -1,12 +1,22 @@
 #include "Global.h"
+#include <unordered_map>
 
 GlobalVAOs globalVAOs;
 
+namespace {
+    // 纹理缓存：相同文件路径 + gamma 模式复用同一个 OpenGL texture，避免重复占用显存。
+    std::unordered_map<std::string, unsigned int> g_textureCache;
+}
 
 unsigned int TextureFromFile(const char* path, const std::string& directory, bool alpha , bool gamma)
 {
     std::string filename = std::string(path);
     filename = directory + '/' + filename;
+    const std::string cacheKey = filename + (gamma ? "|gamma=1" : "|gamma=0");
+    auto it = g_textureCache.find(cacheKey);
+    if (it != g_textureCache.end()) {
+        return it->second;
+    }
 
     unsigned int textureID;
     glGenTextures(1, &textureID);
@@ -52,5 +62,8 @@ unsigned int TextureFromFile(const char* path, const std::string& directory, boo
         stbi_image_free(data);
     }
 
+    if (textureID != 0) {
+        g_textureCache[cacheKey] = textureID;
+    }
     return textureID;
 }

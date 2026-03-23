@@ -24,7 +24,10 @@ void ShaderManager::Init() {
 	}
 	//load Geometry Shaders
 	for (int i = 0; i < geometryShaderNames.size(); ++i) {
-		LoadGeometryShader(geometryShaderNames[i]);
+		// 某些 geometry shader 名称也在 shaderNames 里，避免重复加载同名 shader。
+		if (m_shaderMap.find(geometryShaderNames[i]) == m_shaderMap.end()) {
+			LoadGeometryShader(geometryShaderNames[i]);
+		}
 		shader2Idx[m_shaderMap[geometryShaderNames[i]]] = shaderNames.size() + i;
 	}
 	//bind uniform buffer objects

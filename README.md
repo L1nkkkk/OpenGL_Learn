@@ -31,6 +31,15 @@
 - Assimp 加载 OBJ 模型
 - XML 材质系统，支持热重载
 - Phong / Mirror / Grass / Explode 等着色器
+- 材质面板支持按 Mesh 实时切换贴图（系统文件浏览器）
+
+### 场景存档与加载优化
+- Scene JSON 按模型来源区分：`file`（文件模型）/`generated`（程序生成模型）
+- 持久化并恢复模型状态：transform、active、shader、outline、材质参数
+- 持久化并恢复灯光参数：Point/Direction/Spot（含阴影开关与衰减参数）
+- 分帧异步恢复文件模型，降低启动卡顿峰值
+- 启动与 UI 显示模型加载进度（Settings + 窗口标题）
+- 纹理缓存与模型网格缓存，减少重复加载带来的内存占用
 
 ## 项目结构
 

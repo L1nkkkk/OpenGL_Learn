@@ -41,7 +41,25 @@ void InitVAOs() {
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 }
 
-void LoadModels(Scene& scene) {
+void LoadDefaultLights(Scene& scene) {
+	// Load PointLight
+	auto pointLight = PointLight(
+		pointLightPositions[3],
+		glm::vec3(0.05f),
+		glm::vec3(0.8f),
+		glm::vec3(1.0f),
+		"models/sphere/sphere.obj",
+		XmlMaterialManager::GetInstance().GetMaterialRaw("Light")
+	);
+	pointLight.SetScale(0.2f);
+	scene.lightSource.AddPointLight(pointLight);
+
+	scene.lightSource.AddDirectionLight(
+		DirectionLight(glm::vec3(-0.2f, -1.0f, -0.3f), glm::vec3(10.f), glm::vec3(0.4f), glm::vec3(0.5f))
+	);
+}
+
+void LoadDefaultModels(Scene& scene) {
 	auto& shaderManager = ShaderManager::GetInstance();
 
 	auto object1 = std::make_shared<Model>("models/plk/plk.obj",shaderManager.GetShader(ShaderManager::Phong));
@@ -60,17 +78,6 @@ void LoadModels(Scene& scene) {
 	scene.modelSource.AddModel(object);
 	object->SetName("saki");
 
-	
-	//Load PointLight
-	
-	//scene.lightSource.AddPointLight(PointLight(pointLightPositions[0], glm::vec3(0.05f), glm::vec3(0.8f), glm::vec3(1.0f)));
-	//scene.lightSource.AddPointLight(PointLight(pointLightPositions[1], glm::vec3(0.05f), glm::vec3(0.8f), glm::vec3(1.0f)));
-	//scene.lightSource.AddPointLight(PointLight(pointLightPositions[2], glm::vec3(0.05f), glm::vec3(0.8f), glm::vec3(1.0f)));
-	auto pointLight = PointLight(pointLightPositions[3], glm::vec3(0.05f), glm::vec3(0.8f), glm::vec3(1.0f), "models/sphere/sphere.obj",XmlMaterialManager::GetInstance().GetMaterialRaw("Light"));
-	
-	pointLight.SetScale(0.2);
-	scene.lightSource.AddPointLight(pointLight);
-	scene.lightSource.AddDirectionLight(DirectionLight(glm::vec3(-0.2f, -1.0f, -0.3f), glm::vec3(10.f), glm::vec3(0.4f), glm::vec3(0.5f)));
 	
 	//Load Glass
 	std::vector<glm::vec3> vegetation;
@@ -98,6 +105,7 @@ void LoadModels(Scene& scene) {
 	for (auto& pos : vegetation) {
 		glm::mat4 model = glm::mat4(1.0f);
 		auto vegi = std::make_shared<Model>(grassMeshes);
+		vegi->SetDataSourceGenerated("transparent_window_quad");
 		vegi->position = pos;
 		vegi->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
 		vegi->SetShader(shaderManager.GetShader(ShaderManager::Grass));
@@ -122,6 +130,7 @@ void LoadModels(Scene& scene) {
 	planeMeshes.emplace_back(planeVertices,planeIndices,planeMaterial,"materials/brickwall/brickwall.xml");
 
 	auto plane = std::make_shared<Model>(planeMeshes);
+	plane->SetDataSourceGenerated("plane_quad");
 	plane->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
 	plane->AddOtherShader(OtherShaderType::normalLines, shaderManager.GetShader(ShaderManager::NormalLines));
 	plane->SetShader(shaderManager.GetShader(ShaderManager::Phong));
@@ -129,6 +138,7 @@ void LoadModels(Scene& scene) {
 	plane->SetName("plane");
 
 	auto ceiling = std::make_shared<Model>(planeMeshes);
+	ceiling->SetDataSourceGenerated("plane_quad");
 	ceiling->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
 	ceiling->AddOtherShader(OtherShaderType::normalLines, shaderManager.GetShader(ShaderManager::NormalLines));
 	ceiling->SetShader(shaderManager.GetShader(ShaderManager::Phong));
@@ -150,6 +160,7 @@ void LoadModels(Scene& scene) {
 	std::vector<Mesh> wallMeshes;
 	wallMeshes.emplace_back(wallVertices, wallIndices, planeMaterial, "materials/brickwall/brickwall.xml");
 	auto wall1 = std::make_shared<Model>(wallMeshes);
+	wall1->SetDataSourceGenerated("wall_quad");
 	wall1->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
 	wall1->AddOtherShader(OtherShaderType::normalLines, shaderManager.GetShader(ShaderManager::NormalLines));
 	wall1->SetShader(shaderManager.GetShader(ShaderManager::Phong));
@@ -159,6 +170,7 @@ void LoadModels(Scene& scene) {
 	wall1->position = glm::vec3(-5.0, 5.0, 0);
 
 	auto wall2 = std::make_shared<Model>(wallMeshes);
+	wall2->SetDataSourceGenerated("wall_quad");
 	wall2->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
 	wall2->SetShader(shaderManager.GetShader(ShaderManager::Phong));
 	scene.modelSource.AddModel(wall2);
@@ -167,10 +179,16 @@ void LoadModels(Scene& scene) {
 	wall2->position = glm::vec3(5.0, 0, 0);
 
 	auto wall3 = std::make_shared<Model>(wallMeshes);
+	wall3->SetDataSourceGenerated("wall_quad");
 	wall3->AddOtherShader(OtherShaderType::outline, shaderManager.GetShader(ShaderManager::Outline));
 	wall3->SetShader(shaderManager.GetShader(ShaderManager::Phong));
 	scene.modelSource.AddModel(wall3);
 	wall3->SetName("wall3");
 	wall3->SetRotation(glm::vec3(0, -90, -90));
 	wall3->SetPosition(glm::vec3(0, 5, -5));
+}
+
+void LoadModels(Scene& scene) {
+	LoadDefaultLights(scene);
+	LoadDefaultModels(scene);
 }

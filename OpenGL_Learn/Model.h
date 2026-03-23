@@ -74,6 +74,28 @@ private:
 
 class Model : public BaseObject {
 public:
+	// Model 的“数据来源”用于 Scene Save/Load：文件加载 or 程序生成。
+	enum class DataSourceType {
+		File,
+		Generated
+	};
+
+	DataSourceType GetDataSourceType() const { return m_dataSourceType; }
+	const std::string& GetDataSourceFilePath() const { return m_dataSourceFilePath; }
+	const std::string& GetDataSourceGeneratorId() const { return m_dataSourceGeneratorId; }
+
+	void SetDataSourceFile(const std::string& path) {
+		m_dataSourceType = DataSourceType::File;
+		m_dataSourceFilePath = path;
+		m_dataSourceGeneratorId.clear();
+	}
+
+	void SetDataSourceGenerated(const std::string& generatorId) {
+		m_dataSourceType = DataSourceType::Generated;
+		m_dataSourceGeneratorId = generatorId;
+		m_dataSourceFilePath.clear();
+	}
+
 	struct MeshEntry {
 		Mesh* mesh = nullptr;
 		Material* material = nullptr;
@@ -82,6 +104,8 @@ public:
 	Model(std::string path) {
 		position = glm::vec3(0.0f);
 		rotation = glm::vec3(0.0f);
+		m_dataSourceType = DataSourceType::File;
+		m_dataSourceFilePath = path;
 		loadModel(path);
 		BuildMeshLists();
 		localCenter = CalculateLocalCenter();
@@ -91,6 +115,8 @@ public:
 		position = glm::vec3(0.0f);
 		rotation = glm::vec3(0.0f);
 		m_shader = shader;
+		m_dataSourceType = DataSourceType::File;
+		m_dataSourceFilePath = path;
 		loadModel(path);
 		BuildMeshLists();
 		localCenter = CalculateLocalCenter();
@@ -99,6 +125,8 @@ public:
 	Model(std::string path, glm::mat4 matrix) {
 		position = glm::vec3(0.0f);
 		rotation = glm::vec3(0.0f);
+		m_dataSourceType = DataSourceType::File;
+		m_dataSourceFilePath = path;
 		loadModel(path);
 		BuildMeshLists();
 		localCenter = CalculateLocalCenter();
@@ -108,6 +136,7 @@ public:
 	Model(std::vector<Mesh> inputMeshes) {
 		position = glm::vec3(0.0f);
 		rotation = glm::vec3(0.0f);
+		m_dataSourceType = DataSourceType::Generated;
 		meshes = std::move(inputMeshes);
 		BuildMeshLists();
 		localCenter = CalculateLocalCenter();
@@ -116,6 +145,7 @@ public:
 	Model(std::vector<Mesh> inputMeshes, glm::mat4 matrix) {
 		position = glm::vec3(0.0f);
 		rotation = glm::vec3(0.0f);
+		m_dataSourceType = DataSourceType::Generated;
 		meshes = std::move(inputMeshes);
 		BuildMeshLists();
 		localCenter = CalculateLocalCenter();
@@ -126,6 +156,8 @@ public:
 	Model(std::string path, Material* mat) {
 		position = glm::vec3(0.0f);
 		rotation = glm::vec3(0.0f);
+		m_dataSourceType = DataSourceType::File;
+		m_dataSourceFilePath = path;
 		
 		m_shader = ShaderManager::GetInstance().GetShaderByName(mat->GetShaderName());
 		loadModel(path,mat);
@@ -203,6 +235,9 @@ private:
 	std::string directory;
 	glm::vec3 localCenter;
 	std::string name;
+	DataSourceType m_dataSourceType = DataSourceType::Generated;
+	std::string m_dataSourceFilePath;
+	std::string m_dataSourceGeneratorId;
 	inline static unsigned int count = 0;
 protected:
 	std::vector<Mesh> meshes;

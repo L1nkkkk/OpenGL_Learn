@@ -1,5 +1,11 @@
 #include "Model.h"
 #include "XmlMaterialManager.h"
+#include <unordered_map>
+
+namespace {
+	// 模型缓存：相同 path(+shader) 直接复用已构建 meshes，避免重复 Assimp 解析与 CPU 构建。
+	std::unordered_map<std::string, std::vector<Mesh>> g_modelMeshCache;
+}
 
 void Mesh::ReleaseGL()
 {
@@ -187,6 +193,17 @@ void Model::Draw(Shader* shader, unsigned int start_tex_index )
 
 void Model::loadModel(std::string path,Material* mat)
 {
+	std::string shaderName = (m_shader ? m_shader->shaderName : std::string("phong"));
+	std::string cacheKey = path + "|shader=" + shaderName + (mat ? "|mat=custom" : "|mat=default");
+	if (!mat) {
+		auto it = g_modelMeshCache.find(cacheKey);
+		if (it != g_modelMeshCache.end()) {
+			meshes = it->second;
+			directory = path.substr(0, path.find_last_of('/'));
+			return;
+		}
+	}
+
 	Assimp::Importer importer;
 	const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate  | aiProcess_CalcTangentSpace | aiProcess_FlipUVs);
 
@@ -199,6 +216,9 @@ void Model::loadModel(std::string path,Material* mat)
 	meshes.reserve(scene->mNumMeshes);
 	directory = path.substr(0, path.find_last_of('/'));
 	processNode(scene->mRootNode, scene,mat);
+	if (!mat) {
+		g_modelMeshCache[cacheKey] = meshes;
+	}
 }
 
 void Model::processNode(aiNode* node, const aiScene* scene,Material* mat)
