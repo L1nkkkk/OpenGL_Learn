@@ -7,6 +7,7 @@ layout (location = 4) in vec3 aBitangent;
 
 out VS_OUT {
 	vec3 FragPos;
+	float ViewDepth;
 	vec3 Normal;
 	vec2 TexCoords;
 	mat3 TBN;
@@ -22,6 +23,7 @@ layout (std140) uniform Matrices{
 void main()
 {
 	vs_out.FragPos = vec3(model * vec4(aPos, 1.0));
+	vs_out.ViewDepth = -(view * model * vec4(aPos, 1.0)).z;
 	vs_out.Normal = mat3(transpose(inverse(model))) * aNormal;
 	vs_out.TexCoords = aTexCoords;
 	vec3 T = normalize(vec3(model * vec4(aTangent,   0.0)));

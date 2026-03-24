@@ -355,11 +355,22 @@ int main() {
 
 		// Viewport：默认(INDEX==0)显示最终渲染结果；否则显示所选 FBO 的指定 color/depth 附件
 		unsigned int viewportTextureID = 0;
+		unsigned int viewportReadFBO = 0;
+		int viewportReadAttachment = 0;
+		bool viewportReadIsDepth = false;
+		int viewportReadWidth = properties.SCREEN_WIDTH;
+		int viewportReadHeight = properties.SCREEN_HEIGHT;
 		if (properties.VIEWPORT_DEBUG_FBO_INDEX == 0) {
 			// 最终图（延迟+正向+后处理后的结果）
 			FBO* finalFBO = postprocessRenderPass->GetOutputFBO();
-			if (finalFBO && !finalFBO->textureIDs.empty())
+			if (finalFBO && !finalFBO->textureIDs.empty()) {
 				viewportTextureID = finalFBO->textureIDs[0];
+				viewportReadFBO = finalFBO->framebufferID;
+				viewportReadAttachment = 0;
+				viewportReadIsDepth = false;
+				viewportReadWidth = finalFBO->width;
+				viewportReadHeight = finalFBO->height;
+			}
 		} else {
 			std::vector<FBO*> busyFBOs = FramebuffersManager::GetInstance().GetBusyFBOs();
 			int fboIdx = properties.VIEWPORT_DEBUG_FBO_INDEX - 1;
@@ -367,10 +378,23 @@ int main() {
 				FBO* fbo = busyFBOs[fboIdx];
 				if (!fbo->textureIDs.empty()
 					&& properties.VIEWPORT_DEBUG_ATTACHMENT_INDEX >= 0
-					&& properties.VIEWPORT_DEBUG_ATTACHMENT_INDEX < (int)fbo->textureIDs.size())
+					&& properties.VIEWPORT_DEBUG_ATTACHMENT_INDEX < (int)fbo->textureIDs.size()) {
 					viewportTextureID = fbo->textureIDs[properties.VIEWPORT_DEBUG_ATTACHMENT_INDEX];
+					viewportReadFBO = fbo->framebufferID;
+					viewportReadAttachment = properties.VIEWPORT_DEBUG_ATTACHMENT_INDEX;
+					viewportReadIsDepth = (fbo->attr.isShadowMap && properties.VIEWPORT_DEBUG_ATTACHMENT_INDEX == 0);
+					viewportReadWidth = fbo->width;
+					viewportReadHeight = fbo->height;
+				}
 			}
 		}
+		mygui.SetViewportReadSource(
+			viewportReadFBO,
+			viewportReadAttachment,
+			viewportReadIsDepth,
+			viewportReadWidth,
+			viewportReadHeight
+		);
 		mygui.Viewport_UI(viewportTextureID);
 
 		// Assets ?????? models / materials / shaders ??

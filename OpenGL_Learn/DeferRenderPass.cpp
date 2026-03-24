@@ -28,7 +28,7 @@ FBOAttributes DeferRenderPass::BuildGBufferAttributesFromSystemProperties() cons
 	attr.isBloom = false;
 	attr.isGamma = false;
 	attr.textureAttrs.clear();
-	attr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_RGB16F, GL_RGB, GL_FLOAT });          // gPosition
+	attr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_RGBA16F, GL_RGBA, GL_FLOAT });        // gPosition (rgb: world pos, a: depth)
 	attr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_RGB16F, GL_RGB, GL_FLOAT });          // gNormal
 	attr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_RGB, GL_RGB, GL_UNSIGNED_BYTE });     // gAlbedoSpec
 	attr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_RGBA16F, GL_RGBA, GL_FLOAT });        // gMaterial
@@ -192,10 +192,19 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 	glBindFramebuffer(GL_FRAMEBUFFER, m_gbufferFBO->framebufferID);
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_STENCIL_TEST);
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClearStencil(0);
 	glStencilMask(0x00);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+	glClear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+	// GBuffer clear values:
+	// gPosition.a = 0 means invalid/background pixel (valid mask).
+	const float clearGPos[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	const float clearGNormal[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	const float clearGAlbedo[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	const float clearGMaterial[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	glClearBufferfv(GL_COLOR, 0, clearGPos);
+	glClearBufferfv(GL_COLOR, 1, clearGNormal);
+	glClearBufferfv(GL_COLOR, 2, clearGAlbedo);
+	glClearBufferfv(GL_COLOR, 3, clearGMaterial);
 
 	auto deferProcessShader = ShaderManager::GetInstance().GetShader(ShaderManager::DeferProcess);
 	if (!deferProcessShader) return;

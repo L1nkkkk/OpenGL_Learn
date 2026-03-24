@@ -13,6 +13,7 @@
 #include <unordered_map>
 #include <filesystem>
 #include <cstring>
+#include <array>
 #include <windows.h>
 #include <commdlg.h>
 
@@ -379,10 +380,52 @@ public:
 				ImVec2(0.0f, 1.0f),
 				ImVec2(1.0f, 0.0f)
 			);
+
+			// Click-to-pick: sample RGBA/depth from currently displayed framebuffer attachment.
+			if (m_viewportReadFBO != 0 &&
+				ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) &&
+				ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+			{
+				const ImVec2 imgMin = ImGui::GetItemRectMin();
+				const ImVec2 imgMax = ImGui::GetItemRectMax();
+				const ImVec2 mouse = ImGui::GetMousePos();
+				const float w = imgMax.x - imgMin.x;
+				const float h = imgMax.y - imgMin.y;
+				if (w > 0.0f && h > 0.0f && m_viewportReadWidth > 0 && m_viewportReadHeight > 0) {
+					float u = (mouse.x - imgMin.x) / w;
+					float v = (mouse.y - imgMin.y) / h;
+					u = (u < 0.0f) ? 0.0f : (u > 1.0f ? 1.0f : u);
+					v = (v < 0.0f) ? 0.0f : (v > 1.0f ? 1.0f : v);
+					const int px = (int)(u * (float)m_viewportReadWidth);
+					const int py = (int)(v * (float)m_viewportReadHeight);
+					// OpenGL readback origin is bottom-left.
+					ReadViewportPixel(px, m_viewportReadHeight - 1 - py);
+				}
+			}
+
+			if (m_hasPickedPixel) {
+				ImGui::Separator();
+				ImGui::Text("Picked Pixel: (%d, %d)", m_pickedX, m_pickedY);
+				if (m_viewportReadIsDepth) {
+					ImGui::Text("Depth: %.6f", m_pickedRGBA[0]);
+				}
+				else {
+					ImGui::Text("RGBA: %.6f, %.6f, %.6f, %.6f",
+						m_pickedRGBA[0], m_pickedRGBA[1], m_pickedRGBA[2], m_pickedRGBA[3]);
+				}
+			}
 		}
 		else {
 			ImGui::TextUnformatted("No viewport texture.");
 		}
+	}
+
+	void SetViewportReadSource(unsigned int fboID, int attachmentIndex, bool isDepth, int width, int height) {
+		m_viewportReadFBO = fboID;
+		m_viewportReadAttachment = attachmentIndex;
+		m_viewportReadIsDepth = isDepth;
+		m_viewportReadWidth = width;
+		m_viewportReadHeight = height;
 	}
 
 	void Framebuffers_UI() {
@@ -868,6 +911,42 @@ public:
 		ImGui::End();
 	}
 private:
+	void ReadViewportPixel(int x, int y) {
+		GLint prevReadFBO = 0;
+		GLint prevReadBuffer = 0;
+		glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prevReadFBO);
+		glGetIntegerv(GL_READ_BUFFER, &prevReadBuffer);
+
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, m_viewportReadFBO);
+		if (m_viewportReadIsDepth) {
+			float d = 0.0f;
+			glReadPixels(x, y, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &d);
+			m_pickedRGBA = { d, d, d, 1.0f };
+		}
+		else {
+			glReadBuffer(GL_COLOR_ATTACHMENT0 + m_viewportReadAttachment);
+			float rgba[4] = { 0, 0, 0, 0 };
+			glReadPixels(x, y, 1, 1, GL_RGBA, GL_FLOAT, rgba);
+			m_pickedRGBA = { rgba[0], rgba[1], rgba[2], rgba[3] };
+		}
+
+		m_pickedX = x;
+		m_pickedY = y;
+		m_hasPickedPixel = true;
+
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, (unsigned int)prevReadFBO);
+		glReadBuffer((unsigned int)prevReadBuffer);
+	}
+
 	MyGui() = default;
 	SystemProperties& properties = SystemProperties::GetInstance();
+	unsigned int m_viewportReadFBO = 0;
+	int m_viewportReadAttachment = 0;
+	bool m_viewportReadIsDepth = false;
+	int m_viewportReadWidth = 0;
+	int m_viewportReadHeight = 0;
+	bool m_hasPickedPixel = false;
+	int m_pickedX = 0;
+	int m_pickedY = 0;
+	std::array<float, 4> m_pickedRGBA = { 0.0f, 0.0f, 0.0f, 0.0f };
 };
