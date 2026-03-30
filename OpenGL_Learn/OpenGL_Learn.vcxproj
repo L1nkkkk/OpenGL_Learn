@@ -148,6 +148,7 @@
     <ClCompile Include="Object.cpp" />
     <ClCompile Include="PostprocessRenderPass.cpp" />
     <ClCompile Include="SceneStateIO.cpp" />
+    <ClCompile Include="SSAORenderPass.cpp" />
     <ClCompile Include="Scene.cpp" />
     <ClCompile Include="Shader.cpp" />
     <ClCompile Include="ShaderManager.cpp" />
@@ -171,6 +172,7 @@
     <ClInclude Include="RenderPass.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="SceneStateIO.h" />
+    <ClInclude Include="SSAORenderPass.h" />
     <ClInclude Include="Scene.h" />
     <ClInclude Include="Shader.h" />
     <ClInclude Include="ShaderManager.h" />
@@ -234,7 +236,6 @@
     <None Include="VertexShader.glsl" />
   </ItemGroup>
   <ItemGroup>
-    <Image Include="..\..\Utils\ImageAlphaChecker\black_a0.2_512.png" />
     <Image Include="materials\transparent_window\blending_transparent_window.png" />
   </ItemGroup>
   <ItemGroup>

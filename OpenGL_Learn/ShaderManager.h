@@ -50,6 +50,7 @@ public:
 		DeferDirLightVolume,
 		LightVolume,
 		LightVolumeFullscreen,
+		SSAO,
 		//StartGeometryShaderIndex
 		Explode,
 		NormalLines,
@@ -124,6 +125,7 @@ private:
 		"deferDirLightVolume",
 		"lightVolume",
 		"lightVolumeFullscreen",
+		"ssao",
 		"explode",
 		"normal",
 		"shadowCube"

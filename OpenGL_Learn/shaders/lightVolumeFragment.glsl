@@ -45,6 +45,8 @@ uniform sampler2D gPosition;
 uniform sampler2D gNormal;
 uniform sampler2D gAlbedoSpec;
 uniform sampler2D gMaterial;
+uniform sampler2D ssaoMap;
+uniform bool useSSAO;
 
 #define EPS 1e-5
 #define PI 3.141592653589793
@@ -175,6 +177,7 @@ void main()
 	float shadow = 0.0;
 	
 	vec3 color = texture(gAlbedoSpec,TexCoords).rgb;
+	float ao = useSSAO ? texture(ssaoMap, TexCoords).r : 1.0;
 	vec3 fragPos = texture(gPosition, TexCoords).rgb;
 	vec3 normal = normalize(texture(gNormal, TexCoords).rgb);
 	vec3 lightDir = normalize(pointLight.position - fragPos);
@@ -189,7 +192,7 @@ void main()
 	float distance = length(pointLight.position - fragPos);
 	float attenuation = 1.0 / (pointLight.constant + pointLight.linear * distance + pointLight.quadratic * (distance * distance));
 	// combine results
-	vec3 ambient = pointLight.ambient * material.r;
+	vec3 ambient = pointLight.ambient * material.r * ao;
 	vec3 diffuse = pointLight.diffuse * material.g *diff;
 	vec3 specular = pointLight.specular * material.b* spec;
 	ambient *= attenuation;

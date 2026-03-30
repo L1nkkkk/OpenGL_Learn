@@ -5,6 +5,7 @@
 void DeferRenderPass::Init(int width, int height)
 {
 	UpdateFBOFromSystemProperties();
+	m_ssao.Init(width, height);
 }
 
 FBOAttributes DeferRenderPass::BuildAttributesFromSystemProperties()
@@ -65,6 +66,8 @@ void DeferRenderPass::DrawPointLightVolumesDeferred(Scene* scene)
 	if (!defaultShader || !lightVolumeShader) return;
 
 	auto& properties = SystemProperties::GetInstance();
+	const FBO* ssaoFBO = properties.SSAO ? m_ssao.GetOutputFBO() : nullptr;
+	const bool useSSAOInLighting = ssaoFBO && !ssaoFBO->textureIDs.empty();
 	lightVolumeShader->use();
 	if (scene->camera_ptr) {
 		lightVolumeShader->setVec3("viewPos", scene->camera_ptr->cameraPos);
@@ -81,6 +84,12 @@ void DeferRenderPass::DrawPointLightVolumesDeferred(Scene* scene)
 	glActiveTexture(GL_TEXTURE3);
 	glBindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[3]);
 	lightVolumeShader->setInt("gMaterial", 3);
+	lightVolumeShader->setBool("useSSAO", useSSAOInLighting);
+	if (useSSAOInLighting) {
+		glActiveTexture(GL_TEXTURE5);
+		glBindTexture(GL_TEXTURE_2D, ssaoFBO->textureIDs[0]);
+		lightVolumeShader->setInt("ssaoMap", 5);
+	}
 
 	glEnable(GL_STENCIL_TEST);
 	glBlendEquation(GL_FUNC_ADD);
@@ -146,6 +155,10 @@ void DeferRenderPass::DrawPointLightVolumesDeferred(Scene* scene)
 		glBindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[2]);
 		glActiveTexture(GL_TEXTURE3);
 		glBindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[3]);
+		if (useSSAOInLighting) {
+			glActiveTexture(GL_TEXTURE5);
+			glBindTexture(GL_TEXTURE_2D, ssaoFBO->textureIDs[0]);
+		}
 
 		pointLight.DrawPointLight();
 
@@ -185,6 +198,10 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 	}
 	if (!m_gbufferFBO || m_gbufferFBO->textureIDs.size() < 4) return;
 
+	auto& properties = SystemProperties::GetInstance();
+	const FBO* ssaoFBO = properties.SSAO ? m_ssao.GetOutputFBO() : nullptr;
+	const bool useSSAOInLighting = ssaoFBO && !ssaoFBO->textureIDs.empty();
+
 	scene->DrawShadowMap();
 
 	// 1) Geometry pass: write opaque meshes into GBuffer.
@@ -216,8 +233,11 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 		item.mesh->Draw(deferProcessShader.get());
 	}
 
+	if (properties.SSAO) {
+		m_ssao.Render(scene, m_gbufferFBO);
+	}
+
 	// Copy depth to output target so skybox / transparent passes can share it.
-	auto& properties = SystemProperties::GetInstance();
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, m_gbufferFBO->framebufferID);
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_outputFBO->framebufferID);
 	glBlitFramebuffer(
@@ -245,6 +265,13 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 			deferLightShader->setVec3("viewPos", scene->camera_ptr->cameraPos);
 		}
 		BindGBufferTextures(*deferLightShader, texSlot);
+		deferLightShader->setBool("useSSAO", useSSAOInLighting);
+		if (useSSAOInLighting) {
+			glActiveTexture(GL_TEXTURE0 + texSlot);
+			glBindTexture(GL_TEXTURE_2D, ssaoFBO->textureIDs[0]);
+			deferLightShader->setInt("ssaoMap", texSlot);
+			++texSlot;
+		}
 
 		glBindVertexArray(globalVAOs.quadVAO);
 		glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -259,6 +286,13 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 			deferDirShader->setVec3("viewPos", scene->camera_ptr->cameraPos);
 		}
 		BindGBufferTextures(*deferDirShader, texSlot);
+		deferDirShader->setBool("useSSAO", useSSAOInLighting);
+		if (useSSAOInLighting) {
+			glActiveTexture(GL_TEXTURE0 + texSlot);
+			glBindTexture(GL_TEXTURE_2D, ssaoFBO->textureIDs[0]);
+			deferDirShader->setInt("ssaoMap", texSlot);
+			++texSlot;
+		}
 
 		glBindVertexArray(globalVAOs.quadVAO);
 		glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -269,6 +303,10 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 	// 3) Forward extras on top of deferred base.
 	glBindFramebuffer(GL_FRAMEBUFFER, m_outputFBO->framebufferID);
 	glEnable(GL_DEPTH_TEST);
+	// Forward stage relies on USED_TEXTURE_NUM for per-material/skybox bindings.
+	// Reset here to avoid stale texture unit growth across deferred lighting paths.
+	properties.USED_TEXTURE_NUM = 0;
+	glActiveTexture(GL_TEXTURE0);
 	scene->DrawPointLights();
 	if (scene->camera_ptr) {
 		scene->DrawSkybox(scene->camera_ptr->GetViewMatrix());
@@ -281,6 +319,7 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 
 void DeferRenderPass::Destroy()
 {
+	m_ssao.Destroy();
 	FramebuffersManager::GetInstance().ReleaseFBO(m_gbufferFBO);
 	m_gbufferFBO = nullptr;
 	FramebuffersManager::GetInstance().ReleaseFBO(m_outputFBO);

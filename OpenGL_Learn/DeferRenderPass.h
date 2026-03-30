@@ -1,5 +1,6 @@
 #pragma once
 #include "RenderPass.h"
+#include "SSAORenderPass.h"
 
 class DeferRenderPass : public RenderPass {
 public:
@@ -12,6 +13,7 @@ public:
 protected:
 	FBOAttributes BuildAttributesFromSystemProperties() override;
 	FBO* m_gbufferFBO = nullptr;
+	SSAORenderPass m_ssao;
 
 private:
 	FBOAttributes BuildGBufferAttributesFromSystemProperties() const;

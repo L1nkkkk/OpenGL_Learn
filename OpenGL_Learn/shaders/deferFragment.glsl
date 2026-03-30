@@ -7,9 +7,12 @@ uniform sampler2D gPosition;
 uniform sampler2D gNormal;
 uniform sampler2D gAlbedoSpec;
 uniform sampler2D gMaterial;
+uniform sampler2D ssaoMap;
+uniform bool useSSAO;
 
 vec3 albedoSpec;
 vec4 material;//r : ambinent g:diffuse b:spec a : shinings
+float gAO = 1.0;
 
 struct DirLight{
 	vec3 direction;
@@ -282,7 +285,7 @@ vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir,float shadow)
 	vec3 halfwayDir = normalize(lightDir + viewDir);
 	float spec = pow(max(dot(normal, halfwayDir), 0.0), material.a);
 	// combine results
-	vec3 ambient = light.ambient * material.r;
+	vec3 ambient = light.ambient * material.r * gAO;
 	vec3 diffuse = light.diffuse * material.g *diff;
 	vec3 specular = light.specular * material.b* spec;
 	return (ambient + (1.0-shadow)*(diffuse + specular))* color;
@@ -301,7 +304,7 @@ vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir,fl
 	float distance = length(light.position - fragPos);
 	float attenuation = 1.0 / (light.constant + light.linear * distance + light.quadratic * (distance * distance));
 	// combine results
-	vec3 ambient = light.ambient * material.r;
+	vec3 ambient = light.ambient * material.r * gAO;
 	vec3 diffuse = light.diffuse * material.g *diff;
 	vec3 specular = light.specular * material.b* spec;
 	ambient *= attenuation;
@@ -327,7 +330,7 @@ vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir,floa
 	float epsilon = light.cutOff - light.outerCutOff;
 	float intensity = clamp((theta - light.outerCutOff) / epsilon, 0.0, 1.0);
 	// combine results
-	vec3 ambient = light.ambient * material.r;
+	vec3 ambient = light.ambient * material.r * gAO;
 	vec3 diffuse = light.diffuse * material.g *diff;
 	vec3 specular = light.specular * material.b* spec;
 	ambient *= attenuation * intensity;
@@ -339,6 +342,7 @@ vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir,floa
 void main(){
 	albedoSpec = texture(gAlbedoSpec, TexCoords).rgb;
 	material = texture(gMaterial, TexCoords);
+	gAO = useSSAO ? texture(ssaoMap, TexCoords).r : 1.0;
 	vec3 norm = normalize(texture(gNormal,TexCoords).rgb);
 	vec3 FragPos = texture(gPosition,TexCoords).rgb;
 	vec3 viewDir = normalize(viewPos - FragPos);

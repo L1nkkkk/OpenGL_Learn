@@ -69,6 +69,11 @@ public:
     int BLOOM_BLUR_ITERATIONS = 5;
 
     bool DEFER_RENDERING = false;
+    /// 屏幕空间环境光遮蔽（仅延迟管线）：当前为采样 Pass 输出 R8/R16 可视度纹理，后续再接入模糊与光照。
+    bool SSAO = false;
+    float SSAO_RADIUS = 0.35f;
+    float SSAO_BIAS = 0.025f;
+    int SSAO_KERNEL_SIZE = 64;
     bool LIGHT_VOLUME = false;
     /// ??????? = ?????? ?? ???????????/??????????????
     float LIGHT_VOLUME_RADIUS_SCALE = 1.0f;

@@ -244,6 +244,14 @@ public:
 		}
 		ImGui::Checkbox("Defer Rendering", &properties.DEFER_RENDERING);
 		if (properties.DEFER_RENDERING) {
+			ImGui::Checkbox("SSAO", &properties.SSAO);
+			if (properties.SSAO) {
+				ImGui::Indent();
+				ImGui::DragFloat("SSAO radius", &properties.SSAO_RADIUS, 0.01f, 0.05f, 2.0f, "%.3f");
+				ImGui::DragFloat("SSAO bias", &properties.SSAO_BIAS, 0.001f, 0.0f, 0.2f, "%.4f");
+				ImGui::DragInt("SSAO kernel", &properties.SSAO_KERNEL_SIZE, 1.0f, 8, 64);
+				ImGui::Unindent();
+			}
 			ImGui::Checkbox("Light Volume", &properties.LIGHT_VOLUME);
 			if (properties.LIGHT_VOLUME) {
 				ImGui::Indent();
