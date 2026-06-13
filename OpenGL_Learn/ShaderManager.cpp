@@ -51,7 +51,15 @@ void ShaderManager::Init() {
 }
 
 void ShaderManager::LoadShader(std::string name) {
-	m_shaderMap[name] = std::make_shared<Shader>(name);
+	auto it = m_shaderMap.find(name);
+	if (it == m_shaderMap.end()) {
+		m_shaderMap[name] = std::make_shared<Shader>(name);
+	}
+	else {
+		it->second->shaderName = name;
+		it->second->SetSourcePaths("shaders/" + name + "Vertex.glsl", "shaders/" + name + "Fragment.glsl");
+		it->second->Reload(true);
+	}
 	m_shaderMap[name]->shaderName = name;
 	std::cout << "Loaded shader: " << name << std::endl;
 
@@ -62,11 +70,74 @@ void ShaderManager::LoadGeometryShader(std::string name) {
 	std::string vertexPath = "shaders/" + name + "Vertex.glsl";
 	std::string geometryPath = "shaders/" + name + "Geometry.glsl";
 	std::string fragmentPath = "shaders/" + name + "Fragment.glsl";
-	m_shaderMap[name] = std::make_shared<GeometryShader>(vertexPath.c_str(), geometryPath.c_str(), fragmentPath.c_str());
+	auto it = m_shaderMap.find(name);
+	if (it == m_shaderMap.end()) {
+		m_shaderMap[name] = std::make_shared<GeometryShader>(vertexPath.c_str(), geometryPath.c_str(), fragmentPath.c_str());
+	}
+	else {
+		it->second->shaderName = name;
+		it->second->SetSourcePaths(vertexPath, fragmentPath, geometryPath);
+		it->second->Reload(true);
+	}
 	m_shaderMap[name]->shaderName = name;
 	std::cout << "Loaded shader: " << name << std::endl;
 
 	BindUniformBlocks(*m_shaderMap[name]);
+}
+
+bool ShaderManager::ReloadShader(const std::string& name, bool force)
+{
+	auto it = m_shaderMap.find(name);
+	if (it == m_shaderMap.end() || !it->second) {
+		m_lastReloadSuccessful = false;
+		m_lastReloadMessage = "Shader not found: " + name;
+		return false;
+	}
+
+	std::string errorMessage;
+	const bool reloaded = it->second->Reload(force, &errorMessage);
+	if (!errorMessage.empty()) {
+		m_lastReloadSuccessful = false;
+		m_lastReloadMessage = errorMessage;
+		return false;
+	}
+	if (!reloaded) {
+		return false;
+	}
+
+	BindUniformBlocks(*it->second);
+	m_lastReloadSuccessful = true;
+	m_lastReloadMessage = "Reloaded shader: " + name;
+	++m_reloadCount;
+	return true;
+}
+
+int ShaderManager::ReloadChangedShaders()
+{
+	int reloads = 0;
+	for (auto& [name, shader] : m_shaderMap) {
+		if (!shader || !shader->HasSourceChanges()) {
+			continue;
+		}
+		if (ReloadShader(name, false)) {
+			++reloads;
+		}
+	}
+	return reloads;
+}
+
+int ShaderManager::ReloadAllShaders()
+{
+	int reloads = 0;
+	for (auto& [name, shader] : m_shaderMap) {
+		if (!shader) {
+			continue;
+		}
+		if (ReloadShader(name, true)) {
+			++reloads;
+		}
+	}
+	return reloads;
 }
 
 void ShaderManager::SetUBOData(UniformBufferType uboType, unsigned int offset, size_t size,const void* dataPtr) {
@@ -78,8 +149,11 @@ void ShaderManager::SetUBOData(UniformBufferType uboType, unsigned int offset, s
 
 std::shared_ptr<Shader> ShaderManager::GetShader(int index) {
 	assert(index < m_shaderMap.size() && "����Shader���ʷ�Χ��");
-	if (index < 0 || index > shaderNames.size()+geometryShaderNames.size()) return nullptr;
-	return GetShaderByName(shaderNames[index]);
+	const int shaderCount = static_cast<int>(shaderNames.size());
+	const int geometryCount = static_cast<int>(geometryShaderNames.size());
+	if (index < 0 || index >= shaderCount + geometryCount) return nullptr;
+	if (index < shaderCount) return GetShaderByName(shaderNames[index]);
+	return GetShaderByName(geometryShaderNames[index - shaderCount]);
 }
 
 std::shared_ptr<Shader> ShaderManager::GetShaderByName(std::string name) {

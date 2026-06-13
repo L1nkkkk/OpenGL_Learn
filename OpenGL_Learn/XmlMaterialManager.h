@@ -3,6 +3,8 @@
 #include <string>
 #include <unordered_map>
 #include <memory>
+#include <filesystem>
+#include <vector>
 
 #include "Material.h"
 #include "Global.h"
@@ -23,6 +25,8 @@ public:
 
     // 若文件时间戳发生变化，则重新加载 XML
     void ReloadIfFileChanged();
+    int ReloadChangedFiles();
+    int ReloadAllFiles();
 
     // 获取共享材质；若不存在返回空指针
     std::shared_ptr<Material> GetMaterial(const std::string& name);
@@ -47,6 +51,10 @@ public:
     // 以及按文件路径缓存的单文件材质）。
     // key 对于大材质表是材质名，对于单文件材质是 xml 路径。
     std::vector<std::pair<std::string, std::shared_ptr<Material>>> GetAllMaterials() const;
+    const std::string& GetLastReloadMessage() const { return m_lastReloadMessage; }
+    bool WasLastReloadSuccessful() const { return m_lastReloadSuccessful; }
+    int GetReloadCount() const { return m_reloadCount; }
+    size_t GetMaterialRevision() const { return m_materialRevision; }
 
 private:
     XmlMaterialManager() = default;
@@ -59,13 +67,20 @@ private:
     struct MaterialFileEntry {
         std::shared_ptr<Material> material;
         std::string lastContent;
+        std::filesystem::file_time_type lastWriteTime = {};
     };
     bool ParseSingleMaterial(const std::string& xmlContent, MaterialFileEntry& entry);
+    static bool TryGetWriteTime(const std::string& path, std::filesystem::file_time_type& outTime);
 
 private:
     std::unordered_map<std::string, std::shared_ptr<Material>> m_materials;
     std::string m_xmlPath;
     bool m_hasLoaded = false;
+    std::filesystem::file_time_type m_xmlWriteTime = {};
+    std::string m_lastReloadMessage;
+    bool m_lastReloadSuccessful = true;
+    int m_reloadCount = 0;
+    size_t m_materialRevision = 0;
 
     // 按文件路径缓存的材质（一个 xml 文件对应一个 entry，用于懒加载 + 热重载）
     std::unordered_map<std::string, MaterialFileEntry> m_materialFiles;

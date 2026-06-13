@@ -31,6 +31,7 @@ Mesh::~Mesh()
 Mesh::Mesh(const Mesh& other)
 	: vertices(other.vertices)
 	, material_ptr(other.material_ptr)
+	, material_owner(other.material_owner)
 	, start_tex_index(other.start_tex_index)
 	, materialXmlPath(other.materialXmlPath)
 	, m_active(other.m_active)
@@ -49,6 +50,7 @@ Mesh& Mesh::operator=(const Mesh& other)
 	ReleaseGL();
 	vertices = other.vertices;
 	material_ptr = other.material_ptr;
+	material_owner = other.material_owner;
 	start_tex_index = other.start_tex_index;
 	materialXmlPath = other.materialXmlPath;
 	m_active = other.m_active;
@@ -59,6 +61,7 @@ Mesh& Mesh::operator=(const Mesh& other)
 Mesh::Mesh(Mesh&& other) noexcept
 	: vertices(std::move(other.vertices))
 	, material_ptr(other.material_ptr)
+	, material_owner(std::move(other.material_owner))
 	, start_tex_index(other.start_tex_index)
 	, materialXmlPath(std::move(other.materialXmlPath))
 	, m_active(other.m_active)
@@ -67,6 +70,7 @@ Mesh::Mesh(Mesh&& other) noexcept
 	, EBO(other.EBO)
 {
 	other.material_ptr = nullptr;
+	other.material_owner.reset();
 	other.start_tex_index = 0;
 	other.VAO = 0;
 	other.VBO = 0;
@@ -82,6 +86,7 @@ Mesh& Mesh::operator=(Mesh&& other) noexcept
 	ReleaseGL();
 	vertices = std::move(other.vertices);
 	material_ptr = other.material_ptr;
+	material_owner = std::move(other.material_owner);
 	start_tex_index = other.start_tex_index;
 	materialXmlPath = std::move(other.materialXmlPath);
 	m_active = other.m_active;
@@ -90,6 +95,7 @@ Mesh& Mesh::operator=(Mesh&& other) noexcept
 	EBO = other.EBO;
 
 	other.material_ptr = nullptr;
+	other.material_owner.reset();
 	other.start_tex_index = 0;
 	other.VAO = 0;
 	other.VBO = 0;
@@ -101,11 +107,16 @@ Mesh& Mesh::operator=(Mesh&& other) noexcept
 Mesh::Mesh(std::vector<Vertex> vertices,
 		std::vector<unsigned int> indices,
 		   Material* material,
+		   std::shared_ptr<Material> ownedMaterial,
            const std::string& materialXmlPathIn)
 {
 	this->vertices = ComputeTBNVertices(vertices,indices);
+	this->material_owner = std::move(ownedMaterial);
 	if(material) {
 		this->material_ptr = material;
+	}
+	else if (this->material_owner) {
+		this->material_ptr = this->material_owner.get();
 	}
 	else {
 		this->material_ptr = XmlMaterialManager::GetInstance().GetOrLoadMaterialByFile(materialXmlPathIn);
@@ -115,6 +126,14 @@ Mesh::Mesh(std::vector<Vertex> vertices,
 	// 默认：Mesh 可见 / 可绘制
 	SetActiveStatus(true);
 	setupMesh();
+}
+
+Mesh::Mesh(std::vector<Vertex> vertices,
+		std::vector<unsigned int> indices,
+		Material* material,
+		const std::string& materialXmlPathIn)
+	: Mesh(std::move(vertices), std::move(indices), material, std::shared_ptr<Material>(), materialXmlPathIn)
+{
 }
 
 void Mesh::setupMesh()
@@ -165,7 +184,7 @@ void Mesh::Draw(Shader* shader)
 	if (shader) shader->use();
 	glActiveTexture(GL_TEXTURE0);
 	glBindVertexArray(VAO);
-	glDrawArrays(GL_TRIANGLES, 0, vertices.size());
+	glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size()));
 	glBindVertexArray(0);
 }
 
@@ -271,6 +290,36 @@ void Model::BuildMeshLists()
 	}
 }
 
+void Model::RefreshMaterialDrivenState()
+{
+	auto& materialManager = XmlMaterialManager::GetInstance();
+	const size_t materialRevision = materialManager.GetMaterialRevision();
+	if (m_lastAppliedMaterialRevision == materialRevision) {
+		return;
+	}
+
+	for (auto& mesh : meshes) {
+		if (!mesh.materialXmlPath.empty()) {
+			if (Material* xmlMaterial = materialManager.GetOrLoadMaterialByFile(mesh.materialXmlPath)) {
+				mesh.material_ptr = xmlMaterial;
+			}
+		}
+	}
+
+	for (const auto& mesh : meshes) {
+		if (mesh.material_ptr) {
+			auto shader = ShaderManager::GetInstance().GetShaderByName(mesh.material_ptr->GetShaderName());
+			if (shader) {
+				m_shader = shader;
+			}
+			break;
+		}
+	}
+
+	BuildMeshLists();
+	m_lastAppliedMaterialRevision = materialRevision;
+}
+
 Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 {
 	std::vector<Vertex> vertices;
@@ -311,7 +360,7 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 		<< " | MatID: " << mesh->mMaterialIndex << std::endl;
 	std::string xmlPath;
 	if(mat) {
-		return Mesh(vertices, indices, mat);
+		return Mesh(vertices, indices, mat, std::shared_ptr<Material>(), std::string());
 	}
 	else if (mesh->mMaterialIndex >= 0) {
 		aiMaterial* aiMat = scene->mMaterials[mesh->mMaterialIndex];
@@ -319,17 +368,25 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 		aiString aiName;
 		if (aiMat->Get(AI_MATKEY_NAME, aiName) == AI_SUCCESS) {
             // 约定：一个材质对应一个 xml 文件，如 materials/Wood.xml
-			material = new Material(m_shader->shaderName);
-			prosessMaterial(aiMat, material);
-		}
-
-		if (!material) {
 			xmlPath = "materials/";
 			xmlPath += aiName.C_Str();
 			xmlPath += ".xml";
 			if (Material* xmlMat = XmlMaterialManager::GetInstance().GetOrLoadMaterialByFile(xmlPath)) {
 				material = xmlMat;
 			}
+			else {
+				std::shared_ptr<Material> ownedMaterial = std::make_shared<Material>(m_shader->shaderName);
+				material = ownedMaterial.get();
+				prosessMaterial(aiMat, material);
+				return Mesh(vertices, indices, material, ownedMaterial, std::string());
+			}
+		}
+
+		if (!material) {
+			std::shared_ptr<Material> ownedMaterial = std::make_shared<Material>(m_shader->shaderName);
+			material = ownedMaterial.get();
+			prosessMaterial(aiMat, material);
+			return Mesh(vertices, indices, material, ownedMaterial, std::string());
 		}
 	}
 	else {
@@ -338,10 +395,12 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
         if (Material* xmlMat = XmlMaterialManager::GetInstance().GetOrLoadMaterialByFile(xmlPath)) {
             material = xmlMat;
         } else {
-		    material = new Material(m_shader->shaderName);
+			std::shared_ptr<Material> ownedMaterial = std::make_shared<Material>(m_shader->shaderName);
+			material = ownedMaterial.get();
+			return Mesh(vertices,indices, material, ownedMaterial, xmlPath);
         }
 	}
-	return Mesh(vertices,indices, material, xmlPath);
+	return Mesh(vertices,indices, material, nullptr, xmlPath);
 }
 
 void Model::prosessMaterial(aiMaterial* mat,Material* material)

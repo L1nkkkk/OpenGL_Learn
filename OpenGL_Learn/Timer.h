@@ -1,9 +1,9 @@
-#pragma once
+ï»¿#pragma once
+#include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <mutex>
-#include <atomic>
 
-// Engine Time Manager
 class Timer
 {
 public:
@@ -18,31 +18,22 @@ public:
         return instance;
     }
 
-	// Per-frame update (should be called once per frame)
     void Tick()
     {
         std::lock_guard<std::mutex> lock(m_mutex);
 
         auto now = std::chrono::steady_clock::now();
-
-		//compute delta time
         std::chrono::duration<float> delta = now - m_lastTimePoint;
         m_deltaTime = delta.count();
-
-		//update total time with time scale
-        m_totalTime += m_deltaTime * m_timeScale;
-
-		//update last time point for next frame
+        m_totalTime += m_deltaTime * m_timeScale.load();
         m_lastTimePoint = now;
-
-		//update FPS statistics
         UpdateFPS();
     }
 
     float GetDeltaTime() const
     {
         std::lock_guard<std::mutex> lock(m_mutex);
-        return m_deltaTime * m_timeScale;
+        return m_deltaTime * m_timeScale.load();
     }
 
     float GetRawDeltaTime() const
@@ -51,23 +42,20 @@ public:
         return m_deltaTime;
     }
 
-	// Get total time since engine start (affected by time scale)
     float GetTotalTime() const
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         return m_totalTime;
     }
 
-	// set time scale (e.g., for slow motion or fast forward)
     void SetTimeScale(float scale)
     {
-        m_timeScale = std::max(0.0f, scale);
+        m_timeScale.store((std::max)(0.0f, scale));
     }
 
-	//get current fps
     int GetFPS() const
     {
-        return m_fps.load(); // atomicÎÞÐèËø
+        return m_fps.load();
     }
 
 private:
@@ -84,26 +72,23 @@ private:
 
     void UpdateFPS()
     {
-        m_frameCount++;
+        ++m_frameCount;
         m_fpsAccumulator += m_deltaTime;
 
         if (m_fpsAccumulator >= 1.0f)
         {
-            m_fps.store(m_frameCount); // Ô­×Ó²Ù×÷£¬Ïß³Ì°²È«
+            m_fps.store(m_frameCount);
             m_frameCount = 0;
-            m_fpsAccumulator -= 1.0f; 
+            m_fpsAccumulator -= 1.0f;
         }
     }
 
-    mutable std::mutex m_mutex; // Ïß³Ì°²È«Ëø£¨mutableÔÊÐíconstº¯Êý¼ÓËø£©
+    mutable std::mutex m_mutex;
     std::chrono::steady_clock::time_point m_lastTimePoint;
-
-    float m_deltaTime;       
-    float m_totalTime;       
-    std::atomic<float> m_timeScale; 
-
-    
-    std::atomic<int> m_fps;  // µ±Ç°Ö¡ÂÊ£¨Ô­×Ó±äÁ¿£©
-    int m_frameCount;        // Í³¼ÆÖÜÆÚÄÚµÄÖ¡Êý
-    float m_fpsAccumulator;  // Ö¡ÂÊÍ³¼ÆÀÛ¼ÆÊ±¼ä
+    float m_deltaTime;
+    float m_totalTime;
+    std::atomic<float> m_timeScale;
+    std::atomic<int> m_fps;
+    int m_frameCount;
+    float m_fpsAccumulator;
 };

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <imgui.h>
+#include <imgui_internal.h>
 #include <backends/imgui_impl_opengl3.h>
 #include <backends/imgui_impl_glfw.h>
 #include <glad/glad.h>
@@ -19,6 +20,7 @@
 
 #include "Scene.h"
 #include "Global.h"
+#include "ShaderManager.h"
 #include "XmlMaterialManager.h"
 #include "Material.h"
 #include "Model.h"
@@ -54,7 +56,7 @@ public:
 		ImGui::CreateContext();
 		ImGuiIO& io = ImGui::GetIO(); (void)io;
 		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-		ImGui::StyleColorsDark();
+		ApplyEditorStyle();
 		ImGui_ImplGlfw_InitForOpenGL(window, true);
 		ImGui_ImplOpenGL3_Init("#version 330 core");
 	}
@@ -89,11 +91,12 @@ public:
 
 		ImGuiID dockspace_id = ImGui::GetID("MainDockSpaceID");
 		ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f));
+		BuildDefaultLayout(dockspace_id);
 		ImGui::End();
 	}
 
 	void Begin() {
-		ImGui::Begin("Settings");
+		ImGui::Begin("Renderer");
 	}
 
 	void End() {
@@ -103,6 +106,45 @@ public:
 	void Render() {
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+	}
+
+	void Overview_UI() {
+		if (!ImGui::Begin("Overview")) {
+			ImGui::End();
+			return;
+		}
+
+		auto& shaderManager = ShaderManager::GetInstance();
+		auto& materialManager = XmlMaterialManager::GetInstance();
+
+		ImGui::Text("Viewport  %d x %d", properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
+		ImGui::Text("Auto Reload");
+		ImGui::SameLine();
+		ImGui::Checkbox("Shaders##auto_reload_shaders", &properties.AUTO_RELOAD_SHADERS);
+		ImGui::SameLine();
+		ImGui::Checkbox("Materials##auto_reload_materials", &properties.AUTO_RELOAD_MATERIALS);
+
+		if (ImGui::Button("Reload Shaders")) {
+			shaderManager.ReloadAllShaders();
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Reload Materials")) {
+			materialManager.ReloadAllFiles();
+		}
+
+		ImGui::Separator();
+		ImGui::Text("Shader reloads: %d", shaderManager.GetReloadCount());
+		ImGui::TextColored(
+			shaderManager.WasLastReloadSuccessful() ? ImVec4(0.55f, 0.85f, 0.55f, 1.0f) : ImVec4(0.95f, 0.45f, 0.45f, 1.0f),
+			"%s",
+			shaderManager.GetLastReloadMessage().empty() ? "Shaders idle" : shaderManager.GetLastReloadMessage().c_str());
+		ImGui::Text("Material reloads: %d", materialManager.GetReloadCount());
+		ImGui::TextColored(
+			materialManager.WasLastReloadSuccessful() ? ImVec4(0.55f, 0.85f, 0.55f, 1.0f) : ImVec4(0.95f, 0.45f, 0.45f, 1.0f),
+			"%s",
+			materialManager.GetLastReloadMessage().empty() ? "Materials idle" : materialManager.GetLastReloadMessage().c_str());
+
+		ImGui::End();
 	}
 
 	// Assets 面板：浏览项目中的 models / materials 等资源（类似 Unity Project 窗口）
@@ -242,6 +284,8 @@ public:
 			ImGui::ProgressBar(total > 0 ? (float)done / (float)total : 0.0f, ImVec2(-1.0f, 0.0f));
 			ImGui::Separator();
 		}
+		ImGui::Checkbox("Auto Reload Shaders", &properties.AUTO_RELOAD_SHADERS);
+		ImGui::Checkbox("Auto Reload Materials", &properties.AUTO_RELOAD_MATERIALS);
 		ImGui::Checkbox("Defer Rendering", &properties.DEFER_RENDERING);
 		if (properties.DEFER_RENDERING) {
 			ImGui::Checkbox("SSAO", &properties.SSAO);
@@ -271,7 +315,7 @@ public:
 
 	void Gamma_UI() {
 		ImGui::Checkbox("HDR", &properties.USE_HDR);
-		if (properties.HDR_EXPOSURE) {
+		if (properties.USE_HDR) {
 			ImGui::DragFloat("hdr exposure", &properties.HDR_EXPOSURE, 0.00f, 0.01f, 100.0f, "%.2f");
 		}
 		ImGui::Checkbox("gammaCorrection", &properties.GAMMA_CORRECTION);
@@ -919,6 +963,73 @@ public:
 		ImGui::End();
 	}
 private:
+	void ApplyEditorStyle() {
+		ImGui::StyleColorsDark();
+		ImGuiStyle& style = ImGui::GetStyle();
+		style.WindowRounding = 6.0f;
+		style.ChildRounding = 6.0f;
+		style.FrameRounding = 5.0f;
+		style.GrabRounding = 5.0f;
+		style.ScrollbarRounding = 8.0f;
+		style.TabRounding = 4.0f;
+		style.WindowPadding = ImVec2(10.0f, 10.0f);
+		style.FramePadding = ImVec2(10.0f, 6.0f);
+		style.ItemSpacing = ImVec2(8.0f, 8.0f);
+		style.IndentSpacing = 14.0f;
+
+		ImVec4* colors = style.Colors;
+		colors[ImGuiCol_WindowBg] = ImVec4(0.08f, 0.09f, 0.11f, 1.0f);
+		colors[ImGuiCol_ChildBg] = ImVec4(0.11f, 0.12f, 0.15f, 1.0f);
+		colors[ImGuiCol_PopupBg] = ImVec4(0.10f, 0.11f, 0.14f, 0.98f);
+		colors[ImGuiCol_Header] = ImVec4(0.18f, 0.28f, 0.30f, 1.0f);
+		colors[ImGuiCol_HeaderHovered] = ImVec4(0.24f, 0.40f, 0.42f, 1.0f);
+		colors[ImGuiCol_HeaderActive] = ImVec4(0.30f, 0.50f, 0.52f, 1.0f);
+		colors[ImGuiCol_Button] = ImVec4(0.18f, 0.34f, 0.36f, 1.0f);
+		colors[ImGuiCol_ButtonHovered] = ImVec4(0.24f, 0.45f, 0.47f, 1.0f);
+		colors[ImGuiCol_ButtonActive] = ImVec4(0.30f, 0.54f, 0.56f, 1.0f);
+		colors[ImGuiCol_FrameBg] = ImVec4(0.13f, 0.15f, 0.18f, 1.0f);
+		colors[ImGuiCol_FrameBgHovered] = ImVec4(0.18f, 0.21f, 0.25f, 1.0f);
+		colors[ImGuiCol_FrameBgActive] = ImVec4(0.21f, 0.25f, 0.29f, 1.0f);
+		colors[ImGuiCol_TitleBg] = ImVec4(0.10f, 0.12f, 0.14f, 1.0f);
+		colors[ImGuiCol_TitleBgActive] = ImVec4(0.12f, 0.15f, 0.18f, 1.0f);
+		colors[ImGuiCol_Tab] = ImVec4(0.13f, 0.18f, 0.20f, 1.0f);
+		colors[ImGuiCol_TabHovered] = ImVec4(0.23f, 0.35f, 0.37f, 1.0f);
+		colors[ImGuiCol_TabActive] = ImVec4(0.18f, 0.28f, 0.30f, 1.0f);
+		colors[ImGuiCol_DockingPreview] = ImVec4(0.31f, 0.68f, 0.64f, 0.45f);
+	}
+
+	void BuildDefaultLayout(ImGuiID dockspaceId) {
+		if (m_layoutInitialized) {
+			return;
+		}
+
+		m_layoutInitialized = true;
+		ImGui::DockBuilderRemoveNode(dockspaceId);
+		ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
+		ImGui::DockBuilderSetNodeSize(dockspaceId, ImGui::GetMainViewport()->Size);
+
+		ImGuiID left = 0;
+		ImGuiID right = 0;
+		ImGuiID bottom = 0;
+		ImGuiID lowerLeft = 0;
+		ImGuiID center = dockspaceId;
+
+		ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.23f, &left, &center);
+		ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.28f, &right, &center);
+		ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, 0.26f, &bottom, &center);
+		ImGui::DockBuilderSplitNode(left, ImGuiDir_Down, 0.45f, &lowerLeft, &left);
+
+		ImGui::DockBuilderDockWindow("Overview", left);
+		ImGui::DockBuilderDockWindow("Renderer", left);
+		ImGui::DockBuilderDockWindow("Scene", lowerLeft);
+		ImGui::DockBuilderDockWindow("Assets", bottom);
+		ImGui::DockBuilderDockWindow("Viewport", center);
+		ImGui::DockBuilderDockWindow("Materials Inspector", right);
+		ImGui::DockBuilderDockWindow("Model Materials", right);
+		ImGui::DockBuilderDockWindow("Materials XML Editor", right);
+		ImGui::DockBuilderFinish(dockspaceId);
+	}
+
 	void ReadViewportPixel(int x, int y) {
 		GLint prevReadFBO = 0;
 		GLint prevReadBuffer = 0;
@@ -953,6 +1064,7 @@ private:
 	bool m_viewportReadIsDepth = false;
 	int m_viewportReadWidth = 0;
 	int m_viewportReadHeight = 0;
+	bool m_layoutInitialized = false;
 	bool m_hasPickedPixel = false;
 	int m_pickedX = 0;
 	int m_pickedY = 0;

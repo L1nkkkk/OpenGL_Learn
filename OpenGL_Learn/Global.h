@@ -41,6 +41,8 @@ public:
     }
 
     bool DEBUG_MODE = false;
+    bool AUTO_RELOAD_SHADERS = true;
+    bool AUTO_RELOAD_MATERIALS = true;
 
     // Viewport ?????????? FBO ?? GetBusyFBOs() ??????????????????? FBO textureIDs ????????
     int VIEWPORT_DEBUG_FBO_INDEX = 0;
@@ -459,7 +461,7 @@ public:
 
 	AntiAliasManager() = default;
 
-	static enum AntiAliasType {
+	enum AntiAliasType {
 		Default = 0,
 		MSAA = 1,
 	};
@@ -497,7 +499,7 @@ inline void hash_combine(std::size_t& seed, const T& v) {
 }
 
 struct FBOAttributes {
-	static enum FramebufferType {
+	enum FramebufferType {
 		Framebuffer = 0,
 		Multisample,
 		ShadowMap,
@@ -559,7 +561,7 @@ namespace std {
 
 class FBO {
 public:
-	static enum FrameRenderType {
+	enum FrameRenderType {
 		Default_FrameRenderType = 0,
 		ShadowMap_FrameRenderType,
 		BrightColor_FrameRenderType,
@@ -606,7 +608,7 @@ public:
 
 	void Delete() {
 		glDeleteFramebuffers(1, &framebufferID);
-		glDeleteTextures(textureIDs.size(), textureIDs.data());
+		glDeleteTextures(static_cast<GLsizei>(textureIDs.size()), textureIDs.data());
 		glDeleteRenderbuffers(1, &rboID);
 		if (depthTextureID != 0) {
 			glDeleteTextures(1, &depthTextureID);
@@ -713,7 +715,7 @@ public:
 		}
 	}
 
-	inline static float normalLineMagnitude = 0.01;
+	inline static float normalLineMagnitude = 0.01f;
 };
 
 unsigned int TextureFromFile(const char* path, const std::string& directory, bool alpha = false, bool gamma = false);

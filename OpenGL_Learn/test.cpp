@@ -280,11 +280,19 @@ int main() {
 			windowTitle << " [Loading " << done << "/" << total << "]";
 		}
 		glfwSetWindowTitle(window, windowTitle.str().c_str());
+
+		if (properties.AUTO_RELOAD_SHADERS) {
+			shaderManager.ReloadChangedShaders();
+		}
+		if (properties.AUTO_RELOAD_MATERIALS) {
+			xmlMaterialManager.ReloadChangedFiles();
+		}
 		// NewFrame
 		SetGui();
 
 		// ?? DockSpace??? Unity ?????
 		mygui.MainDockSpace();
+		mygui.Overview_UI();
 
 		// Settings / Scene / Materials / XML / Assets ??? Dock ? DockSpace ?
 		mygui.Begin();              // Settings ??

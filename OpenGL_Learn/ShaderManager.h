@@ -3,6 +3,7 @@
 #include "Shader.h"
 #include "Global.h"
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 #include <unordered_map>
@@ -33,7 +34,7 @@ struct UBOInfo {
 
 class ShaderManager {
 public:
-	static enum ShaderType {
+	enum ShaderType {
 		Scene = 0,
 		DebugScene,
 		Phong,
@@ -57,7 +58,7 @@ public:
 		ShadowCube,
 	};
 
-	static enum UniformBufferType {
+	enum UniformBufferType {
 		Matrices = 0,
 		SystemProperties = 1
 	};
@@ -71,6 +72,9 @@ public:
 
 	void LoadShader(std::string name);
 	void LoadGeometryShader(std::string name);
+	bool ReloadShader(const std::string& name, bool force = true);
+	int ReloadChangedShaders();
+	int ReloadAllShaders();
 	std::shared_ptr<Shader> GetShader(int index);
 	std::shared_ptr<Shader> GetShaderByName(std::string name);
 	std::vector<std::string> GetNames();
@@ -78,6 +82,10 @@ public:
 	void SetUBOData(UniformBufferType uboType, unsigned int offset, size_t size, const void* dataPtr);
 	/// 从 SystemProperties 同步到 SystemProperties UBO，每帧或配置变更时调用一次即可，所有使用该 UBO 的 Shader 自动获得
 	void UpdateSystemUBO();
+
+	const std::string& GetLastReloadMessage() const { return m_lastReloadMessage; }
+	bool WasLastReloadSuccessful() const { return m_lastReloadSuccessful; }
+	int GetReloadCount() const { return m_reloadCount; }
 
 	void UseShader(std::string name) {
 		if (m_shaderMap.find(name) != m_shaderMap.end()) {
@@ -108,6 +116,9 @@ private:
 	std::unordered_map<std::string, std::shared_ptr<Shader>> m_shaderMap;
 	std::unordered_map<std::shared_ptr<Shader>, int> shader2Idx;
 	std::vector<UBOInfo> UBOInfos;
+	std::string m_lastReloadMessage;
+	bool m_lastReloadSuccessful = true;
+	int m_reloadCount = 0;
 	std::vector<std::string> shaderNames = {
 		"scene",
 		"debugScene",

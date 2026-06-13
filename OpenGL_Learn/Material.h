@@ -364,7 +364,7 @@ public:
 		unsigned int count = 0;
 		for (const auto& [name, prop] : m_propertiesMap) {
 			if (prop.type == MaterialPropertyType::Texture) {
-				count += prop.textures.size();
+				count += static_cast<unsigned int>(prop.textures.size());
 			}
 		}
 		return count;

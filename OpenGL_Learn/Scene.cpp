@@ -7,6 +7,7 @@ void Scene::BuildMeshDrawLists()
 
 	for (auto& model : modelSource.models) {
 		if (!model || !model->GetAcitveStatus()) continue;
+		model->RefreshMaterialDrivenState();
 		auto shaderPtr = model->GetShader();
 		Shader* shader = shaderPtr.get();
 		if (!shader) continue;

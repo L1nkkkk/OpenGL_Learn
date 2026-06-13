@@ -36,6 +36,7 @@ public:
 	std::vector<Vertex> vertices;
 
 	Material* material_ptr;
+	std::shared_ptr<Material> material_owner;
 	unsigned int start_tex_index;
     // 可选：该 Mesh 对应的材质 XML 路径（如 "materials/Wood.xml"），用于懒加载 + 热重载
     std::string materialXmlPath;
@@ -43,7 +44,12 @@ public:
 	Mesh(std::vector<Vertex> vertices,
 		std::vector<unsigned int> indices,
 		 Material* material,
+		 std::shared_ptr<Material> ownedMaterial = nullptr,
          const std::string& materialXmlPathIn = std::string());
+	Mesh(std::vector<Vertex> vertices,
+		std::vector<unsigned int> indices,
+		Material* material,
+		const std::string& materialXmlPathIn);
 
 	Mesh(const Mesh& other);
 	Mesh& operator=(const Mesh& other);
@@ -207,6 +213,7 @@ public:
 		return meshes;
 	}
 
+	void RefreshMaterialDrivenState();
 	const std::vector<MeshEntry>& GetOpaqueMeshEntries() const { return m_opaqueMeshes; }
 	const std::vector<MeshEntry>& GetTransparentMeshEntries() const { return m_transparentMeshes; }
 
@@ -238,6 +245,7 @@ private:
 	DataSourceType m_dataSourceType = DataSourceType::Generated;
 	std::string m_dataSourceFilePath;
 	std::string m_dataSourceGeneratorId;
+	size_t m_lastAppliedMaterialRevision = static_cast<size_t>(-1);
 	inline static unsigned int count = 0;
 protected:
 	std::vector<Mesh> meshes;
