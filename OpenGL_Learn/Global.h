@@ -73,6 +73,8 @@ public:
     int BLOOM_BLUR_ITERATIONS = 5;
 
     bool DEFER_RENDERING = false;
+    bool FRUSTUM_CULLING = true;
+    bool FORWARD_NORMAL_BUFFER = false;
     /// 屏幕空间环境光遮蔽（仅延迟管线）：当前为采样 Pass 输出 R8/R16 可视度纹理，后续再接入模糊与光照。
     bool SSAO = false;
     float SSAO_RADIUS = 0.35f;
@@ -744,19 +746,27 @@ public:
 
     void SetScale(glm::vec3 s) {
         scale = s;
+		m_transformCacheValid = false;
 	}
     
     void SetScale(float s) {
         scale = glm::vec3(s);
+		m_transformCacheValid = false;
     }
 
     void SetPosition(glm::vec3 p) {
         position = p;
-	}
+		m_transformCacheValid = false;
+    }
 
     void SetRotation(glm::vec3 r) {
         rotation = r;
-	}
+		m_transformCacheValid = false;
+    }
 protected:
 	glm::mat4 modelMatrix;
+	glm::vec3 m_cachedPosition = glm::vec3(0);
+	glm::vec3 m_cachedRotation = glm::vec3(0);
+	glm::vec3 m_cachedScale = glm::vec3(1);
+	bool m_transformCacheValid = false;
 };

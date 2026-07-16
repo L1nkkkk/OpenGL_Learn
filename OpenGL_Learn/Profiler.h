@@ -46,6 +46,9 @@ struct RenderStats {
 	std::uint64_t framebufferBindCacheHits = 0;
 	std::uint64_t fileSystemChecks = 0;
 	std::uint64_t activeModels = 0;
+	std::uint64_t visibleModels = 0;
+	std::uint64_t culledModels = 0;
+	std::uint64_t culledMeshes = 0;
 	std::uint64_t opaqueMeshes = 0;
 	std::uint64_t transparentMeshes = 0;
 	std::uint64_t uiDrawCalls = 0;
@@ -95,7 +98,13 @@ public:
 	void RecordVertexArrayBind(bool cacheHit);
 	void RecordFramebufferBind(bool cacheHit);
 	void RecordFileSystemCheck();
-	void SetSceneSubmissionStats(std::uint64_t activeModels, std::uint64_t opaqueMeshes, std::uint64_t transparentMeshes);
+	void SetSceneSubmissionStats(
+		std::uint64_t activeModels,
+		std::uint64_t visibleModels,
+		std::uint64_t culledModels,
+		std::uint64_t culledMeshes,
+		std::uint64_t opaqueMeshes,
+		std::uint64_t transparentMeshes);
 	void RecordUiDrawData(std::uint64_t drawCalls, std::uint64_t vertices, std::uint64_t indices);
 
 	const ProfilerFrameSummary& GetFrameSummary() const { return m_frameSummary; }

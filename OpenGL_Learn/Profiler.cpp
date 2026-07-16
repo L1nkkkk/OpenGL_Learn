@@ -407,6 +407,9 @@ void PerformanceProfiler::RecordFileSystemCheck()
 
 void PerformanceProfiler::SetSceneSubmissionStats(
 	std::uint64_t activeModels,
+	std::uint64_t visibleModels,
+	std::uint64_t culledModels,
+	std::uint64_t culledMeshes,
 	std::uint64_t opaqueMeshes,
 	std::uint64_t transparentMeshes)
 {
@@ -414,6 +417,9 @@ void PerformanceProfiler::SetSceneSubmissionStats(
 		return;
 	}
 	m_currentRenderStats.activeModels = activeModels;
+	m_currentRenderStats.visibleModels = visibleModels;
+	m_currentRenderStats.culledModels = culledModels;
+	m_currentRenderStats.culledMeshes = culledMeshes;
 	m_currentRenderStats.opaqueMeshes = opaqueMeshes;
 	m_currentRenderStats.transparentMeshes = transparentMeshes;
 }

@@ -54,6 +54,10 @@ glm::mat4 Camera::GetViewMatrix() {
 	return glm::lookAt(cameraPos, cameraPos - cameraDirection, up);
 }
 
+glm::mat4 Camera::GetProjectionMatrix(float aspectRatio, float nearPlane, float farPlane) const {
+	return glm::perspective(glm::radians(fov), aspectRatio, nearPlane, farPlane);
+}
+
 bool Camera::CheckCameraMoved() {
 	float positionDelta = glm::length(cameraPos - lastFrame_CameraPosition);
 	float frontDeltaCosin = glm::dot(cameraFront, lastFrame_CameraFront);

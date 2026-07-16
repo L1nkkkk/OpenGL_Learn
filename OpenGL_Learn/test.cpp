@@ -111,7 +111,9 @@ void SetGui() {
 
 void SetUniformBuffer() {
 	view = camera.GetViewMatrix();
-	projection = glm::perspective(glm::radians(camera.fov), (float)properties.SCREEN_WIDTH / (float)properties.SCREEN_HEIGHT, 0.1f, 100.0f);
+	const float aspectRatio = static_cast<float>(properties.SCREEN_WIDTH) /
+		static_cast<float>((std::max)(1, properties.SCREEN_HEIGHT));
+	projection = camera.GetProjectionMatrix(aspectRatio);
 	ShaderManager& ShaderMgr = ShaderManager::GetInstance();
 	ShaderMgr.SetUBOData(ShaderManager::Matrices, 0, sizeof(glm::mat4), &view);
 	ShaderMgr.SetUBOData(ShaderManager::Matrices, sizeof(glm::mat4), sizeof(glm::mat4), &projection);

@@ -315,10 +315,15 @@ public:
 				static_cast<unsigned long long>(renderStats.framebufferBinds),
 				static_cast<unsigned long long>(renderStats.framebufferBindCacheHits));
 			ImGui::Text("Filesystem checks: %llu", static_cast<unsigned long long>(renderStats.fileSystemChecks));
-			ImGui::Text("Active models: %llu", static_cast<unsigned long long>(renderStats.activeModels));
+			ImGui::Text("Models: %llu active / %llu visible / %llu culled",
+				static_cast<unsigned long long>(renderStats.activeModels),
+				static_cast<unsigned long long>(renderStats.visibleModels),
+				static_cast<unsigned long long>(renderStats.culledModels));
 			ImGui::Text("Meshes: %llu opaque / %llu transparent",
 				static_cast<unsigned long long>(renderStats.opaqueMeshes),
 				static_cast<unsigned long long>(renderStats.transparentMeshes));
+			ImGui::Text("Frustum-culled meshes: %llu",
+				static_cast<unsigned long long>(renderStats.culledMeshes));
 			ImGui::Text("ImGui draw calls: %llu", static_cast<unsigned long long>(renderStats.uiDrawCalls));
 			ImGui::Text("ImGui vertices / indices: %llu / %llu",
 				static_cast<unsigned long long>(renderStats.uiVertices),
@@ -472,6 +477,10 @@ public:
 		ImGui::Checkbox("Auto Reload Materials", &properties.AUTO_RELOAD_MATERIALS);
 		ImGui::DragFloat("Hot Reload Poll Interval", &properties.HOT_RELOAD_POLL_INTERVAL, 0.05f, 0.05f, 2.0f, "%.2f s");
 		ImGui::Checkbox("Defer Rendering", &properties.DEFER_RENDERING);
+		ImGui::Checkbox("Frustum Culling", &properties.FRUSTUM_CULLING);
+		if (!properties.DEFER_RENDERING) {
+			ImGui::Checkbox("Forward Normal Buffer", &properties.FORWARD_NORMAL_BUFFER);
+		}
 		if (properties.DEFER_RENDERING) {
 			ImGui::Checkbox("SSAO", &properties.SSAO);
 			if (properties.SSAO) {

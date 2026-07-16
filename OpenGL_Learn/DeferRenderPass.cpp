@@ -235,7 +235,7 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 		MaterialBatchScope materialBatch;
 		for (const auto& item : opaqueList) {
 			if (!item.model || !item.mesh) continue;
-			deferProcessShader->setMat4("model", item.model->getModelMatrix());
+			deferProcessShader->setMat4("model", item.modelMatrix);
 			item.mesh->Draw(deferProcessShader.get());
 		}
 	}

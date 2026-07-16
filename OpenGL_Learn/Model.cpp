@@ -469,7 +469,9 @@ std::vector<Texture> Model::loadMaterialTextures(aiMaterial* mat, aiTextureType 
 glm::vec3 Model::CalculateLocalCenter()
 {
 	bool first = true;
-	float minX, maxX, minY, maxY, minZ, maxZ;
+	float minX = 0.0f, maxX = 0.0f;
+	float minY = 0.0f, maxY = 0.0f;
+	float minZ = 0.0f, maxZ = 0.0f;
 	for (auto& mesh : meshes) {
 		for (auto& vertice : mesh.vertices) {
 			glm::vec3& pos = vertice.Position;
@@ -491,7 +493,25 @@ glm::vec3 Model::CalculateLocalCenter()
 			}
 		}
 	}
-	return glm::vec3((minX+maxX)/2.f, (minY+maxY)/2.f, (minZ+maxZ) / 2.f);
+
+	if (first) {
+		localBoundingRadius = 0.0f;
+		return glm::vec3(0.0f);
+	}
+
+	const glm::vec3 center(
+		(minX + maxX) * 0.5f,
+		(minY + maxY) * 0.5f,
+		(minZ + maxZ) * 0.5f);
+	float radiusSquared = 0.0f;
+	for (const auto& mesh : meshes) {
+		for (const auto& vertex : mesh.vertices) {
+			const glm::vec3 delta = vertex.Position - center;
+			radiusSquared = (std::max)(radiusSquared, glm::dot(delta, delta));
+		}
+	}
+	localBoundingRadius = std::sqrt(radiusSquared);
+	return center;
 }
 
 std::vector<Vertex> ComputeTBNVertices(std::vector<Vertex>& vertices, std::vector<unsigned int> indices) {

@@ -13,21 +13,21 @@ FBOAttributes ForwardRenderPass::BuildAttributesFromSystemProperties()
 {
 	// 基于当前全局配置生成 Forward 渲染需要的 FBOAttributes
 	FBOAttributes attr = FramebuffersManager::GenCurrentAttr();
-	// ForwardPass 额外输出 AO 所需的场景信息：
-	// 1) depth texture（用于后处理采样）
-	// 2) normal texture（用于后处理采样）
-	// 注意：depth texture 不支持 MSAA，这里强制使用非 MSAA。
+	// Keep the forward target non-MSAA. The optional normal attachment is only
+	// allocated when explicitly enabled for diagnostics or a future AO consumer.
 	attr.aaType = AntiAliasManager::AntiAliasType::Default;
-	attr.hasDepthTexture = true;
+	attr.hasDepthTexture = false;
 
 	// ForwardPass 输出：
 	// color[0] = HDR 颜色
 	// color[1] = Bloom BrightColor（即使 BLOOM 关闭也保留，方便 normal 固定落在 attachment2）
-	// color[2] = Normal（给 AO 使用）
+	// color[2] = optional world-space normal
 	attr.textureAttrs.clear();
 	attr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_RGBA16F, GL_RGBA, GL_FLOAT }); // scene HDR
 	attr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_RGBA16F, GL_RGBA, GL_FLOAT }); // bloom bright
-	attr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_RGB16F, GL_RGB, GL_FLOAT });   // normal
+	if (SystemProperties::GetInstance().FORWARD_NORMAL_BUFFER) {
+		attr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_RGB16F, GL_RGB, GL_FLOAT }); // normal
+	}
 	return attr;
 }
 
@@ -46,31 +46,11 @@ void ForwardRenderPass::Render(Scene* scene, const FBO* inputFBO)
 	GLState::Enable(GL_DEPTH_TEST);
 	GLState::Enable(GL_STENCIL_TEST);
 
-	// Optimization:
-	// Color2(normal) attachment is only needed when the user is actively viewing it in the viewport.
-	// When not needed, skip the extra opaque re-draw (AOInfo pass) and skip depth blit.
-	// However: if we will run postprocess that needs normals/depth (AO/GTAO/etc),
-	// we must also render attachment2 during the normal forward pass.
-	bool renderNormalAttachment2 = false;
-	{
-		auto& props = SystemProperties::GetInstance();
-		// Postprocess is only executed when !DEBUG_MODE in test.cpp.
-		// When we add AO/GTAO later, it will read depth+normal, so ensure Color2 is valid then too.
-		if (!props.DEBUG_MODE) {
-			renderNormalAttachment2 = true;
-		}
-		if (props.VIEWPORT_DEBUG_FBO_INDEX >= 1) {
-			int fboIdx = props.VIEWPORT_DEBUG_FBO_INDEX - 1;
-			// Find selected FBO and check if it's our current output FBO.
-			const std::vector<FBO*> busyFBOs = FramebuffersManager::GetInstance().GetBusyFBOs();
-			if (fboIdx >= 0 && fboIdx < (int)busyFBOs.size()) {
-				FBO* selected = busyFBOs[fboIdx];
-				if (selected == m_outputFBO && props.VIEWPORT_DEBUG_ATTACHMENT_INDEX == 2) {
-					renderNormalAttachment2 = true;
-				}
-			}
-		}
-	}
+	// Avoid the third MRT write unless a consumer explicitly requests it.
+	const bool renderNormalAttachment2 =
+		SystemProperties::GetInstance().FORWARD_NORMAL_BUFFER &&
+		m_outputFBO &&
+		m_outputFBO->textureIDs.size() > 2;
 
 	GLState::StencilFunc(GL_ALWAYS, 0, 0xFF);
 	GLState::StencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
@@ -116,7 +96,7 @@ void ForwardRenderPass::Render(Scene* scene, const FBO* inputFBO)
 				lastShader->use();
 				scene->SetLightUniforms(*lastShader);
 			}
-			lastShader->setMat4("model", item.model->getModelMatrix());
+			lastShader->setMat4("model", item.modelMatrix);
 			item.mesh->Draw();
 		}
 	}
@@ -154,7 +134,7 @@ void ForwardRenderPass::Render(Scene* scene, const FBO* inputFBO)
 				lastShader->use();
 				scene->SetLightUniforms(*lastShader);
 			}
-			lastShader->setMat4("model", item.model->getModelMatrix());
+			lastShader->setMat4("model", item.modelMatrix);
 			item.mesh->Draw();
 		}
 	}

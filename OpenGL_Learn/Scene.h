@@ -110,6 +110,13 @@ public:
 		Model* model = nullptr;
 		Mesh* mesh = nullptr;
 		Shader* shader = nullptr;
+		glm::mat4 modelMatrix = glm::mat4(1.0f);
+		glm::vec3 worldBoundsCenter = glm::vec3(0.0f);
+	};
+
+	struct ModelFrameItem {
+		Model* model = nullptr;
+		glm::mat4 modelMatrix = glm::mat4(1.0f);
 	};
 
 	LightSource lightSource;
@@ -186,6 +193,7 @@ public:
 
 private:
 	void BuildMeshDrawLists();
+	std::vector<ModelFrameItem> m_visibleModels;
 	std::vector<MeshDrawItem> m_opaqueMeshList;
 	std::vector<MeshDrawItem> m_transparentMeshList;
 	glm::mat4 view;

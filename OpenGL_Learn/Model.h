@@ -173,7 +173,6 @@ public:
 	}
 
 	void Draw(Shader* shader = nullptr, unsigned int start_tex_index = 0);
-	glm::mat4 modelMatrix = glm::mat4(1.0f);
 
 	std::unordered_map<int,bool> otherShaderUse;
 	std::unordered_map<int,std::shared_ptr<Shader>> otherShaderPtr;
@@ -194,6 +193,10 @@ public:
 
 	glm::vec3 GetLoacalCenter() {
 		return localCenter;
+	}
+
+	float GetLocalBoundingRadius() const {
+		return localBoundingRadius;
 	}
 
 	void AddOtherShader(OtherShaderType type, std::shared_ptr<Shader> shader) {
@@ -241,6 +244,7 @@ private:
 	std::vector<Texture> textures_loaded;
 	std::string directory;
 	glm::vec3 localCenter;
+	float localBoundingRadius = 0.0f;
 	std::string name;
 	DataSourceType m_dataSourceType = DataSourceType::Generated;
 	std::string m_dataSourceFilePath;

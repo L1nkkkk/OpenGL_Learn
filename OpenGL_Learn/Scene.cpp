@@ -2,18 +2,110 @@
 #include "GLStateCache.h"
 #include "Profiler.h"
 
+#include <array>
 #include <functional>
+
+namespace {
+	struct Frustum {
+		std::array<glm::vec4, 6> planes{};
+
+		bool IntersectsSphere(const glm::vec3& center, float radius) const
+		{
+			for (const glm::vec4& plane : planes) {
+				if (glm::dot(glm::vec3(plane), center) + plane.w < -radius) {
+					return false;
+				}
+			}
+			return true;
+		}
+	};
+
+	Frustum BuildFrustum(const glm::mat4& viewProjection)
+	{
+		const glm::vec4 row0(
+			viewProjection[0][0], viewProjection[1][0],
+			viewProjection[2][0], viewProjection[3][0]);
+		const glm::vec4 row1(
+			viewProjection[0][1], viewProjection[1][1],
+			viewProjection[2][1], viewProjection[3][1]);
+		const glm::vec4 row2(
+			viewProjection[0][2], viewProjection[1][2],
+			viewProjection[2][2], viewProjection[3][2]);
+		const glm::vec4 row3(
+			viewProjection[0][3], viewProjection[1][3],
+			viewProjection[2][3], viewProjection[3][3]);
+
+		Frustum frustum;
+		frustum.planes = {
+			row3 + row0,
+			row3 - row0,
+			row3 + row1,
+			row3 - row1,
+			row3 + row2,
+			row3 - row2
+		};
+		for (glm::vec4& plane : frustum.planes) {
+			const float normalLength = glm::length(glm::vec3(plane));
+			if (normalLength > 0.0f) {
+				plane /= normalLength;
+			}
+		}
+		return frustum;
+	}
+
+	float GetMaximumWorldScale(const glm::mat4& modelMatrix)
+	{
+		const float scaleX = glm::length(glm::vec3(modelMatrix[0]));
+		const float scaleY = glm::length(glm::vec3(modelMatrix[1]));
+		const float scaleZ = glm::length(glm::vec3(modelMatrix[2]));
+		return (std::max)(scaleX, (std::max)(scaleY, scaleZ));
+	}
+}
 
 void Scene::BuildMeshDrawLists()
 {
 	PERF_CPU_SCOPE("Build Draw Lists");
+	m_visibleModels.clear();
 	m_opaqueMeshList.clear();
 	m_transparentMeshList.clear();
+	m_visibleModels.reserve(modelSource.models.size());
 	std::uint64_t activeModelCount = 0;
+	std::uint64_t visibleModelCount = 0;
+	std::uint64_t culledModelCount = 0;
+	std::uint64_t culledMeshCount = 0;
+
+	const bool useFrustumCulling = properties.FRUSTUM_CULLING && camera_ptr;
+	Frustum cameraFrustum;
+	if (useFrustumCulling) {
+		const float aspectRatio = static_cast<float>(properties.SCREEN_WIDTH) /
+			static_cast<float>((std::max)(1, properties.SCREEN_HEIGHT));
+		cameraFrustum = BuildFrustum(
+			camera_ptr->GetProjectionMatrix(aspectRatio) *
+			camera_ptr->GetViewMatrix());
+	}
 
 	for (auto& model : modelSource.models) {
 		if (!model || !model->GetAcitveStatus()) continue;
 		++activeModelCount;
+		const glm::mat4 modelMatrix = model->getModelMatrix();
+		const glm::vec3 worldBoundsCenter = glm::vec3(
+			modelMatrix * glm::vec4(model->GetLoacalCenter(), 1.0f));
+		const float worldBoundsRadius =
+			model->GetLocalBoundingRadius() * GetMaximumWorldScale(modelMatrix);
+
+		if (useFrustumCulling &&
+			!cameraFrustum.IntersectsSphere(worldBoundsCenter, worldBoundsRadius)) {
+			++culledModelCount;
+			for (const Mesh& mesh : model->GetMeshes()) {
+				if (mesh.GetActiveStatus()) {
+					++culledMeshCount;
+				}
+			}
+			continue;
+		}
+
+		++visibleModelCount;
+		m_visibleModels.push_back({ model.get(), modelMatrix });
 		model->RefreshMaterialDrivenState();
 		auto shaderPtr = model->GetShader();
 		Shader* shader = shaderPtr.get();
@@ -22,12 +114,14 @@ void Scene::BuildMeshDrawLists()
 		for (const auto& entry : model->GetOpaqueMeshEntries()) {
 			if (!entry.mesh) continue;
 			if (!entry.mesh->GetActiveStatus()) continue;
-			m_opaqueMeshList.push_back({ model.get(), entry.mesh, shader });
+			m_opaqueMeshList.push_back({
+				model.get(), entry.mesh, shader, modelMatrix, worldBoundsCenter });
 		}
 		for (const auto& entry : model->GetTransparentMeshEntries()) {
 			if (!entry.mesh) continue;
 			if (!entry.mesh->GetActiveStatus()) continue;
-			m_transparentMeshList.push_back({ model.get(), entry.mesh, shader });
+			m_transparentMeshList.push_back({
+				model.get(), entry.mesh, shader, modelMatrix, worldBoundsCenter });
 		}
 	}
 
@@ -47,16 +141,19 @@ void Scene::BuildMeshDrawLists()
 	if (camera_ptr) {
 		std::sort(m_transparentMeshList.begin(), m_transparentMeshList.end(),
 			[this](const MeshDrawItem& a, const MeshDrawItem& b) {
-				glm::vec3 aPos = a.model ? a.model->position : glm::vec3(0);
-				glm::vec3 bPos = b.model ? b.model->position : glm::vec3(0);
-				float da = glm::length(camera_ptr->cameraPos - aPos);
-				float db = glm::length(camera_ptr->cameraPos - bPos);
+				const glm::vec3 aDelta = camera_ptr->cameraPos - a.worldBoundsCenter;
+				const glm::vec3 bDelta = camera_ptr->cameraPos - b.worldBoundsCenter;
+				const float da = glm::dot(aDelta, aDelta);
+				const float db = glm::dot(bDelta, bDelta);
 				return da > db;
 			});
 	}
 
 	PerformanceProfiler::GetInstance().SetSceneSubmissionStats(
 		activeModelCount,
+		visibleModelCount,
+		culledModelCount,
+		culledMeshCount,
 		m_opaqueMeshList.size(),
 		m_transparentMeshList.size());
 }
@@ -129,7 +226,7 @@ void Scene::DrawDefferedModels()
         MaterialBatchScope materialBatch;
         for (const auto& item : list) {
             if (!item.model || !item.mesh) continue;
-            deferShader->setMat4("model", item.model->getModelMatrix());
+            deferShader->setMat4("model", item.modelMatrix);
             item.mesh->Draw(deferShader.get());
         }
     }
@@ -358,7 +455,7 @@ void Scene::DrawOpaqueModels()
 			GLState::StencilOp(GL_KEEP, GL_REPLACE, GL_REPLACE);
 		}
 
-		lastShader->setMat4("model", item.model->getModelMatrix());
+		lastShader->setMat4("model", item.modelMatrix);
 		item.mesh->Draw(lastShader);
 	}
 }
@@ -410,7 +507,7 @@ void Scene::DrawTransparentModels()
 				GLState::StencilFunc(GL_ALWAYS, 0, 0xFF);
 			}
 
-			lastShader->setMat4("model", item.model->getModelMatrix());
+			lastShader->setMat4("model", item.modelMatrix);
 			item.mesh->Draw(lastShader);
 		}
 	}
@@ -496,8 +593,9 @@ void Scene::DrawOutlines()
     GLState::Disable(GL_DEPTH_TEST);
     {
 		MaterialBatchScope materialBatch;
-		for (const auto& model : modelSource.models) {
-			if (!model || !model->GetAcitveStatus()) continue;
+		for (const auto& frameItem : m_visibleModels) {
+			Model* model = frameItem.model;
+			if (!model) continue;
 			if (!model->IsOtherShaderUsed(OtherShaderType::outline)) continue;
 
 			std::shared_ptr<Shader> outlineShader;
@@ -507,14 +605,19 @@ void Scene::DrawOutlines()
 			}
 			outlineShader->use();
 			outlineShader->setVec3("Color", model->outlineColor);
-			glm::mat4 modelMatrix = model->getModelMatrix();
 
 			glm::mat4 moveToOrigin = glm::translate(glm::mat4(1.0f), -model->GetLoacalCenter());
 			glm::mat4 scale = glm::scale(glm::mat4(1.0f), glm::vec3(1.f + model->outlineWidth));
 			glm::mat4 moveBack = glm::translate(glm::mat4(1.0f), model->GetLoacalCenter());
 
-			outlineShader->setMat4("model", modelMatrix * moveBack * scale * moveToOrigin);
-			model->Draw(outlineShader.get());
+			outlineShader->setMat4(
+				"model",
+				frameItem.modelMatrix * moveBack * scale * moveToOrigin);
+			for (Mesh& mesh : model->GetMeshes()) {
+				if (mesh.GetActiveStatus()) {
+					mesh.Draw(outlineShader.get());
+				}
+			}
 		}
 	}
 
@@ -526,8 +629,9 @@ void Scene::DrawNormalLines()
 {
     //glStencilMask(0x00); // Disable writing to stencil buffer
 	MaterialBatchScope materialBatch;
-	for (auto& model : modelSource.models) {
-		if (!model || !model->GetAcitveStatus()) continue;
+	for (const auto& frameItem : m_visibleModels) {
+		Model* model = frameItem.model;
+		if (!model) continue;
 		if (!model->IsOtherShaderUsed(OtherShaderType::normalLines)) continue;
 		std::shared_ptr<Shader> normalLineShader;
 		if (!(normalLineShader = model->GetOtherShader(OtherShaderType::normalLines))) {
@@ -536,8 +640,12 @@ void Scene::DrawNormalLines()
 		}
 		normalLineShader->use();
 		normalLineShader->setFloat("MAGNITUDE", OtherShader::normalLineMagnitude);
-		normalLineShader->setMat4("model", model->getModelMatrix());
-		model->Draw(normalLineShader.get());
+		normalLineShader->setMat4("model", frameItem.modelMatrix);
+		for (Mesh& mesh : model->GetMeshes()) {
+			if (mesh.GetActiveStatus()) {
+				mesh.Draw(normalLineShader.get());
+			}
+		}
 	}
     //glStencilMask(0xFF); // Re-enable stencil mask
 }
