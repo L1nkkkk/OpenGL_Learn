@@ -1,4 +1,5 @@
 #include "XmlMaterialManager.h"
+#include "Profiler.h"
 
 #include <fstream>
 #include <iostream>
@@ -58,6 +59,7 @@ namespace {
 }
 
 bool XmlMaterialManager::TryGetWriteTime(const std::string& path, fs::file_time_type& outTime) {
+    PerformanceProfiler::GetInstance().RecordFileSystemCheck();
     try {
         if (!fs::exists(path)) {
             return false;

@@ -1,4 +1,5 @@
 #include "Learn.h"
+#include "Profiler.h"
 #include <cstdint>
 
 void Planet::Init() {
@@ -86,6 +87,10 @@ void Planet::Draw() {
     for (unsigned int i = 0; i < meshes.size(); i++)
     {
         glBindVertexArray(meshes[i].GetVAO());
+        PerformanceProfiler::GetInstance().RecordDraw(
+            GL_TRIANGLES,
+            meshes[i].vertices.size(),
+            amount);
         glDrawArraysInstanced(
             GL_TRIANGLES, 0,
             static_cast<GLsizei>(meshes[i].vertices.size()),

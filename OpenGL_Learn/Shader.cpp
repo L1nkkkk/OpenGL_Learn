@@ -1,4 +1,5 @@
 #include "Shader.h"
+#include "Profiler.h"
 
 namespace fs = std::filesystem;
 
@@ -20,6 +21,7 @@ void Shader::SetSourcePaths(const std::string& vertexPath, const std::string& fr
 
 bool Shader::TryGetWriteTime(const std::string& path, fs::file_time_type& outTime)
 {
+	PerformanceProfiler::GetInstance().RecordFileSystemCheck();
 	try {
 		if (!fs::exists(path)) {
 			return false;
@@ -193,41 +195,49 @@ void Shader::Load(const char* vertexPath, const char* fragmentPath)
 
 void Shader::use()
 {
+	PerformanceProfiler::GetInstance().RecordShaderBind();
 	glUseProgram(ID);
 }
 
 void Shader::setBool(const std::string& name, bool value) const
 {
+	PerformanceProfiler::GetInstance().RecordUniformUpdate();
 	glUniform1i(glGetUniformLocation(ID, name.c_str()), (int)value);
 }
 
 void Shader::setInt(const std::string& name, int value) const
 {
+	PerformanceProfiler::GetInstance().RecordUniformUpdate();
 	glUniform1i(glGetUniformLocation(ID, name.c_str()), value);
 }
 
 void Shader::setFloat(const std::string& name, float value) const
 {
+	PerformanceProfiler::GetInstance().RecordUniformUpdate();
 	glUniform1f(glGetUniformLocation(ID, name.c_str()), value);
 }
 
 void Shader::setMat4(const std::string& name, const glm::mat4& mat) const
 {
+	PerformanceProfiler::GetInstance().RecordUniformUpdate();
 	glUniformMatrix4fv(glGetUniformLocation(ID, name.c_str()), 1, GL_FALSE, &mat[0][0]);
 }
 
 void Shader::setVec3(const std::string& name, const glm::vec3& vec) const
 {
+	PerformanceProfiler::GetInstance().RecordUniformUpdate();
 	glUniform3fv(glGetUniformLocation(ID, name.c_str()), 1, &vec[0]);
 }
 
 void Shader::setVec4(const std::string& name, const glm::vec4& vec) const
 {
+	PerformanceProfiler::GetInstance().RecordUniformUpdate();
 	glUniform4fv(glGetUniformLocation(ID, name.c_str()), 1, &vec[0]);
 }
 
 void Shader::setVec2(const std::string& name, const glm::vec2& vec) const
 {
+	PerformanceProfiler::GetInstance().RecordUniformUpdate();
 	glUniform2fv(glGetUniformLocation(ID, name.c_str()), 1, &vec[0]);
 }
 

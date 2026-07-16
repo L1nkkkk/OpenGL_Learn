@@ -1,12 +1,16 @@
 #include "Scene.h"
+#include "Profiler.h"
 
 void Scene::BuildMeshDrawLists()
 {
+	PERF_CPU_SCOPE("Build Draw Lists");
 	m_opaqueMeshList.clear();
 	m_transparentMeshList.clear();
+	std::uint64_t activeModelCount = 0;
 
 	for (auto& model : modelSource.models) {
 		if (!model || !model->GetAcitveStatus()) continue;
+		++activeModelCount;
 		model->RefreshMaterialDrivenState();
 		auto shaderPtr = model->GetShader();
 		Shader* shader = shaderPtr.get();
@@ -34,6 +38,11 @@ void Scene::BuildMeshDrawLists()
 				return da > db;
 			});
 	}
+
+	PerformanceProfiler::GetInstance().SetSceneSubmissionStats(
+		activeModelCount,
+		m_opaqueMeshList.size(),
+		m_transparentMeshList.size());
 }
 
 const std::vector<Scene::MeshDrawItem>& Scene::GetOpaqueMeshes()
@@ -135,6 +144,7 @@ void Scene::DrawDefferedModels()
         deferDrawShader->setInt("gMaterial", properties.USED_TEXTURE_NUM++);
 
         glBindVertexArray(globalVAOs.quadVAO);
+        PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, 6);
         glDrawArrays(GL_TRIANGLES, 0, 6);
         glEnable(GL_DEPTH_TEST);
     }
@@ -159,6 +169,7 @@ void Scene::DrawDefferedModels()
         glBindTexture(GL_TEXTURE_2D, deferFBO->textureIDs[3]);
         deferDirDrawShader->setInt("gMaterial", properties.USED_TEXTURE_NUM++);
         glBindVertexArray(globalVAOs.quadVAO);
+        PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, 6);
         glDrawArrays(GL_TRIANGLES, 0, 6);
         //模板缓冲来计算受点光源影响的区域，减少光照计算的像素数量
         auto defaultShader = ShaderManager::GetInstance().GetShader(ShaderManager::Default);
@@ -442,6 +453,7 @@ void Scene::DrawSkybox(glm::mat4 view)
         glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxSource.textureCubeMap->textureID);
     skyboxSource.skyboxShader_ptr->setInt("skybox", properties.USED_TEXTURE_NUM++);
     skyboxSource.skyboxShader_ptr->setMat4("skyboxView", glm::mat4(glm::mat3(view))); // Remove translation from the view matrix
+    PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, 36);
     glDrawArrays(GL_TRIANGLES, 0, 36);
 
     glBindVertexArray(0);
@@ -500,6 +512,8 @@ void Scene::DrawNormalLines()
 }
 
 void Scene::DrawShadowMap() {
+    PERF_CPU_SCOPE("Shadow Maps");
+    PERF_GPU_SCOPE("Shadow Maps");
     glCullFace(GL_FRONT);
     glEnable(GL_DEPTH_TEST);
     glDisable(GL_STENCIL_TEST);
@@ -618,6 +632,7 @@ void Scene::Blur(int times, FBO* fbo) {
             GL_TEXTURE_2D, first_iteration ? fbo->textureIDs[1] : fbos[(i + 1) % 2]->textureIDs[0]
         );
         bulrShader->setInt("image", 0);
+        PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, 6);
         glDrawArrays(GL_TRIANGLES, 0, 6);
         horizontal = !horizontal;
         if (first_iteration)

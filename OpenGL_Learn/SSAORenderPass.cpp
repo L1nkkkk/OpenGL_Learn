@@ -1,4 +1,5 @@
 #include "SSAORenderPass.h"
+#include "Profiler.h"
 #include "ShaderManager.h"
 
 #include <random>
@@ -57,6 +58,8 @@ void SSAORenderPass::EnsureKernelAndNoise()
 
 void SSAORenderPass::Render(Scene* scene, const FBO* gbufferFBO)
 {
+	PERF_CPU_SCOPE("SSAO Pass");
+	PERF_GPU_SCOPE("SSAO Pass");
 	auto& properties = SystemProperties::GetInstance();
 	if (!properties.SSAO || !gbufferFBO || gbufferFBO->textureIDs.size() < 2)
 		return;
@@ -99,6 +102,7 @@ void SSAORenderPass::Render(Scene* scene, const FBO* gbufferFBO)
 	glBindTexture(GL_TEXTURE_2D, m_noiseTexture);
 
 	glBindVertexArray(globalVAOs.quadVAO);
+	PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, 6);
 	glDrawArrays(GL_TRIANGLES, 0, 6);
 	glBindVertexArray(0);
 

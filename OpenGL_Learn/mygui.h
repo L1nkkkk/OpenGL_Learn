@@ -15,6 +15,8 @@
 #include <filesystem>
 #include <cstring>
 #include <array>
+#include <algorithm>
+#include <cstdint>
 #include <windows.h>
 #include <commdlg.h>
 
@@ -24,6 +26,7 @@
 #include "XmlMaterialManager.h"
 #include "Material.h"
 #include "Model.h"
+#include "Profiler.h"
 #include "SceneStateIO.h"
 
 class MyGui {
@@ -105,7 +108,24 @@ public:
 
 	void Render() {
 		ImGui::Render();
-		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+		ImDrawData* drawData = ImGui::GetDrawData();
+		std::uint64_t uiDrawCalls = 0;
+		if (drawData) {
+			for (int listIndex = 0; listIndex < drawData->CmdListsCount; ++listIndex) {
+				const ImDrawList* drawList = drawData->CmdLists[listIndex];
+				for (int commandIndex = 0; commandIndex < drawList->CmdBuffer.Size; ++commandIndex) {
+					const ImDrawCmd& command = drawList->CmdBuffer[commandIndex];
+					if (command.UserCallback == nullptr && command.ElemCount > 0) {
+						++uiDrawCalls;
+					}
+				}
+			}
+			PerformanceProfiler::GetInstance().RecordUiDrawData(
+				uiDrawCalls,
+				static_cast<std::uint64_t>(drawData->TotalVtxCount),
+				static_cast<std::uint64_t>(drawData->TotalIdxCount));
+		}
+		ImGui_ImplOpenGL3_RenderDrawData(drawData);
 	}
 
 	void Overview_UI() {
@@ -147,6 +167,147 @@ public:
 		ImGui::End();
 	}
 
+	void Profiler_UI() {
+		if (!ImGui::Begin("Profiler")) {
+			ImGui::End();
+			return;
+		}
+
+		auto& profiler = PerformanceProfiler::GetInstance();
+		bool enabled = profiler.IsEnabled();
+		if (ImGui::Checkbox("Capture enabled", &enabled)) {
+			profiler.SetEnabled(enabled);
+		}
+
+		ImGui::SameLine();
+		bool gpuTiming = profiler.IsGpuTimingEnabled();
+		if (!profiler.IsGpuTimingSupported()) {
+			gpuTiming = false;
+		}
+		if (ImGui::Checkbox("GPU timing", &gpuTiming)) {
+			profiler.SetGpuTimingEnabled(gpuTiming);
+		}
+		if (!profiler.IsGpuTimingSupported()) {
+			ImGui::SameLine();
+			ImGui::TextDisabled("(not supported)");
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Reset stats")) {
+			profiler.ResetStatistics();
+		}
+
+		const auto& summary = profiler.GetFrameSummary();
+		const double averageFps = summary.averageCpuFrameMs > 0.0
+			? 1000.0 / summary.averageCpuFrameMs
+			: 0.0;
+
+		ImGui::Separator();
+		ImGui::Text("CPU Frame: %.3f ms   Average: %.3f ms (%.1f FPS)",
+			summary.cpuFrameMs,
+			summary.averageCpuFrameMs,
+			averageFps);
+		ImGui::Text("CPU P95: %.3f ms   P99: %.3f ms",
+			summary.cpuP95Ms,
+			summary.cpuP99Ms);
+		if (profiler.IsGpuTimingSupported()) {
+			ImGui::Text("GPU Frame: %.3f ms   Average: %.3f ms",
+				summary.gpuFrameMs,
+				summary.averageGpuFrameMs);
+		}
+
+		const auto& cpuHistory = profiler.GetCpuFrameHistory();
+		if (!cpuHistory.empty()) {
+			float maxValue = 16.67f;
+			for (float value : cpuHistory) {
+				maxValue = (std::max)(maxValue, value);
+			}
+			ImGui::PlotLines(
+				"CPU frame history",
+				cpuHistory.data(),
+				static_cast<int>(cpuHistory.size()),
+				0,
+				nullptr,
+				0.0f,
+				maxValue * 1.15f,
+				ImVec2(-1.0f, 70.0f));
+		}
+
+		const auto& gpuHistory = profiler.GetGpuFrameHistory();
+		if (!gpuHistory.empty()) {
+			float maxValue = 16.67f;
+			for (float value : gpuHistory) {
+				maxValue = (std::max)(maxValue, value);
+			}
+			ImGui::PlotLines(
+				"GPU frame history",
+				gpuHistory.data(),
+				static_cast<int>(gpuHistory.size()),
+				0,
+				nullptr,
+				0.0f,
+				maxValue * 1.15f,
+				ImVec2(-1.0f, 70.0f));
+		}
+
+		auto drawZoneTable = [](const char* id, const std::vector<ProfilerZoneStats>& zones) {
+			if (zones.empty()) {
+				ImGui::TextDisabled("No samples yet.");
+				return;
+			}
+
+			ImGui::Columns(4, id, true);
+			ImGui::TextUnformatted("Zone");
+			ImGui::NextColumn();
+			ImGui::TextUnformatted("Latest");
+			ImGui::NextColumn();
+			ImGui::TextUnformatted("Average");
+			ImGui::NextColumn();
+			ImGui::TextUnformatted("Peak");
+			ImGui::NextColumn();
+			ImGui::Separator();
+
+			for (const auto& zone : zones) {
+				ImGui::TextUnformatted(zone.name.c_str());
+				ImGui::NextColumn();
+				ImGui::Text("%.3f ms", zone.latestMs);
+				ImGui::NextColumn();
+				ImGui::Text("%.3f ms", zone.averageMs);
+				ImGui::NextColumn();
+				ImGui::Text("%.3f ms", zone.peakMs);
+				ImGui::NextColumn();
+			}
+			ImGui::Columns(1);
+		};
+
+		if (ImGui::CollapsingHeader("CPU Zones", ImGuiTreeNodeFlags_DefaultOpen)) {
+			drawZoneTable("cpu_profile_zones", profiler.GetCpuZoneStats());
+		}
+		if (ImGui::CollapsingHeader("GPU Zones", ImGuiTreeNodeFlags_DefaultOpen)) {
+			drawZoneTable("gpu_profile_zones", profiler.GetGpuZoneStats());
+		}
+
+		const auto& renderStats = profiler.GetRenderStats();
+		if (ImGui::CollapsingHeader("Render Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
+			ImGui::Text("Scene draw calls: %llu", static_cast<unsigned long long>(renderStats.drawCalls));
+			ImGui::Text("Submitted triangles: %llu", static_cast<unsigned long long>(renderStats.submittedTriangles));
+			ImGui::Text("Submitted vertices: %llu", static_cast<unsigned long long>(renderStats.submittedVertices));
+			ImGui::Text("Shader binds: %llu", static_cast<unsigned long long>(renderStats.shaderBinds));
+			ImGui::Text("Uniform updates: %llu", static_cast<unsigned long long>(renderStats.uniformUpdates));
+			ImGui::Text("Filesystem checks: %llu", static_cast<unsigned long long>(renderStats.fileSystemChecks));
+			ImGui::Text("Active models: %llu", static_cast<unsigned long long>(renderStats.activeModels));
+			ImGui::Text("Meshes: %llu opaque / %llu transparent",
+				static_cast<unsigned long long>(renderStats.opaqueMeshes),
+				static_cast<unsigned long long>(renderStats.transparentMeshes));
+			ImGui::Text("ImGui draw calls: %llu", static_cast<unsigned long long>(renderStats.uiDrawCalls));
+			ImGui::Text("ImGui vertices / indices: %llu / %llu",
+				static_cast<unsigned long long>(renderStats.uiVertices),
+				static_cast<unsigned long long>(renderStats.uiIndices));
+		}
+
+		ImGui::End();
+	}
+
 	// Assets 面板：浏览项目中的 models / materials 等资源（类似 Unity Project 窗口）
 	void AssetsBrowser_UI() {
 		namespace fs = std::filesystem;
@@ -168,6 +329,7 @@ public:
 			const char* rootPath,
 			const char* extsCsv,
 			const char* category) {
+				PerformanceProfiler::GetInstance().RecordFileSystemCheck();
 				if (!fs::exists(rootPath))
 					return;
 				if (!ImGui::TreeNode(label))
@@ -188,7 +350,9 @@ public:
 				}
 
 				std::function<void(const fs::path&)> drawNode = [&](const fs::path& dir) {
+					PerformanceProfiler::GetInstance().RecordFileSystemCheck();
 					for (auto& entry : fs::directory_iterator(dir)) {
+						PerformanceProfiler::GetInstance().RecordFileSystemCheck();
 						const auto& p = entry.path();
 						std::string name = p.filename().string();
 						if (entry.is_directory()) {
@@ -1023,6 +1187,7 @@ private:
 		ImGui::DockBuilderDockWindow("Renderer", left);
 		ImGui::DockBuilderDockWindow("Scene", lowerLeft);
 		ImGui::DockBuilderDockWindow("Assets", bottom);
+		ImGui::DockBuilderDockWindow("Profiler", bottom);
 		ImGui::DockBuilderDockWindow("Viewport", center);
 		ImGui::DockBuilderDockWindow("Materials Inspector", right);
 		ImGui::DockBuilderDockWindow("Model Materials", right);

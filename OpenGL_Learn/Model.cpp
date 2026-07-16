@@ -1,4 +1,5 @@
 #include "Model.h"
+#include "Profiler.h"
 #include "XmlMaterialManager.h"
 #include <filesystem>
 #include <unordered_map>
@@ -9,6 +10,7 @@ namespace {
 
 	bool FileExists(const std::string& path)
 	{
+		PerformanceProfiler::GetInstance().RecordFileSystemCheck();
 		std::error_code error;
 		return std::filesystem::exists(path, error);
 	}
@@ -191,6 +193,7 @@ void Mesh::Draw(Shader* shader)
 	if (shader) shader->use();
 	glActiveTexture(GL_TEXTURE0);
 	glBindVertexArray(VAO);
+	PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, vertices.size());
 	glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size()));
 	glBindVertexArray(0);
 }

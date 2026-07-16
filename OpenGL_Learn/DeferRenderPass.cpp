@@ -1,4 +1,5 @@
 #include "DeferRenderPass.h"
+#include "Profiler.h"
 #include "ShaderManager.h"
 #include <glm/glm.hpp>
 
@@ -182,6 +183,8 @@ void DeferRenderPass::DrawPointLightVolumesDeferred(Scene* scene)
 
 void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 {
+	PERF_CPU_SCOPE("Deferred Pass");
+	PERF_GPU_SCOPE("Deferred Pass");
 	if (!scene) return;
 
 	UpdateFBOFromSystemProperties();
@@ -274,6 +277,7 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 		}
 
 		glBindVertexArray(globalVAOs.quadVAO);
+		PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, 6);
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 	} else {
 		// 与 Scene::DrawDefferedModels 一致：平行光全屏；点光源用模板 + 球体裁剪像素（聚光灯此模式下不单独绘制）
@@ -295,6 +299,7 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 		}
 
 		glBindVertexArray(globalVAOs.quadVAO);
+		PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, 6);
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 
 		DrawPointLightVolumesDeferred(scene);

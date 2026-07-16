@@ -1,5 +1,6 @@
 #include "PostprocessRenderPass.h"
 #include "Global.h"
+#include "Profiler.h"
 
 // Init: Get FBO to save final postprocess color
 void PostprocessRenderPass::Init(int width, int height) {
@@ -16,6 +17,8 @@ FBOAttributes PostprocessRenderPass::BuildAttributesFromSystemProperties() {
 }
 
 void PostprocessRenderPass::Render(Scene* scene, const FBO* inputFBO) {
+    PERF_CPU_SCOPE("Postprocess Pass");
+    PERF_GPU_SCOPE("Postprocess Pass");
     if (!inputFBO || inputFBO->textureIDs.empty()) return;
 
     this->UpdateFBOFromSystemProperties();
@@ -65,6 +68,7 @@ void PostprocessRenderPass::Render(Scene* scene, const FBO* inputFBO) {
     screenShader->use();
     screenShader->setInt("screenTexture", 0);
     screenShader->setInt("bloomBlur", 1);
+    PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, 6);
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -134,6 +138,7 @@ void PostprocessRenderPass::Blur(int times, unsigned int& textureID) {
             GL_TEXTURE_2D, first_iteration ? textureID : fbos[(i + 1) % 2]->textureIDs[0]
         );
         bulrShader->setInt("image", 0);
+        PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, 6);
         glDrawArrays(GL_TRIANGLES, 0, 6);
         horizontal = !horizontal;
         if (first_iteration)

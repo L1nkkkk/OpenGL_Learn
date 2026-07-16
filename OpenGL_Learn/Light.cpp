@@ -1,10 +1,12 @@
 #include "Light.h"
+#include "Profiler.h"
 
 void PointLight::DrawPointLight() {
 	for (auto& mesh : meshes) {
 		auto& vertices = mesh.vertices;
 		auto VAO = mesh.GetVAO();
 		glBindVertexArray(VAO);
+		PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, vertices.size());
 		glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size()));
 		glBindVertexArray(0);
 	}

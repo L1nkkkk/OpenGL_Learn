@@ -23,6 +23,7 @@
 #include "ForwardRenderPass.h"
 #include "DeferRenderPass.h"
 #include "PostprocessRenderPass.h"
+#include "Profiler.h"
 #include "SceneStateIO.h"
 #ifdef _MSC_VER
 #pragma warning(pop)
@@ -141,6 +142,7 @@ int main() {
 	}
 	glfwGetFramebufferSize(window, &properties.SCREEN_WIDTH, &properties.SCREEN_HEIGHT);
 	glViewport(0, 0, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
+	PerformanceProfiler::GetInstance().Initialize();
 
 	InitVAOs();
 
@@ -272,8 +274,12 @@ int main() {
 	postprocessRenderPass->Init(properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
 
 	while (!glfwWindowShouldClose(window)) {
+		PERF_FRAME_SCOPE();
 		// 分帧异步恢复存档里的文件模型，减少单帧加载峰值。
-		SceneStateIO::UpdateAsyncLoads(scene, 1);
+		{
+			PERF_CPU_SCOPE("Async Model Loads");
+			SceneStateIO::UpdateAsyncLoads(scene, 1);
+		}
 
 		//calculate FPS
 		timer.Tick();
@@ -288,18 +294,24 @@ int main() {
 		}
 		glfwSetWindowTitle(window, windowTitle.str().c_str());
 
-		if (properties.AUTO_RELOAD_SHADERS) {
-			shaderManager.ReloadChangedShaders();
-		}
-		if (properties.AUTO_RELOAD_MATERIALS) {
-			xmlMaterialManager.ReloadChangedFiles();
+		{
+			PERF_CPU_SCOPE("Hot Reload Polling");
+			if (properties.AUTO_RELOAD_SHADERS) {
+				shaderManager.ReloadChangedShaders();
+			}
+			if (properties.AUTO_RELOAD_MATERIALS) {
+				xmlMaterialManager.ReloadChangedFiles();
+			}
 		}
 		// NewFrame
-		SetGui();
+		{
+			PERF_CPU_SCOPE("Editor UI Build");
+			SetGui();
 
 		// ?? DockSpace??? Unity ?????
 		mygui.MainDockSpace();
 		mygui.Overview_UI();
+		mygui.Profiler_UI();
 
 		// Settings / Scene / Materials / XML / Assets ??? Dock ? DockSpace ?
 		mygui.Begin();              // Settings ??
@@ -315,12 +327,18 @@ int main() {
 		mygui.MaterialsInspector_UI();  // 全局材质 Inspector
 		mygui.MaterialsEditor_UI();     // XML 编辑器
 
+		}
 		//process input
-		ProcessInput(window);
+		{
+			PERF_CPU_SCOPE("Input and Frame Uniforms");
+			ProcessInput(window);
 		//reset used texture num
 		properties.ResetUsedTextureNum();
 		//before pass: set uniform buffer
-		SetUniformBuffer();
+			SetUniformBuffer();
+		}
+		{
+			PERF_GPU_SCOPE("GPU Frame");
 #ifdef USE_SCENE_SHADER
 		//first pass: render scene to framebuffer (HDR)
 		FBO* sceneFBO = nullptr;
@@ -362,6 +380,7 @@ int main() {
 			debugShader.setFloat("div", (float)len);
 			glBindVertexArray(globalVAOs.quadVAO);
 			glDisable(GL_DEPTH_TEST);
+			PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, 6);
 			glDrawArrays(GL_TRIANGLES, 0, 6);
 		}
 
@@ -403,23 +422,30 @@ int main() {
 				}
 			}
 		}
-		mygui.SetViewportReadSource(
-			viewportReadFBO,
-			viewportReadAttachment,
-			viewportReadIsDepth,
-			viewportReadWidth,
-			viewportReadHeight
-		);
-		mygui.Viewport_UI(viewportTextureID);
+		{
+			PERF_CPU_SCOPE("Viewport and Assets UI");
+			mygui.SetViewportReadSource(
+				viewportReadFBO,
+				viewportReadAttachment,
+				viewportReadIsDepth,
+				viewportReadWidth,
+				viewportReadHeight
+			);
+			mygui.Viewport_UI(viewportTextureID);
 
-		// Assets ?????? models / materials / shaders ??
-		mygui.AssetsBrowser_UI();
+			// Assets ?????? models / materials / shaders ??
+			mygui.AssetsBrowser_UI();
+		}
 
 		//Draw GUI
-		mygui.Render();
+		{
+			PERF_CPU_SCOPE("ImGui Render");
+			mygui.Render();
+		}
 #elif defined(USE_GEOMETRY_SHADER)
 		geometryShader.use();
 		glBindVertexArray(VAO);
+		PerformanceProfiler::GetInstance().RecordDraw(GL_POINTS, 4);
 		glDrawArrays(GL_POINTS, 0, 4);
 #elif defined(USE_PLANET_SHADER)
 		glEnable(GL_DEPTH_TEST);
@@ -428,10 +454,14 @@ int main() {
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		planet.Draw();
 #endif
+		}
 		//scene.ClearFBO();
 		// glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
-		glfwSwapBuffers(window);
-		glfwPollEvents();
+		{
+			PERF_CPU_SCOPE("Present and Events");
+			glfwSwapBuffers(window);
+			glfwPollEvents();
+		}
 		
 	}
 
@@ -442,6 +472,7 @@ int main() {
 	postprocessRenderPass->Destroy();
 	delete postprocessRenderPass;
 	SceneStateIO::Save(scene, camera, sceneStatePath);
+	PerformanceProfiler::GetInstance().Shutdown();
 
 	glfwTerminate();
 	return 0;
