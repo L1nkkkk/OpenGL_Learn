@@ -321,6 +321,83 @@ void PerformanceProfiler::RecordUniformLocationLookup(bool cacheHit)
 	}
 }
 
+void PerformanceProfiler::RecordMaterialBind(bool cacheHit)
+{
+	if (!IsCollecting()) {
+		return;
+	}
+
+	if (cacheHit) {
+		++m_currentRenderStats.materialBindCacheHits;
+	}
+	else {
+		++m_currentRenderStats.materialBinds;
+	}
+}
+
+void PerformanceProfiler::RecordRenderStateChange(bool cacheHit)
+{
+	if (!IsCollecting()) {
+		return;
+	}
+
+	if (cacheHit) {
+		++m_currentRenderStats.renderStateCacheHits;
+	}
+	else {
+		++m_currentRenderStats.renderStateChanges;
+	}
+}
+
+void PerformanceProfiler::RecordRenderStateQuery()
+{
+	if (IsCollecting()) {
+		++m_currentRenderStats.renderStateQueries;
+	}
+}
+
+void PerformanceProfiler::RecordTextureStateChange(bool cacheHit)
+{
+	if (!IsCollecting()) {
+		return;
+	}
+
+	if (cacheHit) {
+		++m_currentRenderStats.textureStateCacheHits;
+	}
+	else {
+		++m_currentRenderStats.textureStateChanges;
+	}
+}
+
+void PerformanceProfiler::RecordVertexArrayBind(bool cacheHit)
+{
+	if (!IsCollecting()) {
+		return;
+	}
+
+	if (cacheHit) {
+		++m_currentRenderStats.vertexArrayBindCacheHits;
+	}
+	else {
+		++m_currentRenderStats.vertexArrayBinds;
+	}
+}
+
+void PerformanceProfiler::RecordFramebufferBind(bool cacheHit)
+{
+	if (!IsCollecting()) {
+		return;
+	}
+
+	if (cacheHit) {
+		++m_currentRenderStats.framebufferBindCacheHits;
+	}
+	else {
+		++m_currentRenderStats.framebufferBinds;
+	}
+}
+
 void PerformanceProfiler::RecordFileSystemCheck()
 {
 	if (IsCollecting()) {

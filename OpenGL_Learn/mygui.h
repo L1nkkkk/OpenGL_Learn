@@ -297,6 +297,23 @@ public:
 			ImGui::Text("Uniform location queries / cache hits: %llu / %llu",
 				static_cast<unsigned long long>(renderStats.uniformLocationQueries),
 				static_cast<unsigned long long>(renderStats.uniformLocationCacheHits));
+			ImGui::Text("Material binds / cache hits: %llu / %llu",
+				static_cast<unsigned long long>(renderStats.materialBinds),
+				static_cast<unsigned long long>(renderStats.materialBindCacheHits));
+			ImGui::Text("Render state changes / cache hits: %llu / %llu",
+				static_cast<unsigned long long>(renderStats.renderStateChanges),
+				static_cast<unsigned long long>(renderStats.renderStateCacheHits));
+			ImGui::Text("Render state driver queries: %llu",
+				static_cast<unsigned long long>(renderStats.renderStateQueries));
+			ImGui::Text("Texture state changes / cache hits: %llu / %llu",
+				static_cast<unsigned long long>(renderStats.textureStateChanges),
+				static_cast<unsigned long long>(renderStats.textureStateCacheHits));
+			ImGui::Text("VAO binds / cache hits: %llu / %llu",
+				static_cast<unsigned long long>(renderStats.vertexArrayBinds),
+				static_cast<unsigned long long>(renderStats.vertexArrayBindCacheHits));
+			ImGui::Text("Framebuffer binds / cache hits: %llu / %llu",
+				static_cast<unsigned long long>(renderStats.framebufferBinds),
+				static_cast<unsigned long long>(renderStats.framebufferBindCacheHits));
 			ImGui::Text("Filesystem checks: %llu", static_cast<unsigned long long>(renderStats.fileSystemChecks));
 			ImGui::Text("Active models: %llu", static_cast<unsigned long long>(renderStats.activeModels));
 			ImGui::Text("Meshes: %llu opaque / %llu transparent",
@@ -1205,7 +1222,7 @@ private:
 		glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prevReadFBO);
 		glGetIntegerv(GL_READ_BUFFER, &prevReadBuffer);
 
-		glBindFramebuffer(GL_READ_FRAMEBUFFER, m_viewportReadFBO);
+		GLState::BindFramebuffer(GL_READ_FRAMEBUFFER, m_viewportReadFBO);
 		if (m_viewportReadIsDepth) {
 			float d = 0.0f;
 			glReadPixels(x, y, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &d);
@@ -1222,7 +1239,7 @@ private:
 		m_pickedY = y;
 		m_hasPickedPixel = true;
 
-		glBindFramebuffer(GL_READ_FRAMEBUFFER, (unsigned int)prevReadFBO);
+		GLState::BindFramebuffer(GL_READ_FRAMEBUFFER, (unsigned int)prevReadFBO);
 		glReadBuffer((unsigned int)prevReadBuffer);
 	}
 

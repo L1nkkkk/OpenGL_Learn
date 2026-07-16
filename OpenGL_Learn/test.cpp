@@ -24,6 +24,7 @@
 #include "DeferRenderPass.h"
 #include "PostprocessRenderPass.h"
 #include "Profiler.h"
+#include "GLStateCache.h"
 #include "SceneStateIO.h"
 #include <algorithm>
 #ifdef _MSC_VER
@@ -144,6 +145,7 @@ int main() {
 	glfwGetFramebufferSize(window, &properties.SCREEN_WIDTH, &properties.SCREEN_HEIGHT);
 	glViewport(0, 0, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
 	PerformanceProfiler::GetInstance().Initialize();
+	GLState::Initialize();
 
 	InitVAOs();
 
@@ -165,7 +167,7 @@ int main() {
 	unsigned int VAO, VBO;
 	glGenVertexArrays(1, &VAO);
 	glGenBuffers(1, &VBO);
-	glBindVertexArray(VAO);
+	GLState::BindVertexArray(VAO);
 	glBindBuffer(GL_ARRAY_BUFFER, VBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(points), points, GL_STATIC_DRAW);
 	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
@@ -251,16 +253,16 @@ int main() {
 	glGenBuffers(1, &skyboxVBO);
 	glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
-	glBindVertexArray(skyboxVAO);
+	GLState::BindVertexArray(skyboxVAO);
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-	glBindVertexArray(0);
+	GLState::BindVertexArray(0);
 	scene.skyboxSource = SkyboxSource(skybox, skyboxVAO, shaderManager.GetShader(ShaderManager::Skybox));
 	
 	FramebuffersManager& framebuffersMgr = FramebuffersManager::GetInstance();
 	AntiAliasManager& antiAliasMgr = AntiAliasManager::GetInstance();
 
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	GLState::BindFramebuffer(GL_FRAMEBUFFER, 0);
 	//glEnable(GL_CULL_FACE);
 	//glCullFace(GL_BACK);
 
@@ -359,7 +361,7 @@ int main() {
 		}
 		//second pass: postprocess (HDR + gamma + bloom) -> LDR texture (inside postprocessRenderPass)
 		
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		GLState::BindFramebuffer(GL_FRAMEBUFFER, 0);
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 		if (!properties.DEBUG_MODE) {
@@ -370,7 +372,7 @@ int main() {
 			postprocessRenderPass->Render(&scene, sceneFBO);
 		}
 		else {
-			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			GLState::BindFramebuffer(GL_FRAMEBUFFER, 0);
 			FBO* debugFBO = scene.GetDebugFramebuffer();
 			int size = static_cast<int>(debugFBO->textureIDs.size());
 			int len = 1;
@@ -379,20 +381,20 @@ int main() {
 			}
 			debugShader.use();
 			for(int i = 0;i<size;i++){
-				glActiveTexture(GL_TEXTURE0 + i);
-				glBindTexture(GL_TEXTURE_2D, debugFBO->textureIDs[i]);
+				GLState::ActiveTexture(GL_TEXTURE0 + i);
+				GLState::BindTexture(GL_TEXTURE_2D, debugFBO->textureIDs[i]);
 				std::string uniformName = "screenTexture[" + std::to_string(i) + "]";
 				debugShader.setInt(uniformName, i);
 			}
 			debugShader.setFloat("div", (float)len);
-			glBindVertexArray(globalVAOs.quadVAO);
-			glDisable(GL_DEPTH_TEST);
+			GLState::BindVertexArray(globalVAOs.quadVAO);
+			GLState::Disable(GL_DEPTH_TEST);
 			PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, 6);
 			glDrawArrays(GL_TRIANGLES, 0, 6);
 		}
 
 		// ??????? FBO??????????????? ImGui ?????
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		GLState::BindFramebuffer(GL_FRAMEBUFFER, 0);
 
 		// Viewport：默认(INDEX==0)显示最终渲染结果；否则显示所选 FBO 的指定 color/depth 附件
 		unsigned int viewportTextureID = 0;
@@ -451,11 +453,11 @@ int main() {
 		}
 #elif defined(USE_GEOMETRY_SHADER)
 		geometryShader.use();
-		glBindVertexArray(VAO);
+		GLState::BindVertexArray(VAO);
 		PerformanceProfiler::GetInstance().RecordDraw(GL_POINTS, 4);
 		glDrawArrays(GL_POINTS, 0, 4);
 #elif defined(USE_PLANET_SHADER)
-		glEnable(GL_DEPTH_TEST);
+		GLState::Enable(GL_DEPTH_TEST);
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 		glClearStencil(0);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);

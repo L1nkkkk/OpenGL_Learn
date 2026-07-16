@@ -1,4 +1,5 @@
 #include "Global.h"
+#include "GLStateCache.h"
 #include <sstream>
 
 void FBO::Init(FBOAttributes attr) {
@@ -7,7 +8,7 @@ void FBO::Init(FBOAttributes attr) {
     depthTextureID = 0;
 
     glGenFramebuffers(1, &framebufferID);
-    glBindFramebuffer(GL_FRAMEBUFFER, framebufferID);
+    GLState::BindFramebuffer(GL_FRAMEBUFFER, framebufferID);
 
     // 1. ???? textureAttrs ?????????? ID
     textureIDs.resize(attr.textureAttrs.size());
@@ -21,7 +22,7 @@ void FBO::Init(FBOAttributes attr) {
         const auto& tAttr = attr.textureAttrs[i];
         GLuint texID = textureIDs[i];
 
-        glBindTexture(tAttr.target, texID);
+        GLState::BindTexture(tAttr.target, texID);
 
         // ??????????? (MSAA)
         if (tAttr.target == GL_TEXTURE_2D_MULTISAMPLE) {
@@ -84,7 +85,7 @@ void FBO::Init(FBOAttributes attr) {
     // Instead, ForwardRenderPass will blit depth into this texture after opaque rendering.
     if (attr.hasDepthTexture && !attr.isShadowMap) {
         glGenTextures(1, &depthTextureID);
-        glBindTexture(GL_TEXTURE_2D, depthTextureID);
+        GLState::BindTexture(GL_TEXTURE_2D, depthTextureID);
         glTexImage2D(
             GL_TEXTURE_2D, 0,
             GL_DEPTH_COMPONENT32F,
@@ -136,7 +137,7 @@ void FBO::Init(FBOAttributes attr) {
         std::cerr << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
     }
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    GLState::BindFramebuffer(GL_FRAMEBUFFER, 0);
     this->init = true;
 }
 

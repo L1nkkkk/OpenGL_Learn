@@ -2,6 +2,7 @@
 
 #include "Shader.h"
 #include "Global.h"
+#include "GLStateCache.h"
 #include <memory>
 #include <string>
 #include <utility>
@@ -158,9 +159,9 @@ public:
 		//�����������������Ժ�����Ⱦ��ɸ���
 		int TextureUsedNum = SystemProperties::GetInstance().USED_TEXTURE_NUM;
 		for(int i = 0; i < TextureUsedNum; ++i) {
-			glActiveTexture(GL_TEXTURE0 + i);
-			glBindTexture(GL_TEXTURE_2D, 0);
-			glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+			GLState::ActiveTexture(GL_TEXTURE0 + i);
+			GLState::BindTexture(GL_TEXTURE_2D, 0);
+			GLState::BindTexture(GL_TEXTURE_CUBE_MAP, 0);
 		}
 	}
 };

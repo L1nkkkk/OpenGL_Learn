@@ -1,4 +1,5 @@
 #pragma once
+#include "GLStateCache.h"
 #include "stb_image.h"
 #include <iostream>
 #include <glad/glad.h>
@@ -608,10 +609,13 @@ public:
     }
 
 	void Delete() {
+		GLState::ForgetFramebuffer(framebufferID);
 		glDeleteFramebuffers(1, &framebufferID);
+		GLState::ForgetTextures(static_cast<GLsizei>(textureIDs.size()), textureIDs.data());
 		glDeleteTextures(static_cast<GLsizei>(textureIDs.size()), textureIDs.data());
 		glDeleteRenderbuffers(1, &rboID);
 		if (depthTextureID != 0) {
+			GLState::ForgetTexture(depthTextureID);
 			glDeleteTextures(1, &depthTextureID);
 			depthTextureID = 0;
 		}
@@ -666,7 +670,7 @@ public:
 	}
 
 	void ClearFBOBuffers(FBO* fbo) {
-		glBindFramebuffer(GL_FRAMEBUFFER, fbo->framebufferID);
+		GLState::BindFramebuffer(GL_FRAMEBUFFER, fbo->framebufferID);
 		if (fbo->attr.isShadowMap) {
 			glClear(GL_DEPTH_BUFFER_BIT);
 		}
@@ -675,7 +679,7 @@ public:
 				glClearBufferfv(GL_COLOR, 0, glm::value_ptr(glm::vec4(0.0f)));
 			}
 		}
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		GLState::BindFramebuffer(GL_FRAMEBUFFER, 0);
 	}
 
 	FBO* GetFBO(FBOAttributes);

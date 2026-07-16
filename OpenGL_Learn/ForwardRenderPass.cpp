@@ -1,4 +1,5 @@
 #include "ForwardRenderPass.h"
+#include "GLStateCache.h"
 #include "Profiler.h"
 #include "ShaderManager.h"
 
@@ -41,9 +42,9 @@ void ForwardRenderPass::Render(Scene* scene, const FBO* inputFBO)
 
 	scene->PrepareRenderData();
 	scene->DrawShadowMap();
-	glBindFramebuffer(GL_FRAMEBUFFER, m_outputFBO->framebufferID);
-	glEnable(GL_DEPTH_TEST);
-	glEnable(GL_STENCIL_TEST);
+	GLState::BindFramebuffer(GL_FRAMEBUFFER, m_outputFBO->framebufferID);
+	GLState::Enable(GL_DEPTH_TEST);
+	GLState::Enable(GL_STENCIL_TEST);
 
 	// Optimization:
 	// Color2(normal) attachment is only needed when the user is actively viewing it in the viewport.
@@ -71,12 +72,12 @@ void ForwardRenderPass::Render(Scene* scene, const FBO* inputFBO)
 		}
 	}
 
-	glStencilFunc(GL_ALWAYS, 0, 0xFF);
-	glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+	GLState::StencilFunc(GL_ALWAYS, 0, 0xFF);
+	GLState::StencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClearStencil(0);
 
-	glStencilMask(0xFF);
+	GLState::StencilMask(0xFF);
 	// Clear required attachments.
 	// If we don't render normal attachment2, don't clear it (it's not used).
 	if (renderNormalAttachment2) {
@@ -88,7 +89,7 @@ void ForwardRenderPass::Render(Scene* scene, const FBO* inputFBO)
 		glDrawBuffers(2, allDrawBuffersForClear);
 	}
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-	glStencilMask(0x00);
+	GLState::StencilMask(0x00);
 
 	// Opaque pass: optionally write attachment2(Color2/Normal) for debug/AO input.
 	GLenum colorDrawBuffers[2] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
@@ -106,29 +107,35 @@ void ForwardRenderPass::Render(Scene* scene, const FBO* inputFBO)
 	auto& transparentList = scene->GetTransparentMeshes();
 	auto& pointLightModels = scene->GetLightSource().GetPointLights();
 	Shader* lastShader = nullptr;
-	for (const auto& item : opaqueList) {
-		if (!item.shader || !item.model || !item.mesh) continue;
-		if (item.shader != lastShader) {
-			lastShader = item.shader;
-			lastShader->use();
-			scene->SetLightUniforms(*lastShader);
+	{
+		MaterialBatchScope materialBatch;
+		for (const auto& item : opaqueList) {
+			if (!item.shader || !item.model || !item.mesh) continue;
+			if (item.shader != lastShader) {
+				lastShader = item.shader;
+				lastShader->use();
+				scene->SetLightUniforms(*lastShader);
+			}
+			lastShader->setMat4("model", item.model->getModelMatrix());
+			item.mesh->Draw();
 		}
-		lastShader->setMat4("model", item.model->getModelMatrix());
-		item.mesh->Draw();
 	}
 
 	// After opaque pass: don't overwrite attachment2 during lighting/skybox/transparent.
 	glDrawBuffers(2, colorDrawBuffers);
 
-	for (auto& light : pointLightModels) {
-		light.Draw();
+	{
+		MaterialBatchScope materialBatch;
+		for (auto& light : pointLightModels) {
+			light.Draw();
+		}
 	}
 	// Draw Skybox (使用深度测试优化，但不影响stencil buffer)
 	scene->DrawSkybox(scene->camera_ptr->GetViewMatrix());
 	// Draw Transparent Meshes
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	glDepthMask(GL_FALSE);
+	GLState::Enable(GL_BLEND);
+	GLState::BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	GLState::DepthMask(false);
 
 	// If the user is viewing Color2, also write normals for transparent meshes.
 	// Keep attachment2 write enabled only for this transparent pass to avoid lighting/skybox overwriting it.
@@ -138,20 +145,23 @@ void ForwardRenderPass::Render(Scene* scene, const FBO* inputFBO)
 	}
 
 	lastShader = nullptr;
-	for (const auto& item : transparentList) {
-		if (!item.shader || !item.model || !item.mesh) continue;
-		if (item.shader != lastShader) {
-			lastShader = item.shader;
-			lastShader->use();
-			scene->SetLightUniforms(*lastShader);
+	{
+		MaterialBatchScope materialBatch;
+		for (const auto& item : transparentList) {
+			if (!item.shader || !item.model || !item.mesh) continue;
+			if (item.shader != lastShader) {
+				lastShader = item.shader;
+				lastShader->use();
+				scene->SetLightUniforms(*lastShader);
+			}
+			lastShader->setMat4("model", item.model->getModelMatrix());
+			item.mesh->Draw();
 		}
-		lastShader->setMat4("model", item.model->getModelMatrix());
-		item.mesh->Draw();
 	}
-	glDepthMask(GL_TRUE);
-	glDisable(GL_BLEND);
+	GLState::DepthMask(true);
+	GLState::Disable(GL_BLEND);
 	// 最后绘制outline（禁用深度测试，基于stencil buffer绘制）
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	GLState::BindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void ForwardRenderPass::Destroy()

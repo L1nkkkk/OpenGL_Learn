@@ -1,4 +1,5 @@
 #include "PostprocessRenderPass.h"
+#include "GLStateCache.h"
 #include "Global.h"
 #include "Profiler.h"
 
@@ -51,18 +52,18 @@ void PostprocessRenderPass::Render(Scene* scene, const FBO* inputFBO) {
     auto screenShader = ShaderManager::GetInstance().GetShader(ShaderManager::Scene);
     if (!screenShader) return;
 
-    glBindFramebuffer(GL_FRAMEBUFFER, m_outputFBO->framebufferID);
-    glDisable(GL_DEPTH_TEST);
-    glBindVertexArray(globalVAOs.quadVAO);
+    GLState::BindFramebuffer(GL_FRAMEBUFFER, m_outputFBO->framebufferID);
+    GLState::Disable(GL_DEPTH_TEST);
+    GLState::BindVertexArray(globalVAOs.quadVAO);
 
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, inputFBO->textureIDs[0]);
+    GLState::ActiveTexture(GL_TEXTURE0);
+    GLState::BindTexture(GL_TEXTURE_2D, inputFBO->textureIDs[0]);
 
-    glActiveTexture(GL_TEXTURE1);
+    GLState::ActiveTexture(GL_TEXTURE1);
     if (properties.BLOOM && m_bloomBlurFBO && !m_bloomBlurFBO->textureIDs.empty()) {
-        glBindTexture(GL_TEXTURE_2D, m_bloomBlurFBO->textureIDs[0]);
+        GLState::BindTexture(GL_TEXTURE_2D, m_bloomBlurFBO->textureIDs[0]);
     } else {
-        glBindTexture(GL_TEXTURE_2D, 0);
+        GLState::BindTexture(GL_TEXTURE_2D, 0);
     }
 
     screenShader->use();
@@ -71,7 +72,7 @@ void PostprocessRenderPass::Render(Scene* scene, const FBO* inputFBO) {
     PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, 6);
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    GLState::BindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void PostprocessRenderPass::Destroy() {
@@ -125,16 +126,16 @@ void PostprocessRenderPass::Blur(int times, unsigned int& textureID) {
     GLuint amount = times << 1;
     bulrShader->use();
     // Blur 是全屏 quad pass：不要受前序 Forward 的深度/模板状态影响
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_STENCIL_TEST);
+    GLState::Disable(GL_DEPTH_TEST);
+    GLState::Disable(GL_STENCIL_TEST);
     glViewport(0, 0, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
-    glBindVertexArray(globalVAOs.quadVAO);
+    GLState::BindVertexArray(globalVAOs.quadVAO);
     for (GLuint i = 0; i < amount; i++)
     {
-        glBindFramebuffer(GL_FRAMEBUFFER, fbos[i % 2]->framebufferID);
+        GLState::BindFramebuffer(GL_FRAMEBUFFER, fbos[i % 2]->framebufferID);
         bulrShader->setBool("horizontal", horizontal);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(
+        GLState::ActiveTexture(GL_TEXTURE0);
+        GLState::BindTexture(
             GL_TEXTURE_2D, first_iteration ? textureID : fbos[(i + 1) % 2]->textureIDs[0]
         );
         bulrShader->setInt("image", 0);
@@ -144,16 +145,14 @@ void PostprocessRenderPass::Blur(int times, unsigned int& textureID) {
         if (first_iteration)
             first_iteration = false;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbos[1]->framebufferID);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_bloomBlurFBO->framebufferID);
+    GLState::BindFramebuffer(GL_READ_FRAMEBUFFER, fbos[1]->framebufferID);
+    GLState::BindFramebuffer(GL_DRAW_FRAMEBUFFER, m_bloomBlurFBO->framebufferID);
     glReadBuffer(GL_COLOR_ATTACHMENT0);
     glDrawBuffer(GL_COLOR_ATTACHMENT0);
     glBlitFramebuffer(0, 0, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT, 0, 0, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT, GL_COLOR_BUFFER_BIT, GL_NEAREST);
     glDrawBuffer(GL_COLOR_ATTACHMENT0);
     glReadBuffer(GL_COLOR_ATTACHMENT0);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    GLState::BindFramebuffer(GL_FRAMEBUFFER, 0);
     FramebuffersManager::GetInstance().ReleaseFBO(fbos[0]);
     FramebuffersManager::GetInstance().ReleaseFBO(fbos[1]);
 }

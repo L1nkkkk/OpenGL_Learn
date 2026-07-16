@@ -1,4 +1,5 @@
 #include "SSAORenderPass.h"
+#include "GLStateCache.h"
 #include "Profiler.h"
 #include "ShaderManager.h"
 
@@ -47,13 +48,13 @@ void SSAORenderPass::EnsureKernelAndNoise()
 	}
 
 	glGenTextures(1, &m_noiseTexture);
-	glBindTexture(GL_TEXTURE_2D, m_noiseTexture);
+	GLState::BindTexture(GL_TEXTURE_2D, m_noiseTexture);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, 4, 4, 0, GL_RGB, GL_FLOAT, noise.data());
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	glBindTexture(GL_TEXTURE_2D, 0);
+	GLState::BindTexture(GL_TEXTURE_2D, 0);
 }
 
 void SSAORenderPass::Render(Scene* scene, const FBO* gbufferFBO)
@@ -74,10 +75,10 @@ void SSAORenderPass::Render(Scene* scene, const FBO* gbufferFBO)
 	if (!ssaoShader)
 		return;
 
-	glBindFramebuffer(GL_FRAMEBUFFER, m_outputFBO->framebufferID);
+	GLState::BindFramebuffer(GL_FRAMEBUFFER, m_outputFBO->framebufferID);
 	glViewport(0, 0, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
-	glDisable(GL_DEPTH_TEST);
-	glDisable(GL_STENCIL_TEST);
+	GLState::Disable(GL_DEPTH_TEST);
+	GLState::Disable(GL_STENCIL_TEST);
 	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT);
 
@@ -94,24 +95,24 @@ void SSAORenderPass::Render(Scene* scene, const FBO* gbufferFBO)
 	for (int i = 0; i < 64; ++i)
 		ssaoShader->setVec3("ssaoKernel[" + std::to_string(i) + "]", m_kernel[i]);
 
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, gbufferFBO->textureIDs[0]);
-	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(GL_TEXTURE_2D, gbufferFBO->textureIDs[1]);
-	glActiveTexture(GL_TEXTURE2);
-	glBindTexture(GL_TEXTURE_2D, m_noiseTexture);
+	GLState::ActiveTexture(GL_TEXTURE0);
+	GLState::BindTexture(GL_TEXTURE_2D, gbufferFBO->textureIDs[0]);
+	GLState::ActiveTexture(GL_TEXTURE1);
+	GLState::BindTexture(GL_TEXTURE_2D, gbufferFBO->textureIDs[1]);
+	GLState::ActiveTexture(GL_TEXTURE2);
+	GLState::BindTexture(GL_TEXTURE_2D, m_noiseTexture);
 
-	glBindVertexArray(globalVAOs.quadVAO);
+	GLState::BindVertexArray(globalVAOs.quadVAO);
 	PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, 6);
 	glDrawArrays(GL_TRIANGLES, 0, 6);
-	glBindVertexArray(0);
 
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	GLState::BindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void SSAORenderPass::Destroy()
 {
 	if (m_noiseTexture != 0) {
+		GLState::ForgetTexture(m_noiseTexture);
 		glDeleteTextures(1, &m_noiseTexture);
 		m_noiseTexture = 0;
 	}

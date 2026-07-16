@@ -1,4 +1,5 @@
 #include "DeferRenderPass.h"
+#include "GLStateCache.h"
 #include "Profiler.h"
 #include "ShaderManager.h"
 #include <glm/glm.hpp>
@@ -41,20 +42,20 @@ void DeferRenderPass::BindGBufferTextures(Shader& shader, unsigned int& textureS
 {
 	if (!m_gbufferFBO || m_gbufferFBO->textureIDs.size() < 4) return;
 
-	glActiveTexture(GL_TEXTURE0 + textureSlot);
-	glBindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[0]);
+	GLState::ActiveTexture(GL_TEXTURE0 + textureSlot);
+	GLState::BindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[0]);
 	shader.setInt("gPosition", textureSlot++);
 
-	glActiveTexture(GL_TEXTURE0 + textureSlot);
-	glBindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[1]);
+	GLState::ActiveTexture(GL_TEXTURE0 + textureSlot);
+	GLState::BindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[1]);
 	shader.setInt("gNormal", textureSlot++);
 
-	glActiveTexture(GL_TEXTURE0 + textureSlot);
-	glBindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[2]);
+	GLState::ActiveTexture(GL_TEXTURE0 + textureSlot);
+	GLState::BindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[2]);
 	shader.setInt("gAlbedoSpec", textureSlot++);
 
-	glActiveTexture(GL_TEXTURE0 + textureSlot);
-	glBindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[3]);
+	GLState::ActiveTexture(GL_TEXTURE0 + textureSlot);
+	GLState::BindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[3]);
 	shader.setInt("gMaterial", textureSlot++);
 }
 
@@ -73,29 +74,29 @@ void DeferRenderPass::DrawPointLightVolumesDeferred(Scene* scene)
 	if (scene->camera_ptr) {
 		lightVolumeShader->setVec3("viewPos", scene->camera_ptr->cameraPos);
 	}
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[0]);
+	GLState::ActiveTexture(GL_TEXTURE0);
+	GLState::BindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[0]);
 	lightVolumeShader->setInt("gPosition", 0);
-	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[1]);
+	GLState::ActiveTexture(GL_TEXTURE1);
+	GLState::BindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[1]);
 	lightVolumeShader->setInt("gNormal", 1);
-	glActiveTexture(GL_TEXTURE2);
-	glBindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[2]);
+	GLState::ActiveTexture(GL_TEXTURE2);
+	GLState::BindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[2]);
 	lightVolumeShader->setInt("gAlbedoSpec", 2);
-	glActiveTexture(GL_TEXTURE3);
-	glBindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[3]);
+	GLState::ActiveTexture(GL_TEXTURE3);
+	GLState::BindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[3]);
 	lightVolumeShader->setInt("gMaterial", 3);
 	lightVolumeShader->setBool("useSSAO", useSSAOInLighting);
 	if (useSSAOInLighting) {
-		glActiveTexture(GL_TEXTURE5);
-		glBindTexture(GL_TEXTURE_2D, ssaoFBO->textureIDs[0]);
+		GLState::ActiveTexture(GL_TEXTURE5);
+		GLState::BindTexture(GL_TEXTURE_2D, ssaoFBO->textureIDs[0]);
 		lightVolumeShader->setInt("ssaoMap", 5);
 	}
 
-	glEnable(GL_STENCIL_TEST);
+	GLState::Enable(GL_STENCIL_TEST);
 	glBlendEquation(GL_FUNC_ADD);
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_ONE, GL_ONE);
+	GLState::Enable(GL_BLEND);
+	GLState::BlendFunc(GL_ONE, GL_ONE);
 
 	for (auto& pointLight : scene->GetLightSource().pointLights) {
 		if (!pointLight.GetActiveStatus()) continue;
@@ -107,17 +108,17 @@ void DeferRenderPass::DrawPointLightVolumesDeferred(Scene* scene)
 		pointLight.SetScale(glm::vec3(radius));
 
 		// 1) 光体积写入模板：INCR_WRAP/DECR_WRAP 单遍，无面剔除（与重构前一致）
-		glDisable(GL_BLEND);
-		glStencilMask(0xFF);
+		GLState::Disable(GL_BLEND);
+		GLState::StencilMask(0xFF);
 		glClear(GL_STENCIL_BUFFER_BIT);
-		glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-		glDepthMask(GL_FALSE);
-		glEnable(GL_DEPTH_TEST);
-		glDepthFunc(GL_LESS);
-		glDisable(GL_CULL_FACE);
-		glStencilFunc(GL_ALWAYS, 0, 0xFF);
-		glStencilOpSeparate(GL_BACK, GL_KEEP, GL_INCR_WRAP, GL_KEEP);
-		glStencilOpSeparate(GL_FRONT, GL_KEEP, GL_DECR_WRAP, GL_KEEP);
+		GLState::ColorMask(false, false, false, false);
+		GLState::DepthMask(false);
+		GLState::Enable(GL_DEPTH_TEST);
+		GLState::DepthFunc(GL_LESS);
+		GLState::Disable(GL_CULL_FACE);
+		GLState::StencilFunc(GL_ALWAYS, 0, 0xFF);
+		GLState::StencilOpSeparate(GL_BACK, GL_KEEP, GL_INCR_WRAP, GL_KEEP);
+		GLState::StencilOpSeparate(GL_FRONT, GL_KEEP, GL_DECR_WRAP, GL_KEEP);
 
 		defaultShader->use();
 		defaultShader->setMat4("model", pointLight.getModelMatrix());
@@ -125,14 +126,14 @@ void DeferRenderPass::DrawPointLightVolumesDeferred(Scene* scene)
 
 		// 2) 仅对模板非 0 像素做光照计算，叠加到平行光结果（深度 GEQUAL + 剔除正面，与重构前一致）
 		lightVolumeShader->use();
-		glEnable(GL_BLEND);
-		glBlendFunc(GL_ONE, GL_ONE);
-		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-		glStencilFunc(GL_NOTEQUAL, 0, 0xFF);
-		glStencilMask(0x00);
-		glEnable(GL_CULL_FACE);
-		glCullFace(GL_FRONT);
-		glDepthFunc(GL_GEQUAL);
+		GLState::Enable(GL_BLEND);
+		GLState::BlendFunc(GL_ONE, GL_ONE);
+		GLState::ColorMask(true, true, true, true);
+		GLState::StencilFunc(GL_NOTEQUAL, 0, 0xFF);
+		GLState::StencilMask(0x00);
+		GLState::Enable(GL_CULL_FACE);
+		GLState::CullFace(GL_FRONT);
+		GLState::DepthFunc(GL_GEQUAL);
 
 		lightVolumeShader->setVec3("pointLight.position", pointLight.position);
 		lightVolumeShader->setFloat("pointLight.constant", pointLight.constant);
@@ -142,43 +143,42 @@ void DeferRenderPass::DrawPointLightVolumesDeferred(Scene* scene)
 		lightVolumeShader->setVec3("pointLight.diffuse", pointLight.diffuse);
 		lightVolumeShader->setVec3("pointLight.specular", pointLight.specular);
 		lightVolumeShader->setFloat("pointLight.far_plane", pointLight.far);
-		glActiveTexture(GL_TEXTURE4);
-		glBindTexture(GL_TEXTURE_CUBE_MAP, pointLight.shadowFBO->textureIDs[0]);
+		GLState::ActiveTexture(GL_TEXTURE4);
+		GLState::BindTexture(GL_TEXTURE_CUBE_MAP, pointLight.shadowFBO->textureIDs[0]);
 		lightVolumeShader->setInt("pointLight.shadowCubeMap", 4);
 		lightVolumeShader->setBool("pointLight.useShadowMap", pointLight.useShadowMap);
 		lightVolumeShader->setMat4("model", pointLight.getModelMatrix());
 
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[0]);
-		glActiveTexture(GL_TEXTURE1);
-		glBindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[1]);
-		glActiveTexture(GL_TEXTURE2);
-		glBindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[2]);
-		glActiveTexture(GL_TEXTURE3);
-		glBindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[3]);
+		GLState::ActiveTexture(GL_TEXTURE0);
+		GLState::BindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[0]);
+		GLState::ActiveTexture(GL_TEXTURE1);
+		GLState::BindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[1]);
+		GLState::ActiveTexture(GL_TEXTURE2);
+		GLState::BindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[2]);
+		GLState::ActiveTexture(GL_TEXTURE3);
+		GLState::BindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[3]);
 		if (useSSAOInLighting) {
-			glActiveTexture(GL_TEXTURE5);
-			glBindTexture(GL_TEXTURE_2D, ssaoFBO->textureIDs[0]);
+			GLState::ActiveTexture(GL_TEXTURE5);
+			GLState::BindTexture(GL_TEXTURE_2D, ssaoFBO->textureIDs[0]);
 		}
 
 		pointLight.DrawPointLight();
 
 		pointLight.SetScale(savedScale);
-		glStencilMask(0xFF);
+		GLState::StencilMask(0xFF);
 		glClear(GL_STENCIL_BUFFER_BIT);
-		glStencilMask(0x00);
-		glCullFace(GL_BACK);
-		glDepthFunc(GL_LESS);
+		GLState::StencilMask(0x00);
+		GLState::CullFace(GL_BACK);
+		GLState::DepthFunc(GL_LESS);
 	}
 
-	glBindVertexArray(0);
-	glDisable(GL_BLEND);
-	glDisable(GL_STENCIL_TEST);
-	glStencilMask(0xFF);
-	glDepthMask(GL_TRUE);
-	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_LESS);
-	glDisable(GL_CULL_FACE);
+	GLState::Disable(GL_BLEND);
+	GLState::Disable(GL_STENCIL_TEST);
+	GLState::StencilMask(0xFF);
+	GLState::DepthMask(true);
+	GLState::Enable(GL_DEPTH_TEST);
+	GLState::DepthFunc(GL_LESS);
+	GLState::Disable(GL_CULL_FACE);
 }
 
 void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
@@ -209,12 +209,12 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 	scene->DrawShadowMap();
 
 	// 1) Geometry pass: write opaque meshes into GBuffer.
-	glDisable(GL_BLEND);
-	glBindFramebuffer(GL_FRAMEBUFFER, m_gbufferFBO->framebufferID);
-	glEnable(GL_DEPTH_TEST);
-	glEnable(GL_STENCIL_TEST);
+	GLState::Disable(GL_BLEND);
+	GLState::BindFramebuffer(GL_FRAMEBUFFER, m_gbufferFBO->framebufferID);
+	GLState::Enable(GL_DEPTH_TEST);
+	GLState::Enable(GL_STENCIL_TEST);
 	glClearStencil(0);
-	glStencilMask(0x00);
+	GLState::StencilMask(0x00);
 	glClear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 	// GBuffer clear values:
 	// gPosition.a = 0 means invalid/background pixel (valid mask).
@@ -231,10 +231,13 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 	if (!deferProcessShader) return;
 	deferProcessShader->use();
 	auto& opaqueList = scene->GetOpaqueMeshes();
-	for (const auto& item : opaqueList) {
-		if (!item.model || !item.mesh) continue;
-		deferProcessShader->setMat4("model", item.model->getModelMatrix());
-		item.mesh->Draw(deferProcessShader.get());
+	{
+		MaterialBatchScope materialBatch;
+		for (const auto& item : opaqueList) {
+			if (!item.model || !item.mesh) continue;
+			deferProcessShader->setMat4("model", item.model->getModelMatrix());
+			item.mesh->Draw(deferProcessShader.get());
+		}
 	}
 
 	if (properties.SSAO) {
@@ -242,8 +245,8 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 	}
 
 	// Copy depth to output target so skybox / transparent passes can share it.
-	glBindFramebuffer(GL_READ_FRAMEBUFFER, m_gbufferFBO->framebufferID);
-	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_outputFBO->framebufferID);
+	GLState::BindFramebuffer(GL_READ_FRAMEBUFFER, m_gbufferFBO->framebufferID);
+	GLState::BindFramebuffer(GL_DRAW_FRAMEBUFFER, m_outputFBO->framebufferID);
 	glBlitFramebuffer(
 		0, 0, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT,
 		0, 0, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT,
@@ -251,13 +254,13 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 	);
 
 	// 2) Lighting pass: GBuffer -> HDR（全屏 或 平行光全屏 + 点光源光体积）
-	glBindFramebuffer(GL_FRAMEBUFFER, m_outputFBO->framebufferID);
+	GLState::BindFramebuffer(GL_FRAMEBUFFER, m_outputFBO->framebufferID);
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT);
-	glStencilMask(0xFF);
+	GLState::StencilMask(0xFF);
 	glClearStencil(0);
 	glClear(GL_STENCIL_BUFFER_BIT);
-	glDisable(GL_DEPTH_TEST);
+	GLState::Disable(GL_DEPTH_TEST);
 
 	if (!properties.LIGHT_VOLUME) {
 		auto deferLightShader = ShaderManager::GetInstance().GetShader(ShaderManager::Defer);
@@ -271,13 +274,13 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 		BindGBufferTextures(*deferLightShader, texSlot);
 		deferLightShader->setBool("useSSAO", useSSAOInLighting);
 		if (useSSAOInLighting) {
-			glActiveTexture(GL_TEXTURE0 + texSlot);
-			glBindTexture(GL_TEXTURE_2D, ssaoFBO->textureIDs[0]);
+			GLState::ActiveTexture(GL_TEXTURE0 + texSlot);
+			GLState::BindTexture(GL_TEXTURE_2D, ssaoFBO->textureIDs[0]);
 			deferLightShader->setInt("ssaoMap", texSlot);
 			++texSlot;
 		}
 
-		glBindVertexArray(globalVAOs.quadVAO);
+		GLState::BindVertexArray(globalVAOs.quadVAO);
 		PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, 6);
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 	} else {
@@ -293,13 +296,13 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 		BindGBufferTextures(*deferDirShader, texSlot);
 		deferDirShader->setBool("useSSAO", useSSAOInLighting);
 		if (useSSAOInLighting) {
-			glActiveTexture(GL_TEXTURE0 + texSlot);
-			glBindTexture(GL_TEXTURE_2D, ssaoFBO->textureIDs[0]);
+			GLState::ActiveTexture(GL_TEXTURE0 + texSlot);
+			GLState::BindTexture(GL_TEXTURE_2D, ssaoFBO->textureIDs[0]);
 			deferDirShader->setInt("ssaoMap", texSlot);
 			++texSlot;
 		}
 
-		glBindVertexArray(globalVAOs.quadVAO);
+		GLState::BindVertexArray(globalVAOs.quadVAO);
 		PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, 6);
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 
@@ -307,12 +310,12 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 	}
 
 	// 3) Forward extras on top of deferred base.
-	glBindFramebuffer(GL_FRAMEBUFFER, m_outputFBO->framebufferID);
-	glEnable(GL_DEPTH_TEST);
+	GLState::BindFramebuffer(GL_FRAMEBUFFER, m_outputFBO->framebufferID);
+	GLState::Enable(GL_DEPTH_TEST);
 	// Forward stage relies on USED_TEXTURE_NUM for per-material/skybox bindings.
 	// Reset here to avoid stale texture unit growth across deferred lighting paths.
 	properties.USED_TEXTURE_NUM = 0;
-	glActiveTexture(GL_TEXTURE0);
+	GLState::ActiveTexture(GL_TEXTURE0);
 	scene->DrawPointLights();
 	if (scene->camera_ptr) {
 		scene->DrawSkybox(scene->camera_ptr->GetViewMatrix());
@@ -320,7 +323,7 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 	scene->DrawTransparentModels();
 	scene->DrawOutlines();
 
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	GLState::BindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void DeferRenderPass::Destroy()

@@ -1,4 +1,5 @@
 #include "Model.h"
+#include "GLStateCache.h"
 #include "Profiler.h"
 #include "XmlMaterialManager.h"
 #include <filesystem>
@@ -19,6 +20,7 @@ namespace {
 void Mesh::ReleaseGL()
 {
 	if (VAO) {
+		GLState::ForgetVertexArray(VAO);
 		glDeleteVertexArrays(1, &VAO);
 		VAO = 0;
 	}
@@ -151,7 +153,7 @@ void Mesh::setupMesh()
 	glGenBuffers(1, &VBO);
 	glGenBuffers(1, &EBO);
 
-	glBindVertexArray(VAO);
+	GLState::BindVertexArray(VAO);
 	glBindBuffer(GL_ARRAY_BUFFER, VBO);
 	glBufferData(
 		GL_ARRAY_BUFFER,
@@ -170,7 +172,7 @@ void Mesh::setupMesh()
 	glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Tangent));
 	glEnableVertexAttribArray(4);
 	glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Bitangent));
-	glBindVertexArray(0);
+	GLState::BindVertexArray(0);
 }
 
 void Mesh::Draw(Shader* shader)
@@ -181,11 +183,10 @@ void Mesh::Draw(Shader* shader)
 
 	// XML materials are refreshed once while preparing the scene render data.
 	auto materialGaurd = MaterialGaurd(*material_ptr, shader);
-	glActiveTexture(GL_TEXTURE0);
-	glBindVertexArray(VAO);
+	GLState::ActiveTexture(GL_TEXTURE0);
+	GLState::BindVertexArray(VAO);
 	PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, vertices.size());
 	glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size()));
-	glBindVertexArray(0);
 }
 
 void Model::Draw(Shader* shader, unsigned int start_tex_index )
@@ -203,6 +204,7 @@ void Model::Draw(Shader* shader, unsigned int start_tex_index )
 	}
 	auto& properties = SystemProperties::GetInstance();
 	int usedTextures = properties.USED_TEXTURE_NUM;
+	MaterialBatchScope materialBatch;
 	for (unsigned int i = 0; i < meshes.size(); ++i) {
 		if (!meshes[i].GetActiveStatus()) {
 			continue;
