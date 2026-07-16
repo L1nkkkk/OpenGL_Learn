@@ -4,7 +4,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#define M_PI 3.14159265358979323846
+#define M_PI 3.14159265358979323846f
 
 class Camera {
 public:
@@ -26,9 +26,9 @@ public:
 	}
 	void CameraMouseCallback(double xpos, double ypos);
 	void CameraSrollCallback(double xoffset, double yoffset);
-	void SetLastPos(float x, float y) {
-		lastX = x;
-		lastY = y;
+	void SetLastPos(double x, double y) {
+		lastX = static_cast<float>(x);
+		lastY = static_cast<float>(y);
 	}
 	glm::mat4 GetViewMatrix();
 	void SetCameraDirection(float pitch, float yaw);

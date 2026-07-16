@@ -28,7 +28,7 @@ void ShaderManager::Init() {
 		if (m_shaderMap.find(geometryShaderNames[i]) == m_shaderMap.end()) {
 			LoadGeometryShader(geometryShaderNames[i]);
 		}
-		shader2Idx[m_shaderMap[geometryShaderNames[i]]] = shaderNames.size() + i;
+		shader2Idx[m_shaderMap[geometryShaderNames[i]]] = static_cast<int>(shaderNames.size()) + i;
 	}
 	//bind uniform buffer objects
 	unsigned int matricesUBO;

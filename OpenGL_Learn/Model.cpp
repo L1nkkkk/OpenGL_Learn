@@ -1,10 +1,17 @@
 #include "Model.h"
 #include "XmlMaterialManager.h"
+#include <filesystem>
 #include <unordered_map>
 
 namespace {
 	// 模型缓存：相同 path(+shader) 直接复用已构建 meshes，避免重复 Assimp 解析与 CPU 构建。
 	std::unordered_map<std::string, std::vector<Mesh>> g_modelMeshCache;
+
+	bool FileExists(const std::string& path)
+	{
+		std::error_code error;
+		return std::filesystem::exists(path, error);
+	}
 }
 
 void Mesh::ReleaseGL()
@@ -194,9 +201,12 @@ void Model::Draw(Shader* shader, unsigned int start_tex_index )
 		shader->use();
 		shader->setMat4("model", getModelMatrix());
 	}
-	else {
+	else if (m_shader) {
 		m_shader->use();
 		m_shader->setMat4("model", getModelMatrix());
+	}
+	else {
+		return;
 	}
 	auto& properties = SystemProperties::GetInstance();
 	int usedTextures = properties.USED_TEXTURE_NUM;
@@ -212,6 +222,9 @@ void Model::Draw(Shader* shader, unsigned int start_tex_index )
 
 void Model::loadModel(std::string path,Material* mat)
 {
+	if (!m_shader && !mat) {
+		m_shader = ShaderManager::GetInstance().GetShaderByName("phong");
+	}
 	std::string shaderName = (m_shader ? m_shader->shaderName : std::string("phong"));
 	std::string cacheKey = path + "|shader=" + shaderName + (mat ? "|mat=custom" : "|mat=default");
 	if (!mat) {
@@ -325,6 +338,7 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 	std::vector<Vertex> vertices;
 	std::vector<unsigned int>indices;
 	Material* material = mat;
+	const std::string materialShaderName = m_shader ? m_shader->shaderName : std::string("phong");
 	vertices.reserve(mesh->mNumVertices);
 	indices.reserve(static_cast<size_t>(mesh->mNumFaces) * 3);
 	for (unsigned int i = 0; i < mesh->mNumVertices; ++i) {
@@ -371,19 +385,13 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 			xmlPath = "materials/";
 			xmlPath += aiName.C_Str();
 			xmlPath += ".xml";
-			if (Material* xmlMat = XmlMaterialManager::GetInstance().GetOrLoadMaterialByFile(xmlPath)) {
-				material = xmlMat;
-			}
-			else {
-				std::shared_ptr<Material> ownedMaterial = std::make_shared<Material>(m_shader->shaderName);
-				material = ownedMaterial.get();
-				prosessMaterial(aiMat, material);
-				return Mesh(vertices, indices, material, ownedMaterial, std::string());
+			if (FileExists(xmlPath)) {
+				material = XmlMaterialManager::GetInstance().GetOrLoadMaterialByFile(xmlPath);
 			}
 		}
 
 		if (!material) {
-			std::shared_ptr<Material> ownedMaterial = std::make_shared<Material>(m_shader->shaderName);
+			std::shared_ptr<Material> ownedMaterial = std::make_shared<Material>(materialShaderName);
 			material = ownedMaterial.get();
 			prosessMaterial(aiMat, material);
 			return Mesh(vertices, indices, material, ownedMaterial, std::string());
@@ -392,12 +400,13 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 	else {
         // 没有关联 aiMaterial，则尝试使用一个默认 XML 材质（如 materials/Default.xml）
         xmlPath = "materials/Default.xml";
-        if (Material* xmlMat = XmlMaterialManager::GetInstance().GetOrLoadMaterialByFile(xmlPath)) {
-            material = xmlMat;
-        } else {
-			std::shared_ptr<Material> ownedMaterial = std::make_shared<Material>(m_shader->shaderName);
+        if (FileExists(xmlPath)) {
+            material = XmlMaterialManager::GetInstance().GetOrLoadMaterialByFile(xmlPath);
+        }
+		if (!material) {
+			std::shared_ptr<Material> ownedMaterial = std::make_shared<Material>(materialShaderName);
 			material = ownedMaterial.get();
-			return Mesh(vertices,indices, material, ownedMaterial, xmlPath);
+			return Mesh(vertices,indices, material, ownedMaterial, std::string());
         }
 	}
 	return Mesh(vertices,indices, material, nullptr, xmlPath);

@@ -11,7 +11,7 @@ in vec2 TexCoords;
 uniform Material material;
 
 void main()
-{   
+{
 	vec4 color = texture(material.texture_diffuse1, TexCoords);
 	if(color.a < 0.99) FragColor = color;
 	else FragColor = vec4(color.rgb,1.0);

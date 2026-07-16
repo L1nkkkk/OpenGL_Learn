@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenGL_Learn Engine Architecture</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #10182d;
+      --panel-2: #162240;
+      --panel-3: #1f2d52;
+      --text: #eaf0ff;
+      --muted: #a8b7dc;
+      --accent: #58b9ff;
+      --accent-2: #79f0c7;
+      --accent-3: #ffc86f;
+      --line: rgba(148, 177, 255, 0.18);
+      --active: #213761;
+      --shadow: 0 16px 34px rgba(0, 0, 0, 0.28);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(88, 185, 255, 0.12), transparent 24%),
+        radial-gradient(circle at top right, rgba(121, 240, 199, 0.08), transparent 20%),
+        linear-gradient(180deg, #0a1020 0%, #0b1020 100%);
+    }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto auto auto 1fr;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 18px 24px 14px;
+      background: rgba(10, 14, 28, 0.9);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .title-block h1 {
+      margin: 0;
+      font-size: 25px;
+      font-weight: 700;
+    }
+
+    .title-block p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .segmented {
+      display: inline-flex;
+      gap: 4px;
+      padding: 4px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+    }
+
+    .segmented button,
+    .filter-chip {
+      border: 0;
+      border-radius: 8px;
+      padding: 8px 12px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 13px;
+      cursor: pointer;
+      transition: 0.18s ease;
+    }
+
+    .segmented button.active,
+    .filter-chip.active {
+      color: var(--text);
+      background: var(--active);
+      box-shadow: inset 0 0 0 1px rgba(121, 240, 199, 0.18);
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .metric,
+    .highlight-card {
+      min-height: 96px;
+      padding: 14px 16px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));
+      box-shadow: var(--shadow);
+    }
+
+    .metric .label,
+    .highlight-card .label {
+      margin-bottom: 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .metric .value {
+      font-size: 28px;
+      font-weight: 700;
+    }
+
+    .metric .hint,
+    .highlight-card .hint {
+      margin-top: 8px;
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+
+    .highlights {
+      padding: 0 24px 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .highlight-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .highlight-head h2 {
+      margin: 0;
+      font-size: 16px;
+    }
+
+    .highlight-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .highlight-card .title {
+      font-size: 15px;
+      font-weight: 650;
+      margin-bottom: 8px;
+      color: var(--accent-2);
+    }
+
+    .content {
+      display: grid;
+      grid-template-columns: 290px minmax(0, 1fr) 380px;
+      gap: 18px;
+      padding: 18px 24px 24px;
+    }
+
+    .panel {
+      min-height: 0;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: rgba(16, 24, 45, 0.92);
+      box-shadow: var(--shadow);
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px 16px 12px;
+      border-bottom: 1px solid rgba(148, 177, 255, 0.12);
+    }
+
+    .panel-header h2,
+    .panel-header h3 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 650;
+    }
+
+    .panel-body {
+      padding: 14px 16px 16px;
+    }
+
+    .module-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .module-card {
+      width: 100%;
+      text-align: left;
+      border: 1px solid rgba(148, 177, 255, 0.14);
+      border-radius: 10px;
+      background: rgba(255,255,255,0.025);
+      color: var(--text);
+      padding: 12px 12px 10px;
+      cursor: pointer;
+      transition: 0.18s ease;
+    }
+
+    .module-card:hover {
+      transform: translateY(-1px);
+      background: rgba(255,255,255,0.045);
+    }
+
+    .module-card.active {
+      background: var(--active);
+      border-color: rgba(88, 185, 255, 0.4);
+    }
+
+    .module-card .type {
+      margin-bottom: 6px;
+      color: var(--accent-2);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .module-card .name {
+      margin-bottom: 6px;
+      font-size: 14px;
+      font-weight: 650;
+    }
+
+    .module-card .desc {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .diagram {
+      display: none;
+    }
+
+    .diagram.active {
+      display: block;
+    }
+
+    .lane-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 6px rgba(88, 185, 255, 0.1);
+    }
+
+    .nodes {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .node {
+      min-height: 116px;
+      padding: 14px;
+      border-radius: 10px;
+      border: 1px solid rgba(148, 177, 255, 0.14);
+      background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.018));
+      color: var(--text);
+      text-align: left;
+      cursor: pointer;
+      transition: 0.18s ease;
+    }
+
+    .node:hover {
+      transform: translateY(-1px);
+      border-color: rgba(88, 185, 255, 0.3);
+    }
+
+    .node.active {
+      background: linear-gradient(180deg, rgba(88,185,255,0.16), rgba(33,55,97,0.95));
+      border-color: rgba(88, 185, 255, 0.5);
+    }
+
+    .node .node-type {
+      margin-bottom: 8px;
+      color: var(--accent-3);
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .node .node-name {
+      margin-bottom: 8px;
+      font-size: 15px;
+      font-weight: 650;
+    }
+
+    .node .node-desc {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .arrow-row {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      margin: 10px 0 4px;
+      align-items: center;
+    }
+
+    .arrow {
+      position: relative;
+      height: 2px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(88,185,255,0.2), rgba(88,185,255,0.78));
+    }
+
+    .arrow::after {
+      content: "";
+      position: absolute;
+      right: -2px;
+      top: -4px;
+      border-left: 8px solid rgba(88,185,255,0.78);
+      border-top: 5px solid transparent;
+      border-bottom: 5px solid transparent;
+    }
+
+    .overview-legend {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .legend-box {
+      padding: 10px 12px;
+      border-radius: 9px;
+      border: 1px solid rgba(148, 177, 255, 0.1);
+      background: rgba(255,255,255,0.025);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .pipeline-track {
+      display: grid;
+      grid-template-columns: repeat(8, minmax(0, 1fr));
+      gap: 10px;
+      align-items: start;
+    }
+
+    .stage {
+      min-height: 194px;
+      padding: 14px;
+      border-radius: 10px;
+      border: 1px solid rgba(148, 177, 255, 0.14);
+      background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.018));
+      cursor: pointer;
+      transition: 0.18s ease;
+    }
+
+    .stage.active {
+      background: linear-gradient(180deg, rgba(121,240,199,0.14), rgba(31,45,82,0.95));
+      border-color: rgba(121, 240, 199, 0.46);
+    }
+
+    .stage .index {
+      width: 28px;
+      height: 28px;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.06);
+      color: var(--accent-2);
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    .stage h4 {
+      margin: 0 0 8px;
+      font-size: 15px;
+    }
+
+    .stage p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .stage small {
+      display: block;
+      margin-top: 10px;
+      color: var(--accent-3);
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
+    .pipe-arrow {
+      position: relative;
+      align-self: center;
+      height: 3px;
+      margin-top: 84px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(121,240,199,0.22), rgba(121,240,199,0.85));
+    }
+
+    .pipe-arrow::after {
+      content: "";
+      position: absolute;
+      right: -1px;
+      top: -5px;
+      border-left: 10px solid rgba(121,240,199,0.85);
+      border-top: 6px solid transparent;
+      border-bottom: 6px solid transparent;
+    }
+
+    .flow-track {
+      display: grid;
+      grid-template-columns: repeat(11, minmax(0, 1fr));
+      gap: 10px;
+      align-items: start;
+    }
+
+    .flow-node {
+      min-height: 136px;
+    }
+
+    .flow-arrow {
+      position: relative;
+      align-self: center;
+      height: 3px;
+      margin-top: 64px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(255,200,111,0.18), rgba(255,200,111,0.84));
+    }
+
+    .flow-arrow::after {
+      content: "";
+      position: absolute;
+      right: -1px;
+      top: -5px;
+      border-left: 10px solid rgba(255,200,111,0.84);
+      border-top: 6px solid transparent;
+      border-bottom: 6px solid transparent;
+    }
+
+    .detail-title {
+      margin: 0 0 8px;
+      font-size: 20px;
+    }
+
+    .detail-subtitle {
+      margin: 0 0 16px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .detail-block {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(148, 177, 255, 0.12);
+    }
+
+    .detail-block h4 {
+      margin: 0 0 10px;
+      font-size: 13px;
+      color: var(--accent-2);
+    }
+
+    .detail-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .detail-item {
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(148, 177, 255, 0.08);
+      background: rgba(255,255,255,0.03);
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .kbd {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 6px;
+      border-radius: 6px;
+      border: 1px solid rgba(148,177,255,0.22);
+      background: rgba(255,255,255,0.05);
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .footer-note {
+      margin-top: 16px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.65;
+    }
+
+    @media (max-width: 1320px) {
+      .summary,
+      .highlight-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .content {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 1180px) {
+      .nodes,
+      .overview-legend,
+      .pipeline-track,
+      .flow-track {
+        grid-template-columns: 1fr;
+      }
+
+      .arrow-row,
+      .pipe-arrow,
+      .flow-arrow {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="title-block">
+        <h1>OpenGL_Learn 引擎架构面板</h1>
+        <p>交互式梳理模块关系、箭头流程、渲染管线和项目亮点，适合一边看一边对照源码。</p>
+      </div>
+      <div class="toolbar">
+        <div class="segmented" id="viewTabs">
+          <button class="active" data-view="overview">模块总览</button>
+          <button data-view="pipeline">渲染管线</button>
+          <button data-view="flow">数据流</button>
+        </div>
+      </div>
+    </header>
+
+    <section class="summary">
+      <div class="metric">
+        <div class="label">核心入口</div>
+        <div class="value">test.cpp</div>
+        <div class="hint">负责启动、主循环、热重载轮询、UI 和 render pass 调度。</div>
+      </div>
+      <div class="metric">
+        <div class="label">场景骨架</div>
+        <div class="value">Scene</div>
+        <div class="hint">聚合 ModelSource / LightSource / SkyboxSource，并组织 draw list。</div>
+      </div>
+      <div class="metric">
+        <div class="label">资源系统</div>
+        <div class="value">Shader + Material</div>
+        <div class="hint">shader 和材质都支持运行时编辑与热重载。</div>
+      </div>
+      <div class="metric">
+        <div class="label">渲染结构</div>
+        <div class="value">Pass + FBO</div>
+        <div class="hint">Forward / Deferred / SSAO / Postprocess 共用 FBO 池。</div>
+      </div>
+    </section>
+
+    <section class="highlights">
+      <div class="highlight-head">
+        <h2>这套渲染引擎的亮点</h2>
+        <span class="kbd">适合对外展示 / 面试讲述 / 自己后续演进</span>
+      </div>
+      <div class="highlight-grid">
+        <div class="highlight-card">
+          <div class="label">亮点 01</div>
+          <div class="title">运行时热重载链路完整</div>
+          <div class="hint">Shader 文件和 XML 材质都能在运行时直接改，保存后同步到画面，而且材质刷新已经带 revision，避免无意义的每帧重建。</div>
+        </div>
+        <div class="highlight-card">
+          <div class="label">亮点 02</div>
+          <div class="title">渲染路径已经开始模块化</div>
+          <div class="hint">不是单个大 Draw 函数硬撑，而是明确拆成 RenderPass、Forward、Deferred、SSAO、Postprocess，为后续继续抽成 renderer graph 打了地基。</div>
+        </div>
+        <div class="highlight-card">
+          <div class="label">亮点 03</div>
+          <div class="title">资源与场景编辑器雏形已经具备</div>
+          <div class="hint">ImGui 不只是 debug panel，而是有 docking、材质面板、reload 控件、viewport 调试和 scene state 存档的轻量编辑器外壳。</div>
+        </div>
+        <div class="highlight-card">
+          <div class="label">亮点 04</div>
+          <div class="title">FBO 池化思路比较成熟</div>
+          <div class="hint">通过 FBOAttributes 去描述渲染目标，再统一交给 FramebufferManager 管理，避免各个 pass 自己散着造 framebuffer。</div>
+        </div>
+      </div>
+    </section>
+
+    <main class="content">
+      <aside class="panel">
+        <div class="panel-header">
+          <h2>模块列表</h2>
+          <div class="segmented" id="moduleFilters">
+            <button class="filter-chip active" data-filter="all">全部</button>
+            <button class="filter-chip" data-filter="runtime">运行时</button>
+            <button class="filter-chip" data-filter="render">渲染</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="module-list" id="moduleList"></div>
+        </div>
+      </aside>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2 id="diagramTitle">模块总览</h2>
+          <span class="kbd">点击节点查看右侧说明</span>
+        </div>
+        <div class="panel-body">
+          <div class="diagram active" id="overviewDiagram">
+            <div class="lane-title"><span class="dot"></span>启动与运行时</div>
+            <div class="nodes" id="overviewNodesTop"></div>
+            <div class="arrow-row">
+              <div class="arrow"></div>
+              <div class="arrow"></div>
+              <div class="arrow"></div>
+              <div class="arrow"></div>
+              <div class="arrow"></div>
+            </div>
+            <div class="lane-title"><span class="dot"></span>场景与资源</div>
+            <div class="nodes" id="overviewNodesBottom"></div>
+            <div class="overview-legend">
+              <div class="legend-box">主干关系：入口层驱动运行时系统、UI、资源系统和场景系统。</div>
+              <div class="legend-box">资源关系：ShaderManager 与 XmlMaterialManager 共同把运行时资源喂给 Material / Model。</div>
+              <div class="legend-box">渲染关系：Scene 组织 draw list，RenderPass 使用 FramebufferManager 把结果串成完整管线。</div>
+            </div>
+          </div>
+
+          <div class="diagram" id="pipelineDiagram">
+            <div class="lane-title"><span class="dot"></span>渲染管线流程图</div>
+            <div class="pipeline-track" id="pipelineStages"></div>
+          </div>
+
+          <div class="diagram" id="flowDiagram">
+            <div class="lane-title"><span class="dot"></span>每帧数据流</div>
+            <div class="flow-track" id="flowNodes"></div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <div class="panel-header">
+          <h3>详情面板</h3>
+        </div>
+        <div class="panel-body" id="detailPanel"></div>
+      </aside>
+    </main>
+  </div>
+
+  <script>
+    const modules = [
+      {
+        id: "entry",
+        name: "test.cpp",
+        type: "入口",
+        group: "runtime",
+        lane: "top",
+        summary: "程序入口与主循环调度中心。",
+        description: "负责 GLFW / GLAD 初始化、窗口与输入注册、ShaderManager 初始化、材质表加载、Scene 构建、RenderPass 调度，以及每帧的 UI 与热重载轮询。",
+        responsibilities: [
+          "创建窗口并初始化 OpenGL 上下文",
+          "初始化 ImGui、全局 VAO 和资源系统",
+          "装配 Scene、Skybox、RenderPass",
+          "主循环内驱动输入、相机、UBO、渲染与 UI"
+        ],
+        files: ["OpenGL_Learn/test.cpp", "OpenGL_Learn/ModelsLoader.h"],
+        links: ["system", "scene", "renderpass", "gui"]
+      },
+      {
+        id: "system",
+        name: "System Runtime",
+        type: "全局状态",
+        group: "runtime",
+        lane: "top",
+        summary: "系统运行时上下文。",
+        description: "由 SystemProperties、Timer、Camera、Global 数据组成，是全引擎共享的运行时环境。它控制开关、时间、窗口尺寸、相机矩阵与一些静态几何资源。",
+        responsibilities: [
+          "SystemProperties 维护 HDR、Bloom、Gamma、Defer、SSAO 等开关",
+          "Timer 维护 deltaTime / totalTime / FPS",
+          "Camera 输出 view matrix 并响应输入",
+          "Global 提供 quad / cube / sphere 顶点和 FBO 相关结构"
+        ],
+        files: ["OpenGL_Learn/Global.h", "OpenGL_Learn/Timer.h", "OpenGL_Learn/Camera.h"],
+        links: ["entry", "shader", "scene", "renderpass"]
+      },
+      {
+        id: "gui",
+        name: "MyGui",
+        type: "编辑器 UI",
+        group: "runtime",
+        lane: "top",
+        summary: "运行时编辑器界面。",
+        description: "基于 ImGui 的编辑器层，包含 docking、Overview、材质面板、场景面板、reload 按钮和调试 viewport。它既是调试面板，也是轻量场景编辑器外壳。",
+        responsibilities: [
+          "组织 docking 布局和各类调试面板",
+          "展示 Scene / Model / Material 信息",
+          "触发 shader/material 手动重载",
+          "配合热重载开关做运行时调试"
+        ],
+        files: ["OpenGL_Learn/mygui.h"],
+        links: ["entry", "scene", "xml"]
+      },
+      {
+        id: "shader",
+        name: "ShaderManager",
+        type: "资源",
+        group: "runtime",
+        lane: "top",
+        summary: "统一管理 shader 生命周期和 UBO。",
+        description: "管理 shader 注册、按名字访问、geometry shader 分类、源文件热重载、UBO 绑定与系统 UBO 更新。Shader 本体负责编译和 program reload。",
+        responsibilities: [
+          "集中加载普通 shader 与 geometry shader",
+          "维护 shader 名称到实例的映射",
+          "支持文件时间戳热重载",
+          "维护 Matrices / SystemProperties UBO"
+        ],
+        files: ["OpenGL_Learn/Shader.h", "OpenGL_Learn/Shader.cpp", "OpenGL_Learn/ShaderManager.h", "OpenGL_Learn/ShaderManager.cpp"],
+        links: ["entry", "material", "model", "renderpass"]
+      },
+      {
+        id: "renderpass",
+        name: "RenderPass Stack",
+        type: "渲染调度",
+        group: "render",
+        lane: "top",
+        summary: "渲染过程抽象层。",
+        description: "RenderPass 把渲染过程拆成 Init / Render / Destroy，并由具体子类实现 Forward、Deferred、SSAO、Postprocess。它们通过 FBO 池衔接，而不是直接写死 framebuffer。",
+        responsibilities: [
+          "定义 pass 生命周期接口",
+          "根据 SystemProperties 生成 FBOAttributes",
+          "封装 forward / deferred / ssao / postprocess 逻辑",
+          "让渲染链从单体 Draw 走向可组合 pass"
+        ],
+        files: ["OpenGL_Learn/RenderPass.h", "OpenGL_Learn/ForwardRenderPass.h", "OpenGL_Learn/DeferRenderPass.h", "OpenGL_Learn/PostprocessRenderPass.h"],
+        links: ["scene", "framebuffer", "shader"]
+      },
+      {
+        id: "framebuffer",
+        name: "FramebufferManager",
+        type: "渲染资源",
+        group: "render",
+        lane: "top",
+        summary: "FBO 对象池与附件描述系统。",
+        description: "通过 FBOAttributes 描述 framebuffer 需求，再由 FramebufferManager 复用或分配 FBO。这样不同 pass 可以共享一套管理逻辑，并跟随系统开关自动切换。",
+        responsibilities: [
+          "维护 FBOAttributes 到 FBO 列表的映射",
+          "按需求获取、释放和 resize FBO",
+          "支持 HDR、Bloom、MSAA、Defer 等组合",
+          "为 Viewport / 调试面板提供 busy FBO 视图"
+        ],
+        files: ["OpenGL_Learn/Global.h", "OpenGL_Learn/FramebufferManager.cpp", "OpenGL_Learn/AntiAliasManager.cpp"],
+        links: ["renderpass", "scene", "entry"]
+      },
+      {
+        id: "xml",
+        name: "XmlMaterialManager",
+        type: "资源",
+        group: "runtime",
+        lane: "bottom",
+        summary: "XML 材质和热重载中心。",
+        description: "负责从 materials.xml 或单材质 XML 文件构建 Material，缓存文件时间戳、内容和共享实例，并用 material revision 驱动模型刷新。",
+        responsibilities: [
+          "解析命名材质表和单文件材质",
+          "维护材质缓存与文件写入时间",
+          "支持自动和手动材质热重载",
+          "对外暴露 revision，避免场景每帧重建"
+        ],
+        files: ["OpenGL_Learn/XmlMaterialManager.h", "OpenGL_Learn/XmlMaterialManager.cpp"],
+        links: ["material", "model", "gui"]
+      },
+      {
+        id: "material",
+        name: "Material",
+        type: "资源对象",
+        group: "runtime",
+        lane: "bottom",
+        summary: "渲染属性与 render state 的封装体。",
+        description: "Material 不只是纹理容器，还携带 shader 名、属性表、render state，配合 MaterialGuard 在 Draw 时统一提交 uniform 与 OpenGL 状态。",
+        responsibilities: [
+          "保存 float / vec / color / texture 等属性",
+          "保存 blend / cull / depth 等 render state",
+          "把材质数据绑定到 shader",
+          "作为 Mesh 的运行时材质视图"
+        ],
+        files: ["OpenGL_Learn/Material.h"],
+        links: ["xml", "model", "shader"]
+      },
+      {
+        id: "scene",
+        name: "Scene",
+        type: "场景",
+        group: "render",
+        lane: "bottom",
+        summary: "场景数据容器与场景级绘制逻辑。",
+        description: "Scene 聚合 ModelSource、LightSource、SkyboxSource，并维护 opaque / transparent draw list。它还是当前各种 DrawXxx 渲染函数的主承载体。",
+        responsibilities: [
+          "管理模型、灯光、天空盒",
+          "生成不透明与透明绘制列表",
+          "组织 Draw、DrawDeferred、DrawShadowMap 等路径",
+          "为 UI 提供当前场景对象访问接口"
+        ],
+        files: ["OpenGL_Learn/Scene.h", "OpenGL_Learn/Scene.cpp"],
+        links: ["model", "light", "framebuffer", "renderpass", "stateio"]
+      },
+      {
+        id: "model",
+        name: "Model / Mesh",
+        type: "场景对象",
+        group: "render",
+        lane: "bottom",
+        summary: "可绘制几何主体。",
+        description: "Model 由多个 Mesh 构成；Mesh 持有顶点、VAO、材质引用和 XML 材质路径。模型支持 Assimp 加载、缓存复用、材质驱动状态刷新与附加 shader。",
+        responsibilities: [
+          "处理模型文件导入和缓存",
+          "持有 mesh、主 shader 和 other shader",
+          "同步 XML 材质变化到 mesh",
+          "按材质构建 opaque / transparent 分类"
+        ],
+        files: ["OpenGL_Learn/Model.h", "OpenGL_Learn/Model.cpp"],
+        links: ["scene", "material", "shader", "xml"]
+      },
+      {
+        id: "light",
+        name: "LightSource",
+        type: "场景对象",
+        group: "render",
+        lane: "bottom",
+        summary: "场景灯光集合。",
+        description: "LightSource 管理点光、方向光、聚光灯列表，并提供统一的 shader uniform 提交接口。点光源还持有用于调试显示的小球 VAO。",
+        responsibilities: [
+          "管理各类灯光集合",
+          "向 shader 注入灯光 uniform",
+          "支持场景编辑中的灯光增删",
+          "服务于 forward 和 deferred 两种路径"
+        ],
+        files: ["OpenGL_Learn/Light.h", "OpenGL_Learn/Light.cpp", "OpenGL_Learn/Scene.h"],
+        links: ["scene", "renderpass"]
+      },
+      {
+        id: "stateio",
+        name: "SceneStateIO",
+        type: "持久化",
+        group: "runtime",
+        lane: "bottom",
+        summary: "场景存档和异步加载。",
+        description: "负责把 Scene 和 Camera 保存到 JSON，并支持异步模型恢复。它是项目从 demo 走向小型编辑器的重要一层。",
+        responsibilities: [
+          "保存和加载场景与相机状态",
+          "支持异步队列式模型恢复",
+          "兼容默认场景和存档回退逻辑",
+          "配合入口层完成 last_scene.json 恢复"
+        ],
+        files: ["OpenGL_Learn/SceneStateIO.h", "OpenGL_Learn/SceneStateIO.cpp"],
+        links: ["scene", "entry"]
+      }
+    ];
+
+    const pipelineStages = [
+      {
+        id: "boot",
+        name: "Bootstrap",
+        short: "窗口、GL、资源、场景初始化。",
+        detail: "在 test.cpp 中完成 GLFW / GLAD / ImGui / ShaderManager / XmlMaterialManager / Scene / RenderPass 的装配。",
+        files: ["test.cpp", "ModelsLoader.h"]
+      },
+      {
+        id: "frame",
+        name: "Frame Update",
+        short: "输入、相机、Timer、UBO、热重载。",
+        detail: "每帧读取输入，更新 Camera 和 Timer，刷新 Matrices / SystemProperties UBO，并轮询 shader/material 热重载。",
+        files: ["test.cpp", "Timer.h", "ShaderManager.cpp", "XmlMaterialManager.cpp"]
+      },
+      {
+        id: "scene-build",
+        name: "Scene Build",
+        short: "同步材质状态，构建绘制列表。",
+        detail: "Scene 调用 Model::RefreshMaterialDrivenState，按 opaque / transparent 分类 MeshDrawItem，为后续 pass 提供输入。",
+        files: ["Scene.cpp", "Model.cpp"]
+      },
+      {
+        id: "forward-or-defer",
+        name: "Forward / Deferred",
+        short: "根据开关走前向或延迟路径。",
+        detail: "ForwardRenderPass 直接产出颜色结果；DeferRenderPass 会先构建 G-Buffer，再做灯光与可选 SSAO。",
+        files: ["ForwardRenderPass.cpp", "DeferRenderPass.cpp", "SSAORenderPass.cpp"]
+      },
+      {
+        id: "shadow",
+        name: "Shadow & Lighting",
+        short: "阴影图、灯光 uniform、体积光路径。",
+        detail: "Scene 中的 DrawShadowMap、SetLightUniforms、DrawPointLightVolumesDeferred 等逻辑在这里发挥作用。",
+        files: ["Scene.cpp", "Light.cpp"]
+      },
+      {
+        id: "post",
+        name: "Postprocess",
+        short: "Bloom、Blur、屏幕合成。",
+        detail: "PostprocessRenderPass 处理后期效果，并通过 FramebufferManager 复用输出目标。",
+        files: ["PostprocessRenderPass.cpp", "FramebufferManager.cpp"]
+      },
+      {
+        id: "ui-stage",
+        name: "Editor UI",
+        short: "ImGui 面板覆盖到最终画面。",
+        detail: "MyGui 显示 scene、material、reload、viewport 调试信息，并接受运行时交互。",
+        files: ["mygui.h", "test.cpp"]
+      },
+      {
+        id: "present",
+        name: "Present",
+        short: "交换缓冲并进入下一帧。",
+        detail: "最终结果显示到窗口，然后进入下一帧循环。",
+        files: ["test.cpp"]
+      }
+    ];
+
+    const flowSteps = [
+      {
+        id: "flow-input",
+        name: "Input -> Camera",
+        type: "数据流",
+        summary: "输入改变相机状态。",
+        description: "键鼠输入通过 ProcessInput、mouse_callback、scroll_callback 改写 Camera 的位置、朝向和缩放，进而影响 view/projection。",
+        responsibilities: ["WASD 更新位置", "鼠标更新朝向", "滚轮更新 FOV"],
+        files: ["test.cpp", "Camera.cpp"],
+        links: ["system", "entry"]
+      },
+      {
+        id: "flow-ubo",
+        name: "Camera -> UBO",
+        type: "数据流",
+        summary: "矩阵进入 ShaderManager。",
+        description: "每帧把 view 和 projection 写入 Matrices UBO，同时把 SystemProperties 打包进 SystemProperties UBO。",
+        responsibilities: ["更新 Matrices UBO", "更新 SystemProperties UBO"],
+        files: ["test.cpp", "ShaderManager.cpp"],
+        links: ["shader", "system"]
+      },
+      {
+        id: "flow-material",
+        name: "XML -> Material -> Mesh",
+        type: "数据流",
+        summary: "材质热重载传递到可绘制单元。",
+        description: "XmlMaterialManager 检测 XML 变化后增加 revision，Model 在 RefreshMaterialDrivenState 中只在 revision 变化时同步 mesh.material_ptr。",
+        responsibilities: ["检测文件变化", "更新共享 Material", "revision 驱动模型刷新"],
+        files: ["XmlMaterialManager.cpp", "Model.cpp"],
+        links: ["xml", "material", "model"]
+      },
+      {
+        id: "flow-scene",
+        name: "Scene -> Draw Lists",
+        type: "数据流",
+        summary: "场景生成 pass 输入。",
+        description: "Scene 从 ModelSource 抽取有效 mesh，按透明与不透明分组，并按距离排序透明对象。",
+        responsibilities: ["构建 opaque list", "构建 transparent list", "透明排序"],
+        files: ["Scene.cpp"],
+        links: ["scene", "model"]
+      },
+      {
+        id: "flow-pass",
+        name: "Pass -> FBO Pool",
+        type: "数据流",
+        summary: "Pass 向 FBO 池申请输出目标。",
+        description: "各 RenderPass 根据 SystemProperties 构建 FBOAttributes，并通过 FramebufferManager 获取匹配的 FBO。",
+        responsibilities: ["构建 FBOAttributes", "复用或分配 FBO", "跟踪当前输出"],
+        files: ["RenderPass.h", "FramebufferManager.cpp"],
+        links: ["renderpass", "framebuffer"]
+      },
+      {
+        id: "flow-ui",
+        name: "Render Result -> UI",
+        type: "数据流",
+        summary: "渲染结果回到编辑器视图。",
+        description: "最终 framebuffer 内容与调试 FBO 通过 MyGui 展示，形成运行时可编辑的工具界面。",
+        responsibilities: ["显示 viewport", "显示调试 FBO", "驱动编辑交互"],
+        files: ["mygui.h"],
+        links: ["gui", "framebuffer"]
+      }
+    ];
+
+    const moduleList = document.getElementById("moduleList");
+    const detailPanel = document.getElementById("detailPanel");
+    const moduleFilters = document.getElementById("moduleFilters");
+    const viewTabs = document.getElementById("viewTabs");
+    const diagramTitle = document.getElementById("diagramTitle");
+    const overviewNodesTop = document.getElementById("overviewNodesTop");
+    const overviewNodesBottom = document.getElementById("overviewNodesBottom");
+    const pipelineRoot = document.getElementById("pipelineStages");
+    const flowRoot = document.getElementById("flowNodes");
+
+    let currentFilter = "all";
+    let currentView = "overview";
+    let currentSelection = "entry";
+
+    function getItemById(id) {
+      return modules.find(item => item.id === id) ||
+        pipelineStages.find(item => item.id === id) ||
+        flowSteps.find(item => item.id === id);
+    }
+
+    function createModuleNode(item, extraClass = "") {
+      const button = document.createElement("button");
+      button.className = `node ${extraClass}` + (item.id === currentSelection ? " active" : "");
+      button.innerHTML = `
+        <div class="node-type">${item.type}</div>
+        <div class="node-name">${item.name}</div>
+        <div class="node-desc">${item.summary}</div>
+      `;
+      button.addEventListener("click", () => selectItem(item.id));
+      return button;
+    }
+
+    function renderModuleList() {
+      moduleList.innerHTML = "";
+      modules
+        .filter(item => currentFilter === "all" || item.group === currentFilter)
+        .forEach(item => {
+          const button = document.createElement("button");
+          button.className = "module-card" + (item.id === currentSelection ? " active" : "");
+          button.innerHTML = `
+            <div class="type">${item.type}</div>
+            <div class="name">${item.name}</div>
+            <div class="desc">${item.summary}</div>
+          `;
+          button.addEventListener("click", () => selectItem(item.id));
+          moduleList.appendChild(button);
+        });
+    }
+
+    function renderOverview() {
+      overviewNodesTop.innerHTML = "";
+      overviewNodesBottom.innerHTML = "";
+      modules.forEach(item => {
+        const node = createModuleNode(item);
+        if (item.lane === "top") {
+          overviewNodesTop.appendChild(node);
+        } else {
+          overviewNodesBottom.appendChild(node);
+        }
+      });
+    }
+
+    function renderPipeline() {
+      pipelineRoot.innerHTML = "";
+      pipelineStages.forEach((stage, index) => {
+        const stageNode = document.createElement("button");
+        stageNode.className = "stage" + (stage.id === currentSelection ? " active" : "");
+        stageNode.innerHTML = `
+          <div class="index">${index + 1}</div>
+          <h4>${stage.name}</h4>
+          <p>${stage.short}</p>
+          <small>${stage.files.join(" · ")}</small>
+        `;
+        stageNode.addEventListener("click", () => selectItem(stage.id));
+        pipelineRoot.appendChild(stageNode);
+        if (index < pipelineStages.length - 1) {
+          const arrow = document.createElement("div");
+          arrow.className = "pipe-arrow";
+          pipelineRoot.appendChild(arrow);
+        }
+      });
+    }
+
+    function renderFlow() {
+      flowRoot.innerHTML = "";
+      flowSteps.forEach((step, index) => {
+        const node = createModuleNode(step, "flow-node");
+        flowRoot.appendChild(node);
+        if (index < flowSteps.length - 1) {
+          const arrow = document.createElement("div");
+          arrow.className = "flow-arrow";
+          flowRoot.appendChild(arrow);
+        }
+      });
+    }
+
+    function renderDetail(item) {
+      if (!item) {
+        detailPanel.innerHTML = "<p>未找到详情。</p>";
+        return;
+      }
+
+      const responsibilities = (item.responsibilities || [])
+        .map(text => `<div class="detail-item">${text}</div>`)
+        .join("");
+
+      const files = (item.files || [])
+        .map(text => `<div class="detail-item">${text}</div>`)
+        .join("");
+
+      const links = (item.links || [])
+        .map(id => modules.find(module => module.id === id))
+        .filter(Boolean)
+        .map(module => `<button class="filter-chip" data-link="${module.id}">${module.name}</button>`)
+        .join("");
+
+      detailPanel.innerHTML = `
+        <h3 class="detail-title">${item.name}</h3>
+        <p class="detail-subtitle">${item.description || item.detail || item.summary}</p>
+
+        <div class="detail-block">
+          <h4>核心职责</h4>
+          <div class="detail-list">${responsibilities || '<div class="detail-item">无</div>'}</div>
+        </div>
+
+        <div class="detail-block">
+          <h4>关键文件</h4>
+          <div class="detail-list">${files || '<div class="detail-item">无</div>'}</div>
+        </div>
+
+        <div class="detail-block">
+          <h4>关联模块</h4>
+          <div class="segmented" id="detailLinks">${links || '<span class="detail-item">当前项更偏流程节点，没有额外关联按钮。</span>'}</div>
+        </div>
+
+        <div class="footer-note">
+          模块总览更适合看分层；渲染管线更适合讲执行顺序；数据流更适合讲“改一个功能时数据怎么走”。
+        </div>
+      `;
+
+      detailPanel.querySelectorAll("[data-link]").forEach(button => {
+        button.addEventListener("click", () => selectItem(button.dataset.link));
+      });
+    }
+
+    function setView(view) {
+      currentView = view;
+      document.querySelectorAll(".diagram").forEach(el => el.classList.remove("active"));
+      document.getElementById(view + "Diagram").classList.add("active");
+
+      viewTabs.querySelectorAll("button").forEach(button => {
+        button.classList.toggle("active", button.dataset.view === view);
+      });
+
+      diagramTitle.textContent = {
+        overview: "模块总览",
+        pipeline: "渲染管线",
+        flow: "数据流"
+      }[view];
+
+      if (view === "pipeline" && !pipelineStages.some(item => item.id === currentSelection)) {
+        currentSelection = "forward-or-defer";
+      }
+      if (view === "flow" && !flowSteps.some(item => item.id === currentSelection)) {
+        currentSelection = "flow-material";
+      }
+      if (view === "overview" && !modules.some(item => item.id === currentSelection)) {
+        currentSelection = "entry";
+      }
+
+      rerender();
+    }
+
+    function selectItem(id) {
+      currentSelection = id;
+      rerender();
+    }
+
+    function rerender() {
+      renderModuleList();
+      renderOverview();
+      renderPipeline();
+      renderFlow();
+      renderDetail(getItemById(currentSelection));
+    }
+
+    moduleFilters.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-filter]");
+      if (!button) return;
+      currentFilter = button.dataset.filter;
+      moduleFilters.querySelectorAll("[data-filter]").forEach(node => {
+        node.classList.toggle("active", node.dataset.filter === currentFilter);
+      });
+      renderModuleList();
+    });
+
+    viewTabs.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-view]");
+      if (!button) return;
+      setView(button.dataset.view);
+    });
+
+    rerender();
+  </script>
+</body>
+</html>

@@ -3,10 +3,14 @@
 //#define USE_GEOMETRY_SHADER
 #define USE_SCENE_SHADER
 //#define USE_PLANET_SHADER
-#include "Learn.h"
-#include "Model.h"
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4005)
+#endif
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#include "Learn.h"
+#include "Model.h"
 #include <iostream>
 #include "callbacks.h"
 #include "Camera.h"
@@ -20,6 +24,9 @@
 #include "DeferRenderPass.h"
 #include "PostprocessRenderPass.h"
 #include "SceneStateIO.h"
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 
 bool firstMouse = false;
@@ -340,7 +347,7 @@ int main() {
 		else {
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
 			FBO* debugFBO = scene.GetDebugFramebuffer();
-			int size = debugFBO->textureIDs.size();
+			int size = static_cast<int>(debugFBO->textureIDs.size());
 			int len = 1;
 			while(len*len<size){
 				len++;

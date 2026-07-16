@@ -5,7 +5,7 @@ void PointLight::DrawPointLight() {
 		auto& vertices = mesh.vertices;
 		auto VAO = mesh.GetVAO();
 		glBindVertexArray(VAO);
-		glDrawArrays(GL_TRIANGLES, 0, vertices.size());
+		glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size()));
 		glBindVertexArray(0);
 	}
 }

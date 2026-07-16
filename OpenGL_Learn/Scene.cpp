@@ -305,7 +305,7 @@ void Scene::DrawOpaqueModels()
 				glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxSource.textureCubeMap->textureID);
 			}
 			glActiveTexture(GL_TEXTURE0);
-			lastShader->setFloat("time", glfwGetTime());
+			lastShader->setFloat("time", static_cast<float>(glfwGetTime()));
 			lastShader->setVec3("viewPos", camera_ptr->cameraPos);
 			lastShader->setVec3("color", glm::vec3(0.2f));
 			SetLightUniforms(*lastShader);
@@ -354,7 +354,7 @@ void Scene::DrawTransparentModels()
 				}
 			}
 			glActiveTexture(GL_TEXTURE0);
-			lastShader->setFloat("time", glfwGetTime());
+			lastShader->setFloat("time", static_cast<float>(glfwGetTime()));
 			if (camera_ptr) {
 				lastShader->setVec3("viewPos", camera_ptr->cameraPos);
 			}
@@ -408,8 +408,8 @@ unsigned int Scene::SetShadowMap(Shader& shader) {
         shader.setFloat("pointLights[" + std::to_string(i) + "].far_plane", pointLight.far);
         shadowMapCount++;
     }
-    shadowMapCount = lightSource.pointLights.size();
-    for (int i = 0; i < lightSource.directionLights.size(); ++i) {
+    shadowMapCount = static_cast<int>(lightSource.pointLights.size());
+    for (size_t i = 0; i < lightSource.directionLights.size(); ++i) {
         auto& dirLight = lightSource.directionLights[i];
         //if (!dirLight.GetActiveStatus()) continue;
         shader.setBool("dirLights[" + std::to_string(i) + "].useShadowMap", dirLight.useShadowMap);
@@ -709,7 +709,7 @@ void Scene::SetSceneGui()
                     }
                     ImGui::DragFloat("Outline Width", &model->outlineWidth, 0.01f, 0.0f, 0.5f);
                     ImGui::ColorEdit3("Outline Color", &model->outlineColor[0]);
-                    ImGui::DragFloat("NormalLine Width", &OtherShader::normalLineMagnitude, 0.01, 0.0f, 0.4f);
+                    ImGui::DragFloat("NormalLine Width", &OtherShader::normalLineMagnitude, 0.01f, 0.0f, 0.4f);
 
                     auto shaderPtr = model->GetShader();
                     int curShaderIdx = shaderPtr ? ShaderManager::GetInstance().GetShaderIndexByShader(shaderPtr) : -1;

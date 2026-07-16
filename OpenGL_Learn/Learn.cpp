@@ -1,4 +1,5 @@
 #include "Learn.h"
+#include <cstdint>
 
 void Planet::Init() {
     planetModel = new Model("models/planet/planet.obj");
@@ -7,26 +8,27 @@ void Planet::Init() {
     rockShader = ShaderManager::GetInstance().GetShader(ShaderManager::Diffuse);
 
     modelMatrices = new glm::mat4[amount];
-    srand(glfwGetTime());
-    float radius = 50.0;
+    srand(static_cast<unsigned int>(glfwGetTime()));
+    float radius = 50.0f;
     float offset = 2.5f;
     for (unsigned int i = 0; i < amount; i++)
     {
         glm::mat4 model = glm::mat4(1.0f);
-        float angle = (float)i / (float)amount * 360.0f;
+        float angle = static_cast<float>(i) / static_cast<float>(amount) * 360.0f;
+        float angleRadians = glm::radians(angle);
         float displacement = (rand() % (int)(2 * offset * 100)) / 100.0f - offset;
-        float x = sin(angle) * radius + displacement;
+        float x = std::sin(angleRadians) * radius + displacement;
         displacement = (rand() % (int)(2 * offset * 100)) / 100.0f - offset;
         float y = displacement * 0.4f; 
         displacement = (rand() % (int)(2 * offset * 100)) / 100.0f - offset;
-        float z = cos(angle) * radius + displacement;
+        float z = std::cos(angleRadians) * radius + displacement;
         model = glm::translate(model, glm::vec3(x, y, z));
 
-        float scale = (rand() % 20) / 100.0f + 0.05;
+        float scale = (rand() % 20) / 100.0f + 0.05f;
         model = glm::scale(model, glm::vec3(scale));
 
-        float rotAngle = (rand() % 360);
-        model = glm::rotate(model, rotAngle, glm::vec3(0.4f, 0.6f, 0.8f));
+        float rotAngle = static_cast<float>(rand() % 360);
+        model = glm::rotate(model, glm::radians(rotAngle), glm::vec3(0.4f, 0.6f, 0.8f));
 
         modelMatrices[i] = model;
     }
@@ -40,15 +42,18 @@ void Planet::Init() {
         glBindVertexArray(VAO);
 
 
-        GLsizei vec4Size = sizeof(glm::vec4);
+        GLsizei vec4Size = static_cast<GLsizei>(sizeof(glm::vec4));
         glEnableVertexAttribArray(3);
         glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, 4 * vec4Size, (void*)0);
         glEnableVertexAttribArray(4);
-        glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, 4 * vec4Size, (void*)(1 * vec4Size));
+        glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, 4 * vec4Size,
+            reinterpret_cast<void*>(static_cast<std::uintptr_t>(vec4Size)));
         glEnableVertexAttribArray(5);
-        glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, 4 * vec4Size, (void*)(2 * vec4Size));
+        glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, 4 * vec4Size,
+            reinterpret_cast<void*>(static_cast<std::uintptr_t>(2 * vec4Size)));
         glEnableVertexAttribArray(6);
-        glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, 4 * vec4Size, (void*)(3 * vec4Size));
+        glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, 4 * vec4Size,
+            reinterpret_cast<void*>(static_cast<std::uintptr_t>(3 * vec4Size)));
 
         glVertexAttribDivisor(3, 1);
         glVertexAttribDivisor(4, 1);
@@ -82,7 +87,9 @@ void Planet::Draw() {
     {
         glBindVertexArray(meshes[i].GetVAO());
         glDrawArraysInstanced(
-            GL_TRIANGLES,0, meshes[i].vertices.size(), amount
+            GL_TRIANGLES, 0,
+            static_cast<GLsizei>(meshes[i].vertices.size()),
+            static_cast<GLsizei>(amount)
         );
     }
     /*for (unsigned int i = 0; i < amount; ++i) {

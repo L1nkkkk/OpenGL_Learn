@@ -2,14 +2,14 @@
 
 void Camera::CameraMouseCallback(double xpos, double ypos) {
 	if (firstMouse) {
-		lastX = xpos;
-		lastY = ypos;
+		lastX = static_cast<float>(xpos);
+		lastY = static_cast<float>(ypos);
 		firstMouse = false;
 	}
-	float deltaX = xpos - lastX;
-	float deltaY = ypos - lastY;
-	lastX = xpos;
-	lastY = ypos;
+	float deltaX = static_cast<float>(xpos) - lastX;
+	float deltaY = static_cast<float>(ypos) - lastY;
+	lastX = static_cast<float>(xpos);
+	lastY = static_cast<float>(ypos);
 	pitch += deltaY * 0.05f;
 	if (pitch > 89.0f)
 		pitch = 89.0f;
@@ -58,7 +58,7 @@ bool Camera::CheckCameraMoved() {
 	float positionDelta = glm::length(cameraPos - lastFrame_CameraPosition);
 	float frontDeltaCosin = glm::dot(cameraFront, lastFrame_CameraFront);
 	if (frontDeltaCosin <= 0) return true; //camera turned more than 90 degree, consider it as moved
-	float frontDelta = 2.0*glm::acos(frontDeltaCosin)*180.f / M_PI;
+	float frontDelta = 2.0f * glm::acos(frontDeltaCosin) * 180.0f / M_PI;
 	if (positionDelta > 0.01f || frontDelta > 0.1f) {
 		return true;
 	}

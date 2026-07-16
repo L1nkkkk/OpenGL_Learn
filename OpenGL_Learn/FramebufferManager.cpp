@@ -12,7 +12,7 @@ void FBO::Init(FBOAttributes attr) {
     // 1. ???? textureAttrs ?????????? ID
     textureIDs.resize(attr.textureAttrs.size());
     if (!textureIDs.empty()) {
-        glGenTextures(textureIDs.size(), textureIDs.data());
+        glGenTextures(static_cast<GLsizei>(textureIDs.size()), textureIDs.data());
     }
 
     // 2. ???? textureAttrs ??????????????????
@@ -72,8 +72,9 @@ void FBO::Init(FBOAttributes attr) {
                 glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, tAttr.target, texID, 0);
             }
         } else {
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, tAttr.target, texID, 0);
-            colorAttachments.push_back(GL_COLOR_ATTACHMENT0 + i);
+            const GLenum attachment = GL_COLOR_ATTACHMENT0 + static_cast<GLenum>(i);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, attachment, tAttr.target, texID, 0);
+            colorAttachments.push_back(attachment);
         }
     }
 
@@ -107,7 +108,7 @@ void FBO::Init(FBOAttributes attr) {
     }
     else {
         if (!colorAttachments.empty()) {
-            glDrawBuffers(colorAttachments.size(), colorAttachments.data());
+            glDrawBuffers(static_cast<GLsizei>(colorAttachments.size()), colorAttachments.data());
         }
 
         // 5. Depth/Stencil storage (keep the original robust setup)

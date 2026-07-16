@@ -39,4 +39,3 @@ void main()
     // Encode normal to 0..1 so it can be stored in a standard floating texture.
     NormalOut = vec4(n * 0.5 + 0.5, 1.0);
 }
-

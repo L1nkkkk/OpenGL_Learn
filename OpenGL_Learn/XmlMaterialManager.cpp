@@ -166,21 +166,25 @@ Material* XmlMaterialManager::GetMaterialRaw(const std::string& name) {
 }
 
 Material* XmlMaterialManager::GetOrLoadMaterialByFile(const std::string& xmlPath) {
-    auto& entry = m_materialFiles[xmlPath];
+    auto entryIt = m_materialFiles.find(xmlPath);
     fs::file_time_type currentWriteTime;
-    if (entry.material && TryGetWriteTime(xmlPath, currentWriteTime) && currentWriteTime == entry.lastWriteTime) {
-        return entry.material.get();
+    if (entryIt != m_materialFiles.end() &&
+        entryIt->second.material &&
+        TryGetWriteTime(xmlPath, currentWriteTime) &&
+        currentWriteTime == entryIt->second.lastWriteTime) {
+        return entryIt->second.material.get();
     }
 
     std::ifstream file(xmlPath);
     if (!file.is_open()) {
         std::cout << "XmlMaterialManager: failed to open material file '" << xmlPath << "'" << std::endl;
-        return entry.material.get();
+        return entryIt != m_materialFiles.end() ? entryIt->second.material.get() : nullptr;
     }
 
     std::stringstream buffer;
     buffer << file.rdbuf();
     const std::string content = buffer.str();
+    auto& entry = m_materialFiles[xmlPath];
 
     if (entry.material && entry.lastContent == content) {
         if (currentWriteTime == fs::file_time_type{}) {
