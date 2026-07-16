@@ -307,6 +307,20 @@ void PerformanceProfiler::RecordUniformUpdate()
 	}
 }
 
+void PerformanceProfiler::RecordUniformLocationLookup(bool cacheHit)
+{
+	if (!IsCollecting()) {
+		return;
+	}
+
+	if (cacheHit) {
+		++m_currentRenderStats.uniformLocationCacheHits;
+	}
+	else {
+		++m_currentRenderStats.uniformLocationQueries;
+	}
+}
+
 void PerformanceProfiler::RecordFileSystemCheck()
 {
 	if (IsCollecting()) {

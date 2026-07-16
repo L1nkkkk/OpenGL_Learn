@@ -175,22 +175,12 @@ void Mesh::setupMesh()
 
 void Mesh::Draw(Shader* shader)
 {
-	auto& properties = SystemProperties::GetInstance();
-    Material* runtimeMat = material_ptr;
-
-    // 如果为该 Mesh 指定了 XML 材质文件，则优先从 XmlMaterialManager 获取 / 热重载
-    if (!materialXmlPath.empty()) {
-        if (Material* xmlMat = XmlMaterialManager::GetInstance().GetOrLoadMaterialByFile(materialXmlPath)) {
-            runtimeMat = xmlMat;
-        }
-    }
-
-    if (!runtimeMat) {
+    if (!material_ptr) {
         return;
     }
-	// 材质参数绑定统一放在 MaterialGaurd 内处理，外部 shader（含 deferProcess）作为 override 传入。
-	auto materialGaurd = MaterialGaurd(*runtimeMat, shader);
-	if (shader) shader->use();
+
+	// XML materials are refreshed once while preparing the scene render data.
+	auto materialGaurd = MaterialGaurd(*material_ptr, shader);
 	glActiveTexture(GL_TEXTURE0);
 	glBindVertexArray(VAO);
 	PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, vertices.size());

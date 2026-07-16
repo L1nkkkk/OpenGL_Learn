@@ -6,6 +6,9 @@ namespace fs = std::filesystem;
 Shader::~Shader()
 {
 	if (ID != 0) {
+		if (s_boundProgram == ID) {
+			s_boundProgram = 0;
+		}
 		glDeleteProgram(ID);
 		ID = 0;
 	}
@@ -171,9 +174,13 @@ bool Shader::Reload(bool force, std::string* errorMessage)
 	}
 
 	if (ID != 0) {
+		if (s_boundProgram == ID) {
+			s_boundProgram = 0;
+		}
 		glDeleteProgram(ID);
 	}
 	ID = newProgram;
+	m_uniformLocationCache.clear();
 	UpdateCachedWriteTimes();
 	if (errorMessage) {
 		errorMessage->clear();
@@ -195,50 +202,90 @@ void Shader::Load(const char* vertexPath, const char* fragmentPath)
 
 void Shader::use()
 {
-	PerformanceProfiler::GetInstance().RecordShaderBind();
+	if (ID == 0 || s_boundProgram == ID) {
+		return;
+	}
+
 	glUseProgram(ID);
+	s_boundProgram = ID;
+	PerformanceProfiler::GetInstance().RecordShaderBind();
+}
+
+int Shader::GetUniformLocation(const std::string& name) const
+{
+	const auto cached = m_uniformLocationCache.find(name);
+	if (cached != m_uniformLocationCache.end()) {
+		PerformanceProfiler::GetInstance().RecordUniformLocationLookup(true);
+		return cached->second;
+	}
+
+	const int location = ID != 0 ? glGetUniformLocation(ID, name.c_str()) : -1;
+	m_uniformLocationCache.emplace(name, location);
+	PerformanceProfiler::GetInstance().RecordUniformLocationLookup(false);
+	return location;
 }
 
 void Shader::setBool(const std::string& name, bool value) const
 {
 	PerformanceProfiler::GetInstance().RecordUniformUpdate();
-	glUniform1i(glGetUniformLocation(ID, name.c_str()), (int)value);
+	const int location = GetUniformLocation(name);
+	if (location >= 0) {
+		glUniform1i(location, static_cast<int>(value));
+	}
 }
 
 void Shader::setInt(const std::string& name, int value) const
 {
 	PerformanceProfiler::GetInstance().RecordUniformUpdate();
-	glUniform1i(glGetUniformLocation(ID, name.c_str()), value);
+	const int location = GetUniformLocation(name);
+	if (location >= 0) {
+		glUniform1i(location, value);
+	}
 }
 
 void Shader::setFloat(const std::string& name, float value) const
 {
 	PerformanceProfiler::GetInstance().RecordUniformUpdate();
-	glUniform1f(glGetUniformLocation(ID, name.c_str()), value);
+	const int location = GetUniformLocation(name);
+	if (location >= 0) {
+		glUniform1f(location, value);
+	}
 }
 
 void Shader::setMat4(const std::string& name, const glm::mat4& mat) const
 {
 	PerformanceProfiler::GetInstance().RecordUniformUpdate();
-	glUniformMatrix4fv(glGetUniformLocation(ID, name.c_str()), 1, GL_FALSE, &mat[0][0]);
+	const int location = GetUniformLocation(name);
+	if (location >= 0) {
+		glUniformMatrix4fv(location, 1, GL_FALSE, &mat[0][0]);
+	}
 }
 
 void Shader::setVec3(const std::string& name, const glm::vec3& vec) const
 {
 	PerformanceProfiler::GetInstance().RecordUniformUpdate();
-	glUniform3fv(glGetUniformLocation(ID, name.c_str()), 1, &vec[0]);
+	const int location = GetUniformLocation(name);
+	if (location >= 0) {
+		glUniform3fv(location, 1, &vec[0]);
+	}
 }
 
 void Shader::setVec4(const std::string& name, const glm::vec4& vec) const
 {
 	PerformanceProfiler::GetInstance().RecordUniformUpdate();
-	glUniform4fv(glGetUniformLocation(ID, name.c_str()), 1, &vec[0]);
+	const int location = GetUniformLocation(name);
+	if (location >= 0) {
+		glUniform4fv(location, 1, &vec[0]);
+	}
 }
 
 void Shader::setVec2(const std::string& name, const glm::vec2& vec) const
 {
 	PerformanceProfiler::GetInstance().RecordUniformUpdate();
-	glUniform2fv(glGetUniformLocation(ID, name.c_str()), 1, &vec[0]);
+	const int location = GetUniformLocation(name);
+	if (location >= 0) {
+		glUniform2fv(location, 1, &vec[0]);
+	}
 }
 
 GeometryShader::GeometryShader(const char* vertexPath, const char* geometryPath, const char* fragmentPath)

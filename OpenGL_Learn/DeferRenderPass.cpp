@@ -205,6 +205,7 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 	const FBO* ssaoFBO = properties.SSAO ? m_ssao.GetOutputFBO() : nullptr;
 	const bool useSSAOInLighting = ssaoFBO && !ssaoFBO->textureIDs.empty();
 
+	scene->PrepareRenderData();
 	scene->DrawShadowMap();
 
 	// 1) Geometry pass: write opaque meshes into GBuffer.

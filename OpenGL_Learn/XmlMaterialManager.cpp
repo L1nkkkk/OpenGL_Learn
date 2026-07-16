@@ -122,7 +122,7 @@ int XmlMaterialManager::ReloadChangedFiles() {
             continue;
         }
 
-        if (GetOrLoadMaterialByFile(path)) {
+        if (LoadMaterialFile(path)) {
             m_lastReloadSuccessful = true;
             m_lastReloadMessage = "Reloaded material file: " + path;
             ++m_reloadCount;
@@ -146,7 +146,7 @@ int XmlMaterialManager::ReloadAllFiles() {
 
     for (auto& [path, entry] : m_materialFiles) {
         entry.lastContent.clear();
-        if (GetOrLoadMaterialByFile(path)) {
+        if (LoadMaterialFile(path)) {
             m_lastReloadSuccessful = true;
             m_lastReloadMessage = "Reloaded material file: " + path;
             ++m_reloadCount;
@@ -169,13 +169,29 @@ Material* XmlMaterialManager::GetMaterialRaw(const std::string& name) {
 
 Material* XmlMaterialManager::GetOrLoadMaterialByFile(const std::string& xmlPath) {
     auto entryIt = m_materialFiles.find(xmlPath);
-    fs::file_time_type currentWriteTime;
-    if (entryIt != m_materialFiles.end() &&
-        entryIt->second.material &&
-        TryGetWriteTime(xmlPath, currentWriteTime) &&
-        currentWriteTime == entryIt->second.lastWriteTime) {
+    if (entryIt != m_materialFiles.end() && entryIt->second.material) {
         return entryIt->second.material.get();
     }
+
+    return LoadMaterialFile(xmlPath);
+}
+
+bool XmlMaterialManager::ReloadMaterialFile(const std::string& xmlPath) {
+    if (LoadMaterialFile(xmlPath)) {
+        m_lastReloadSuccessful = true;
+        m_lastReloadMessage = "Reloaded material file: " + xmlPath;
+        ++m_reloadCount;
+        return true;
+    }
+
+    m_lastReloadSuccessful = false;
+    m_lastReloadMessage = "Failed to reload material file: " + xmlPath;
+    return false;
+}
+
+Material* XmlMaterialManager::LoadMaterialFile(const std::string& xmlPath) {
+    auto entryIt = m_materialFiles.find(xmlPath);
+    fs::file_time_type currentWriteTime;
 
     std::ifstream file(xmlPath);
     if (!file.is_open()) {

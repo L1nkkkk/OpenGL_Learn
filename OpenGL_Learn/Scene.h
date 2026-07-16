@@ -179,9 +179,10 @@ public:
 		return deferFBO;
 	}
 
-	// Mesh-level draw lists (built on demand each call)
-	const std::vector<MeshDrawItem>& GetOpaqueMeshes();
-	const std::vector<MeshDrawItem>& GetTransparentMeshes();
+	// Build render submission once after scene/editor updates and before executing passes.
+	void PrepareRenderData();
+	const std::vector<MeshDrawItem>& GetOpaqueMeshes() const;
+	const std::vector<MeshDrawItem>& GetTransparentMeshes() const;
 
 private:
 	void BuildMeshDrawLists();

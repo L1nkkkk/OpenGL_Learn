@@ -294,6 +294,9 @@ public:
 			ImGui::Text("Submitted vertices: %llu", static_cast<unsigned long long>(renderStats.submittedVertices));
 			ImGui::Text("Shader binds: %llu", static_cast<unsigned long long>(renderStats.shaderBinds));
 			ImGui::Text("Uniform updates: %llu", static_cast<unsigned long long>(renderStats.uniformUpdates));
+			ImGui::Text("Uniform location queries / cache hits: %llu / %llu",
+				static_cast<unsigned long long>(renderStats.uniformLocationQueries),
+				static_cast<unsigned long long>(renderStats.uniformLocationCacheHits));
 			ImGui::Text("Filesystem checks: %llu", static_cast<unsigned long long>(renderStats.fileSystemChecks));
 			ImGui::Text("Active models: %llu", static_cast<unsigned long long>(renderStats.activeModels));
 			ImGui::Text("Meshes: %llu opaque / %llu transparent",
@@ -412,7 +415,7 @@ public:
 						mgr.LoadFromFile(selectedPath);
 					}
 					else {
-						mgr.GetOrLoadMaterialByFile(selectedPath);
+						mgr.ReloadMaterialFile(selectedPath);
 					}
 				}
 			}
@@ -450,6 +453,7 @@ public:
 		}
 		ImGui::Checkbox("Auto Reload Shaders", &properties.AUTO_RELOAD_SHADERS);
 		ImGui::Checkbox("Auto Reload Materials", &properties.AUTO_RELOAD_MATERIALS);
+		ImGui::DragFloat("Hot Reload Poll Interval", &properties.HOT_RELOAD_POLL_INTERVAL, 0.05f, 0.05f, 2.0f, "%.2f s");
 		ImGui::Checkbox("Defer Rendering", &properties.DEFER_RENDERING);
 		if (properties.DEFER_RENDERING) {
 			ImGui::Checkbox("SSAO", &properties.SSAO);
@@ -1095,7 +1099,7 @@ public:
 						mgr.LoadFromFile(currentPath);
 					}
 					else {
-						mgr.GetOrLoadMaterialByFile(currentPath);
+						mgr.ReloadMaterialFile(currentPath);
 					}
 				}
 				else {

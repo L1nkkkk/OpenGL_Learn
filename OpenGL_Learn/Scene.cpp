@@ -1,6 +1,8 @@
 #include "Scene.h"
 #include "Profiler.h"
 
+#include <functional>
+
 void Scene::BuildMeshDrawLists()
 {
 	PERF_CPU_SCOPE("Build Draw Lists");
@@ -28,6 +30,19 @@ void Scene::BuildMeshDrawLists()
 		}
 	}
 
+	std::sort(m_opaqueMeshList.begin(), m_opaqueMeshList.end(),
+		[](const MeshDrawItem& a, const MeshDrawItem& b) {
+			const std::less<Shader*> shaderLess;
+			if (a.shader != b.shader) {
+				return shaderLess(a.shader, b.shader);
+			}
+
+			const std::less<Material*> materialLess;
+			Material* aMaterial = a.mesh ? a.mesh->material_ptr : nullptr;
+			Material* bMaterial = b.mesh ? b.mesh->material_ptr : nullptr;
+			return materialLess(aMaterial, bMaterial);
+		});
+
 	if (camera_ptr) {
 		std::sort(m_transparentMeshList.begin(), m_transparentMeshList.end(),
 			[this](const MeshDrawItem& a, const MeshDrawItem& b) {
@@ -45,19 +60,23 @@ void Scene::BuildMeshDrawLists()
 		m_transparentMeshList.size());
 }
 
-const std::vector<Scene::MeshDrawItem>& Scene::GetOpaqueMeshes()
+void Scene::PrepareRenderData()
 {
 	BuildMeshDrawLists();
+}
+
+const std::vector<Scene::MeshDrawItem>& Scene::GetOpaqueMeshes() const
+{
 	return m_opaqueMeshList;
 }
 
-const std::vector<Scene::MeshDrawItem>& Scene::GetTransparentMeshes()
+const std::vector<Scene::MeshDrawItem>& Scene::GetTransparentMeshes() const
 {
-	BuildMeshDrawLists();
 	return m_transparentMeshList;
 }
 void Scene::Draw()
 {
+    PrepareRenderData();
     DrawShadowMap();
     auto attr = FramebuffersManager::GenCurrentAttr();
     fbo = FramebuffersManager::GetInstance().GetFBO(attr);

@@ -34,9 +34,12 @@ void ForwardRenderPass::Render(Scene* scene, const FBO* inputFBO)
 {
 	PERF_CPU_SCOPE("Forward Pass");
 	PERF_GPU_SCOPE("Forward Pass");
+	if (!scene) return;
+
 	// 每帧渲染前，根据 SystemProperties 变化自动切换 / 重建 FBO
 	UpdateFBOFromSystemProperties();
 
+	scene->PrepareRenderData();
 	scene->DrawShadowMap();
 	glBindFramebuffer(GL_FRAMEBUFFER, m_outputFBO->framebufferID);
 	glEnable(GL_DEPTH_TEST);

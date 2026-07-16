@@ -25,6 +25,7 @@
 #include "PostprocessRenderPass.h"
 #include "Profiler.h"
 #include "SceneStateIO.h"
+#include <algorithm>
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
@@ -272,6 +273,7 @@ int main() {
 	// PostprocessRenderPass 当前主循环未使用（最终图直接画到 postProcessFBO），若 Init 会多占一个同类型 FBO，导致列表里多一个 Forward+Gamma
 	auto postprocessRenderPass = new PostprocessRenderPass();
 	postprocessRenderPass->Init(properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
+	double nextHotReloadPollTime = 0.0;
 
 	while (!glfwWindowShouldClose(window)) {
 		PERF_FRAME_SCOPE();
@@ -294,7 +296,8 @@ int main() {
 		}
 		glfwSetWindowTitle(window, windowTitle.str().c_str());
 
-		{
+		const double currentTime = glfwGetTime();
+		if (currentTime >= nextHotReloadPollTime) {
 			PERF_CPU_SCOPE("Hot Reload Polling");
 			if (properties.AUTO_RELOAD_SHADERS) {
 				shaderManager.ReloadChangedShaders();
@@ -302,6 +305,10 @@ int main() {
 			if (properties.AUTO_RELOAD_MATERIALS) {
 				xmlMaterialManager.ReloadChangedFiles();
 			}
+			const double pollInterval = (std::max)(
+				0.05,
+				static_cast<double>(properties.HOT_RELOAD_POLL_INTERVAL));
+			nextHotReloadPollTime = currentTime + pollInterval;
 		}
 		// NewFrame
 		{

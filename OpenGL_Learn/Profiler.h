@@ -31,6 +31,8 @@ struct RenderStats {
 	std::uint64_t submittedTriangles = 0;
 	std::uint64_t shaderBinds = 0;
 	std::uint64_t uniformUpdates = 0;
+	std::uint64_t uniformLocationQueries = 0;
+	std::uint64_t uniformLocationCacheHits = 0;
 	std::uint64_t fileSystemChecks = 0;
 	std::uint64_t activeModels = 0;
 	std::uint64_t opaqueMeshes = 0;
@@ -74,6 +76,7 @@ public:
 	void RecordDraw(unsigned int primitiveMode, std::uint64_t vertexCount, std::uint64_t instanceCount = 1);
 	void RecordShaderBind();
 	void RecordUniformUpdate();
+	void RecordUniformLocationLookup(bool cacheHit);
 	void RecordFileSystemCheck();
 	void SetSceneSubmissionStats(std::uint64_t activeModels, std::uint64_t opaqueMeshes, std::uint64_t transparentMeshes);
 	void RecordUiDrawData(std::uint64_t drawCalls, std::uint64_t vertices, std::uint64_t indices);
