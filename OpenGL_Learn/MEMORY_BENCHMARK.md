@@ -9,6 +9,10 @@
 - CPU: Intel Core i7-12700KF
 - OS: Windows 11 Pro
 - Method: three cold process launches per variant; wait until the async model queue is empty, wait two additional seconds, then sample process and Windows GPU-process counters. The CPU-staging phase also used one unmeasured warm-up per binary to exclude first-path executable scanning.
+- Assimp import experiment date: 2026-07-18
+- Assimp import method: one unmeasured warm-up per binary, then three fresh-process samples per variant in `A/B/B/A/A/B` order. Memory peaks cover process start through two seconds after load ready.
+- Frame pacing: the application does not call `glfwSwapInterval` or implement an explicit FPS cap. The observed approximately 165 FPS may reflect external display/driver pacing, so FPS is not used as a primary import metric.
+- Background load: no dedicated CPU affinity or machine-isolation step was applied. Balanced interleaving and fresh processes were used to reduce temporal drift; the complete raw spread is retained for noise assessment.
 
 ## Results
 
@@ -91,6 +95,31 @@ This phase used a balanced interleaved `A/B/B/A/A/B` order against `2889d7f`, af
 Mesh upload data now exists only while a VBO is being created. Each shared geometry retains its vertex count, AABB, and a compact conservative bounding sphere, then frees the `std::vector<Vertex>` capacity immediately after `glBufferData`. Cached model instances can therefore calculate safe frustum-culling bounds without retaining or reconstructing CPU vertex arrays.
 
 Adding the matched per-phase deltas to the original baseline gives a normalized cumulative result of **-706.69 MiB dedicated GPU (-48.75%)**, **-880.43 MiB private bytes (-48.30%)**, and **-130.87 MiB working set (-43.03%)**. Normalized load-ready time remains **-1168.4 ms (-41.10%)**, with no material FPS change.
+
+## Assimp face-copy import delta
+
+`Model::processMesh` previously copied every `aiFace` before appending its indices. Assimp's `aiFace` copy constructor allocates and copies the index array, so the default scene paid for approximately **270,988 short-lived heap allocations, copies, and frees** while importing its two character models. The retained implementation reads each immutable face through `const aiFace&`; index output and rendering behavior are unchanged.
+
+This phase compared the candidate against the matched `f781e27` control (binary-equivalent to `5078f30`). The candidate was the uncommitted working tree that became this commit. Both variants used Release x64 at 1440 x 900 with `saved/last_scene.json`. Each binary received one unmeasured warm-up, followed by fresh-process samples in the balanced `A/B/B/A/A/B` order. Load ready is the first frame after the asynchronous model queue becomes empty; memory peaks cover startup through two seconds after that point.
+
+| Order | Variant | Load ready (ms) | Peak working set (MiB) | Peak private bytes (MiB) | Stable working set (MiB) | Stable private bytes (MiB) |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | A - matched control | 2880.5 | 336.59 | 1084.45 | 224.84 | 1024.11 |
+| 2 | B - face by reference | 2622.2 | 340.53 | 1122.44 | 220.77 | 1026.43 |
+| 3 | B - face by reference | 2872.2 | 330.94 | 1080.72 | 225.52 | 1023.49 |
+| 4 | A - matched control | 2783.7 | 326.93 | 1092.48 | 224.97 | 1025.56 |
+| 5 | A - matched control | 2740.2 | 343.18 | 1114.23 | 220.88 | 1019.80 |
+| 6 | B - face by reference | 2643.7 | 332.68 | 1081.02 | 224.92 | 1016.22 |
+
+| Average | Load ready (ms) | Peak working set (MiB) | Peak private bytes (MiB) | Stable working set (MiB) | Stable private bytes (MiB) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| A - matched control | 2801.5 | 335.57 | 1097.05 | 223.56 | 1023.16 |
+| B - face by reference | 2712.7 | 334.72 | 1094.73 | 223.74 | 1022.05 |
+| Delta | **-88.8 (-3.17%)** | -0.85 (-0.25%) | -2.33 (-0.21%) | +0.17 (+0.08%) | -1.11 (-0.11%) |
+
+- Load-ready time improved by **88.8 ms (3.17%)** on average. Two of the three candidate launches were faster than every control launch; one candidate launch overlapped the control range, so the full raw spread is retained above rather than presenting the mean alone.
+- All observed memory changes were below 0.3% and are treated as measurement noise. This change removes transient allocator work, not retained mesh or GPU storage.
+- Release x64 built successfully. The resource smoke test passed with the expected FBO sequence **2 -> 4 -> 6 -> 8 -> 2**, while every stage remained at **0.00 MiB Mesh CPU** and **43.57 MiB Mesh GPU**.
 
 ## Resource lifecycle smoke test
 
