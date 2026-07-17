@@ -90,11 +90,11 @@ void Planet::Draw() {
         GLState::BindVertexArray(meshes[i].GetVAO());
         PerformanceProfiler::GetInstance().RecordDraw(
             GL_TRIANGLES,
-            meshes[i].vertices.size(),
+            meshes[i].GetVertexCount(),
             amount);
         glDrawArraysInstanced(
             GL_TRIANGLES, 0,
-            static_cast<GLsizei>(meshes[i].vertices.size()),
+            static_cast<GLsizei>(meshes[i].GetVertexCount()),
             static_cast<GLsizei>(amount)
         );
     }

@@ -17,148 +17,23 @@ namespace {
 	}
 }
 
-void Mesh::ReleaseGL()
+void Model::DestroyMeshCache()
 {
-	if (VAO) {
-		GLState::ForgetVertexArray(VAO);
-		glDeleteVertexArrays(1, &VAO);
-		VAO = 0;
-	}
-	if (VBO) {
-		glDeleteBuffers(1, &VBO);
-		VBO = 0;
-	}
-	if (EBO) {
-		glDeleteBuffers(1, &EBO);
-		EBO = 0;
-	}
+	g_modelMeshCache.clear();
 }
 
-Mesh::~Mesh()
+MeshGeometry::MeshGeometry(std::vector<Vertex> vertices)
+	: m_vertices(std::move(vertices))
 {
-	ReleaseGL();
-}
+	glGenVertexArrays(1, &m_vao);
+	glGenBuffers(1, &m_vbo);
 
-Mesh::Mesh(const Mesh& other)
-	: vertices(other.vertices)
-	, material_ptr(other.material_ptr)
-	, material_owner(other.material_owner)
-	, start_tex_index(other.start_tex_index)
-	, materialXmlPath(other.materialXmlPath)
-	, m_active(other.m_active)
-	, VAO(0)
-	, VBO(0)
-	, EBO(0)
-{
-	setupMesh();
-}
-
-Mesh& Mesh::operator=(const Mesh& other)
-{
-	if (this == &other) {
-		return *this;
-	}
-	ReleaseGL();
-	vertices = other.vertices;
-	material_ptr = other.material_ptr;
-	material_owner = other.material_owner;
-	start_tex_index = other.start_tex_index;
-	materialXmlPath = other.materialXmlPath;
-	m_active = other.m_active;
-	setupMesh();
-	return *this;
-}
-
-Mesh::Mesh(Mesh&& other) noexcept
-	: vertices(std::move(other.vertices))
-	, material_ptr(other.material_ptr)
-	, material_owner(std::move(other.material_owner))
-	, start_tex_index(other.start_tex_index)
-	, materialXmlPath(std::move(other.materialXmlPath))
-	, m_active(other.m_active)
-	, VAO(other.VAO)
-	, VBO(other.VBO)
-	, EBO(other.EBO)
-{
-	other.material_ptr = nullptr;
-	other.material_owner.reset();
-	other.start_tex_index = 0;
-	other.VAO = 0;
-	other.VBO = 0;
-	other.EBO = 0;
-	other.m_active = true;
-}
-
-Mesh& Mesh::operator=(Mesh&& other) noexcept
-{
-	if (this == &other) {
-		return *this;
-	}
-	ReleaseGL();
-	vertices = std::move(other.vertices);
-	material_ptr = other.material_ptr;
-	material_owner = std::move(other.material_owner);
-	start_tex_index = other.start_tex_index;
-	materialXmlPath = std::move(other.materialXmlPath);
-	m_active = other.m_active;
-	VAO = other.VAO;
-	VBO = other.VBO;
-	EBO = other.EBO;
-
-	other.material_ptr = nullptr;
-	other.material_owner.reset();
-	other.start_tex_index = 0;
-	other.VAO = 0;
-	other.VBO = 0;
-	other.EBO = 0;
-	other.m_active = true;
-	return *this;
-}
-
-Mesh::Mesh(std::vector<Vertex> vertices,
-		std::vector<unsigned int> indices,
-		   Material* material,
-		   std::shared_ptr<Material> ownedMaterial,
-           const std::string& materialXmlPathIn)
-{
-	this->vertices = ComputeTBNVertices(vertices,indices);
-	this->material_owner = std::move(ownedMaterial);
-	if(material) {
-		this->material_ptr = material;
-	}
-	else if (this->material_owner) {
-		this->material_ptr = this->material_owner.get();
-	}
-	else {
-		this->material_ptr = XmlMaterialManager::GetInstance().GetOrLoadMaterialByFile(materialXmlPathIn);
-	}
-    this->materialXmlPath = materialXmlPathIn;
-	this->start_tex_index = 0;
-	// 默认：Mesh 可见 / 可绘制
-	SetActiveStatus(true);
-	setupMesh();
-}
-
-Mesh::Mesh(std::vector<Vertex> vertices,
-		std::vector<unsigned int> indices,
-		Material* material,
-		const std::string& materialXmlPathIn)
-	: Mesh(std::move(vertices), std::move(indices), material, std::shared_ptr<Material>(), materialXmlPathIn)
-{
-}
-
-void Mesh::setupMesh()
-{
-	glGenVertexArrays(1, &VAO);
-	glGenBuffers(1, &VBO);
-	glGenBuffers(1, &EBO);
-
-	GLState::BindVertexArray(VAO);
-	glBindBuffer(GL_ARRAY_BUFFER, VBO);
+	GLState::BindVertexArray(m_vao);
+	glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
 	glBufferData(
 		GL_ARRAY_BUFFER,
-		vertices.size() * sizeof(Vertex),
-		vertices.empty() ? nullptr : vertices.data(),
+		m_vertices.size() * sizeof(Vertex),
+		m_vertices.empty() ? nullptr : m_vertices.data(),
 		GL_STATIC_DRAW
 	);
 
@@ -173,6 +48,81 @@ void Mesh::setupMesh()
 	glEnableVertexAttribArray(4);
 	glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Bitangent));
 	GLState::BindVertexArray(0);
+
+	m_trackedCpuBytes = static_cast<std::uint64_t>(m_vertices.capacity() * sizeof(Vertex));
+	m_trackedGpuBytes = static_cast<std::uint64_t>(m_vertices.size() * sizeof(Vertex));
+	auto& profiler = PerformanceProfiler::GetInstance();
+	if (m_trackedCpuBytes != 0) {
+		profiler.RecordMemoryAllocation(MemoryResourceType::MeshCpu, m_trackedCpuBytes);
+	}
+	if (m_trackedGpuBytes != 0) {
+		profiler.RecordMemoryAllocation(MemoryResourceType::MeshGpu, m_trackedGpuBytes);
+	}
+}
+
+MeshGeometry::~MeshGeometry()
+{
+	auto& profiler = PerformanceProfiler::GetInstance();
+	if (m_trackedCpuBytes != 0) {
+		profiler.RecordMemoryRelease(MemoryResourceType::MeshCpu, m_trackedCpuBytes);
+	}
+	if (m_trackedGpuBytes != 0) {
+		profiler.RecordMemoryRelease(MemoryResourceType::MeshGpu, m_trackedGpuBytes);
+	}
+	if (m_vao != 0) {
+		GLState::ForgetVertexArray(m_vao);
+		glDeleteVertexArrays(1, &m_vao);
+	}
+	if (m_vbo != 0) {
+		glDeleteBuffers(1, &m_vbo);
+	}
+}
+
+Mesh::Mesh(std::vector<Vertex> vertices,
+		std::vector<unsigned int> indices,
+		   Material* material,
+		   std::shared_ptr<Material> ownedMaterial,
+           const std::string& materialXmlPathIn)
+{
+	m_geometry = std::make_shared<MeshGeometry>(ComputeTBNVertices(vertices, indices));
+	this->material_owner = std::move(ownedMaterial);
+	if(material) {
+		this->material_ptr = material;
+	}
+	else if (this->material_owner) {
+		this->material_ptr = this->material_owner.get();
+	}
+	else {
+		this->material_ptr = XmlMaterialManager::GetInstance().GetOrLoadMaterialByFile(materialXmlPathIn);
+	}
+    this->materialXmlPath = materialXmlPathIn;
+	this->start_tex_index = 0;
+	// 默认：Mesh 可见 / 可绘制
+	SetActiveStatus(true);
+}
+
+Mesh::Mesh(std::vector<Vertex> vertices,
+		std::vector<unsigned int> indices,
+		Material* material,
+		const std::string& materialXmlPathIn)
+	: Mesh(std::move(vertices), std::move(indices), material, std::shared_ptr<Material>(), materialXmlPathIn)
+{
+}
+
+unsigned int Mesh::GetVAO() const
+{
+	return m_geometry ? m_geometry->GetVAO() : 0;
+}
+
+std::size_t Mesh::GetVertexCount() const
+{
+	return m_geometry ? m_geometry->GetVertexCount() : 0;
+}
+
+const std::vector<Vertex>& Mesh::GetVertices() const
+{
+	static const std::vector<Vertex> empty;
+	return m_geometry ? m_geometry->GetVertices() : empty;
 }
 
 void Mesh::Draw(Shader* shader)
@@ -184,9 +134,9 @@ void Mesh::Draw(Shader* shader)
 	// XML materials are refreshed once while preparing the scene render data.
 	auto materialGaurd = MaterialGaurd(*material_ptr, shader);
 	GLState::ActiveTexture(GL_TEXTURE0);
-	GLState::BindVertexArray(VAO);
-	PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, vertices.size());
-	glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size()));
+	GLState::BindVertexArray(GetVAO());
+	PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, GetVertexCount());
+	glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(GetVertexCount()));
 }
 
 void Model::Draw(Shader* shader, unsigned int start_tex_index )
@@ -474,8 +424,8 @@ glm::vec3 Model::CalculateLocalCenter()
 	float minY = 0.0f, maxY = 0.0f;
 	float minZ = 0.0f, maxZ = 0.0f;
 	for (auto& mesh : meshes) {
-		for (auto& vertice : mesh.vertices) {
-			glm::vec3& pos = vertice.Position;
+		for (const auto& vertice : mesh.GetVertices()) {
+			const glm::vec3& pos = vertice.Position;
 			if (first) {
 				first = false;
 				minX = pos.x; maxX = pos.x;
@@ -506,7 +456,7 @@ glm::vec3 Model::CalculateLocalCenter()
 		(minZ + maxZ) * 0.5f);
 	float radiusSquared = 0.0f;
 	for (const auto& mesh : meshes) {
-		for (const auto& vertex : mesh.vertices) {
+		for (const auto& vertex : mesh.GetVertices()) {
 			const glm::vec3 delta = vertex.Position - center;
 			radiusSquared = (std::max)(radiusSquared, glm::dot(delta, delta));
 		}
@@ -515,7 +465,9 @@ glm::vec3 Model::CalculateLocalCenter()
 	return center;
 }
 
-std::vector<Vertex> ComputeTBNVertices(std::vector<Vertex>& vertices, std::vector<unsigned int> indices) {
+std::vector<Vertex> ComputeTBNVertices(
+	std::vector<Vertex>& vertices,
+	const std::vector<unsigned int>& indices) {
 	// Assimp Triangulate 理论上应满足 size%3==0，但仍做防御：
 	// - 若 indices 不合法/为空，则保持原 vertices，避免生成空数组触发后续 UB。
 	if (vertices.empty() || indices.empty()) {

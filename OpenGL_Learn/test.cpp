@@ -292,12 +292,21 @@ int main(int argc, char** argv) {
 		const auto& memoryStats = PerformanceProfiler::GetInstance().GetMemoryStats();
 		const auto& renderTargets = memoryStats.categories[
 			static_cast<std::size_t>(MemoryResourceType::RenderTarget)];
+		const auto& meshCpu = memoryStats.categories[
+			static_cast<std::size_t>(MemoryResourceType::MeshCpu)];
+		const auto& meshGpu = memoryStats.categories[
+			static_cast<std::size_t>(MemoryResourceType::MeshGpu)];
 		const double renderTargetMiB =
 			static_cast<double>(renderTargets.currentBytes) / (1024.0 * 1024.0);
 		std::cout << "[ResourceSmoke] stage=" << stage
 			<< " busyFBOs=" << busyFBOs.size()
 			<< " renderTargetMiB=" << std::fixed << std::setprecision(2)
-			<< renderTargetMiB << std::endl;
+			<< renderTargetMiB
+			<< " meshCpuMiB="
+			<< static_cast<double>(meshCpu.currentBytes) / (1024.0 * 1024.0)
+			<< " meshGpuMiB="
+			<< static_cast<double>(meshGpu.currentBytes) / (1024.0 * 1024.0)
+			<< std::endl;
 		if (busyFBOs.size() != expectedBusyFBOs) {
 			resourceSmokeFailed = true;
 		}
@@ -557,6 +566,12 @@ int main(int argc, char** argv) {
 	if (!resourceSmokeTest) {
 		SceneStateIO::Save(scene, camera, sceneStatePath);
 	}
+	scene.SetSelectedModelForMaterials(nullptr);
+	scene.modelSource.models.clear();
+	scene.lightSource.pointLights.clear();
+	scene.lightSource.directionLights.clear();
+	scene.lightSource.spotLights.clear();
+	Model::DestroyMeshCache();
 	skybox.Release();
 	DestroyTextureCache();
 	FramebuffersManager::GetInstance().Shutdown();

@@ -4,11 +4,10 @@
 
 void PointLight::DrawPointLight() {
 	for (auto& mesh : meshes) {
-		auto& vertices = mesh.vertices;
 		auto VAO = mesh.GetVAO();
 		GLState::BindVertexArray(VAO);
-		PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, vertices.size());
-		glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size()));
+		PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, mesh.GetVertexCount());
+		glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.GetVertexCount()));
 	}
 }
 

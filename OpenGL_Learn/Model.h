@@ -9,6 +9,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <cstdint>
 #include <string>
 #include <vector>
 #include <tuple>
@@ -31,13 +32,31 @@ struct Vertex {
 		Position(Pos),Normal(Nor),TexCoords(Tex){}
 };
 
+class MeshGeometry {
+public:
+	explicit MeshGeometry(std::vector<Vertex> vertices);
+	~MeshGeometry();
+
+	MeshGeometry(const MeshGeometry&) = delete;
+	MeshGeometry& operator=(const MeshGeometry&) = delete;
+
+	const std::vector<Vertex>& GetVertices() const { return m_vertices; }
+	std::size_t GetVertexCount() const { return m_vertices.size(); }
+	unsigned int GetVAO() const { return m_vao; }
+
+private:
+	std::vector<Vertex> m_vertices;
+	unsigned int m_vao = 0;
+	unsigned int m_vbo = 0;
+	std::uint64_t m_trackedCpuBytes = 0;
+	std::uint64_t m_trackedGpuBytes = 0;
+};
+
 class Mesh {
 public:
-	std::vector<Vertex> vertices;
-
-	Material* material_ptr;
+	Material* material_ptr = nullptr;
 	std::shared_ptr<Material> material_owner;
-	unsigned int start_tex_index;
+	unsigned int start_tex_index = 0;
     // 可选：该 Mesh 对应的材质 XML 路径（如 "materials/Wood.xml"），用于懒加载 + 热重载
     std::string materialXmlPath;
 
@@ -51,17 +70,17 @@ public:
 		Material* material,
 		const std::string& materialXmlPathIn);
 
-	Mesh(const Mesh& other);
-	Mesh& operator=(const Mesh& other);
-	Mesh(Mesh&& other) noexcept;
-	Mesh& operator=(Mesh&& other) noexcept;
-	~Mesh();
+	Mesh(const Mesh& other) = default;
+	Mesh& operator=(const Mesh& other) = default;
+	Mesh(Mesh&& other) noexcept = default;
+	Mesh& operator=(Mesh&& other) noexcept = default;
+	~Mesh() = default;
 
 	void Draw(Shader* shader = nullptr);
 
-	unsigned int GetVAO() {
-		return VAO;
-	}
+	unsigned int GetVAO() const;
+	std::size_t GetVertexCount() const;
+	const std::vector<Vertex>& GetVertices() const;
 
 	bool GetActiveStatus() const {
 		return m_active;
@@ -73,9 +92,7 @@ public:
 
 private:
 	bool m_active = true;
-	unsigned int VAO, VBO, EBO;
-	void ReleaseGL();
-	void setupMesh();
+	std::shared_ptr<MeshGeometry> m_geometry;
 };
 
 class Model : public BaseObject {
@@ -173,6 +190,7 @@ public:
 	}
 
 	void Draw(Shader* shader = nullptr, unsigned int start_tex_index = 0);
+	static void DestroyMeshCache();
 
 	std::unordered_map<int,bool> otherShaderUse;
 	std::unordered_map<int,std::shared_ptr<Shader>> otherShaderPtr;
@@ -266,6 +284,8 @@ protected:
 	SystemProperties& properties = SystemProperties::GetInstance();
 };
 
-std::vector<Vertex> ComputeTBNVertices(std::vector<Vertex>& vertices, std::vector<unsigned int> indices);
+std::vector<Vertex> ComputeTBNVertices(
+	std::vector<Vertex>& vertices,
+	const std::vector<unsigned int>& indices);
 
 void ComputeTBN(Vertex&, Vertex&, Vertex&);

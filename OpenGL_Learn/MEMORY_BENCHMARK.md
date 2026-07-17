@@ -17,6 +17,7 @@
 | Baseline (`b3becc4`) | 2843.1 | 1449.52 | 47.77 | 304.10 | 1822.73 | 165 |
 | Single-copy color-space-aware textures | 1792.1 | 891.33 | 49.10 | 305.30 | 1257.09 | 165 |
 | Textures + on-demand render targets | 1739.2 | 786.75 | 47.77 | 303.86 | 1130.67 | 165 |
+| Textures + on-demand targets + shared geometry | 1668.9 | 742.83 | 44.43 | 215.01 | 981.55 | 165.3 |
 
 ## Texture optimization delta
 
@@ -47,6 +48,26 @@ Relative to the original `b3becc4` baseline, the two retained memory phases now 
 
 The default forward path now owns only its HDR color/depth target and the final postprocess target. Deferred, SSAO, bloom, and disabled-light shadow targets are created on demand. Switching an effect off returns its old framebuffer storage instead of retaining every historical configuration in the pool.
 
+## Shared mesh-geometry delta
+
+This phase used an interleaved A/B/A test order against `75abe29`. Previously, copying a cached `Mesh` deep-copied its CPU vertex array and created another VAO/VBO. Cached and instantiated meshes now share immutable geometry ownership while retaining independent material and visibility state.
+
+- Dedicated GPU memory: **-43.92 MiB (-5.58%)**
+- Private bytes: **-145.44 MiB (-12.91%)**
+- Working set: **-89.33 MiB (-29.35%)**
+- Load-ready time: **-164.7 ms (-8.98%)**
+- FPS: **unchanged at 165.3**
+
+The profiler reports one live copy of the default scene geometry: **43.57 MiB Mesh CPU + 43.57 MiB Mesh GPU**. Cache hits no longer increase either category.
+
+Relative to the original `b3becc4` baseline, all retained memory phases total:
+
+- Dedicated GPU memory: **-706.69 MiB (-48.75%)**
+- Private bytes: **-841.18 MiB (-46.15%)**
+- Working set: **-89.09 MiB (-29.30%)**
+- Load-ready time: **-1174.2 ms (-41.30%)**
+- FPS: **165 -> 165.3 (no material change)**
+
 ## Resource lifecycle smoke test
 
 Run the built-in OpenGL lifecycle test from the project directory:
@@ -57,13 +78,13 @@ Run the built-in OpenGL lifecycle test from the project directory:
 
 The test enables each large target group, checks the number of live FBOs, disables everything again, and exits without modifying the saved scene.
 
-| Stage | Busy FBOs | Tracked render targets (MiB) |
-| --- | ---: | ---: |
-| Forward default | 2 | 24.72 |
-| Forward + bloom | 4 | 64.27 |
-| Deferred + SSAO + bloom | 6 | 107.53 |
-| All effects + point/directional shadows | 8 | 135.53 |
-| Reclaimed forward default | 2 | 24.72 |
+| Stage | Busy FBOs | Render targets (MiB) | Mesh CPU (MiB) | Mesh GPU (MiB) |
+| --- | ---: | ---: | ---: | ---: |
+| Forward default | 2 | 24.72 | 43.57 | 43.57 |
+| Forward + bloom | 4 | 64.27 | 43.57 | 43.57 |
+| Deferred + SSAO + bloom | 6 | 107.53 | 43.57 | 43.57 |
+| All effects + point/directional shadows | 8 | 135.53 | 43.57 | 43.57 |
+| Reclaimed forward default | 2 | 24.72 | 43.57 | 43.57 |
 
 ## Rejected indexed-mesh experiment
 
