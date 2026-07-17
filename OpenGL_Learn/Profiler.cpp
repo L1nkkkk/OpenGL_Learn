@@ -1,5 +1,12 @@
 #include "Profiler.h"
 
+#ifdef _WIN32
+#define NOMINMAX
+#include <Windows.h>
+#include <Psapi.h>
+#pragma comment(lib, "Psapi.lib")
+#endif
+
 #include <glad/glad.h>
 
 #include <algorithm>
@@ -92,6 +99,7 @@ void PerformanceProfiler::BeginFrame()
 	if (m_gpuTimingSupported) {
 		ResolveGpuQueries();
 	}
+	UpdateProcessMemoryStats();
 
 	if (!m_enabled) {
 		m_frameActive = false;
@@ -106,6 +114,28 @@ void PerformanceProfiler::BeginFrame()
 
 	m_frameStart = std::chrono::steady_clock::now();
 	m_frameActive = true;
+}
+
+void PerformanceProfiler::UpdateProcessMemoryStats()
+{
+	const auto now = std::chrono::steady_clock::now();
+	if (m_lastMemoryPoll.time_since_epoch().count() != 0 &&
+		std::chrono::duration<double>(now - m_lastMemoryPoll).count() < 0.5) {
+		return;
+	}
+	m_lastMemoryPoll = now;
+
+#ifdef _WIN32
+	PROCESS_MEMORY_COUNTERS_EX counters{};
+	counters.cb = sizeof(counters);
+	if (GetProcessMemoryInfo(
+		GetCurrentProcess(),
+		reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&counters),
+		sizeof(counters))) {
+		m_memoryStats.processWorkingSetBytes = static_cast<std::uint64_t>(counters.WorkingSetSize);
+		m_memoryStats.processPrivateBytes = static_cast<std::uint64_t>(counters.PrivateUsage);
+	}
+#endif
 }
 
 void PerformanceProfiler::EndFrame()
@@ -437,6 +467,41 @@ void PerformanceProfiler::RecordUiDrawData(
 	m_currentRenderStats.uiIndices = indices;
 }
 
+void PerformanceProfiler::RecordMemoryAllocation(MemoryResourceType type, std::uint64_t bytes)
+{
+	const std::size_t index = static_cast<std::size_t>(type);
+	if (index >= m_memoryStats.categories.size()) {
+		return;
+	}
+	auto& category = m_memoryStats.categories[index];
+	category.currentBytes += bytes;
+	category.peakBytes = (std::max)(category.peakBytes, category.currentBytes);
+	++category.resourceCount;
+}
+
+void PerformanceProfiler::RecordMemoryRelease(MemoryResourceType type, std::uint64_t bytes)
+{
+	const std::size_t index = static_cast<std::size_t>(type);
+	if (index >= m_memoryStats.categories.size()) {
+		return;
+	}
+	auto& category = m_memoryStats.categories[index];
+	category.currentBytes = bytes >= category.currentBytes ? 0 : category.currentBytes - bytes;
+	if (category.resourceCount > 0) {
+		--category.resourceCount;
+	}
+}
+
+void PerformanceProfiler::RecordTextureCacheLookup(bool cacheHit)
+{
+	if (cacheHit) {
+		++m_memoryStats.textureCacheHits;
+	}
+	else {
+		++m_memoryStats.textureCacheMisses;
+	}
+}
+
 void PerformanceProfiler::AddFrameHistorySample(std::vector<float>& history, double elapsedMs)
 {
 	if (history.size() >= kFrameHistorySize) {
@@ -493,6 +558,11 @@ void PerformanceProfiler::ResetStatistics()
 	m_gpuFrameHistory.clear();
 	m_frameSummary = {};
 	m_lastRenderStats = {};
+	m_memoryStats.textureCacheHits = 0;
+	m_memoryStats.textureCacheMisses = 0;
+	for (auto& category : m_memoryStats.categories) {
+		category.peakBytes = category.currentBytes;
+	}
 
 	for (auto& stats : m_cpuZoneStats) {
 		stats.latestMs = 0.0;

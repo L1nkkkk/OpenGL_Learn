@@ -56,6 +56,28 @@ struct RenderStats {
 	std::uint64_t uiIndices = 0;
 };
 
+enum class MemoryResourceType : std::size_t {
+	Texture = 0,
+	MeshCpu,
+	MeshGpu,
+	RenderTarget,
+	Count
+};
+
+struct MemoryCategoryStats {
+	std::uint64_t currentBytes = 0;
+	std::uint64_t peakBytes = 0;
+	std::uint64_t resourceCount = 0;
+};
+
+struct MemoryStats {
+	std::uint64_t processWorkingSetBytes = 0;
+	std::uint64_t processPrivateBytes = 0;
+	std::array<MemoryCategoryStats, static_cast<std::size_t>(MemoryResourceType::Count)> categories{};
+	std::uint64_t textureCacheHits = 0;
+	std::uint64_t textureCacheMisses = 0;
+};
+
 class PerformanceProfiler {
 public:
 	struct GpuScopeToken {
@@ -106,6 +128,9 @@ public:
 		std::uint64_t opaqueMeshes,
 		std::uint64_t transparentMeshes);
 	void RecordUiDrawData(std::uint64_t drawCalls, std::uint64_t vertices, std::uint64_t indices);
+	void RecordMemoryAllocation(MemoryResourceType type, std::uint64_t bytes);
+	void RecordMemoryRelease(MemoryResourceType type, std::uint64_t bytes);
+	void RecordTextureCacheLookup(bool cacheHit);
 
 	const ProfilerFrameSummary& GetFrameSummary() const { return m_frameSummary; }
 	const RenderStats& GetRenderStats() const { return m_lastRenderStats; }
@@ -113,6 +138,7 @@ public:
 	const std::vector<ProfilerZoneStats>& GetGpuZoneStats() const { return m_gpuZoneStats; }
 	const std::vector<float>& GetCpuFrameHistory() const { return m_cpuFrameHistory; }
 	const std::vector<float>& GetGpuFrameHistory() const { return m_gpuFrameHistory; }
+	const MemoryStats& GetMemoryStats() const { return m_memoryStats; }
 
 	void ResetStatistics();
 
@@ -140,6 +166,7 @@ private:
 	void UpdateZoneStats(ProfilerZoneStats& stats, double elapsedMs);
 	void AddFrameHistorySample(std::vector<float>& history, double elapsedMs);
 	void UpdateFrameSummary();
+	void UpdateProcessMemoryStats();
 	static double CalculateAverage(const std::vector<float>& values);
 	static double CalculatePercentile(const std::vector<float>& values, double percentile);
 
@@ -165,6 +192,8 @@ private:
 	ProfilerFrameSummary m_frameSummary;
 	RenderStats m_currentRenderStats;
 	RenderStats m_lastRenderStats;
+	MemoryStats m_memoryStats;
+	std::chrono::steady_clock::time_point m_lastMemoryPoll{};
 };
 
 class ProfilerFrameScope {

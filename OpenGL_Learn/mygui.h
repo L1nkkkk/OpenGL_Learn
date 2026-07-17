@@ -330,6 +330,39 @@ public:
 				static_cast<unsigned long long>(renderStats.uiIndices));
 		}
 
+		if (ImGui::CollapsingHeader("Memory Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
+			const auto& memoryStats = profiler.GetMemoryStats();
+			constexpr double kBytesPerMiB = 1024.0 * 1024.0;
+			ImGui::Text("Process working set: %.2f MiB",
+				static_cast<double>(memoryStats.processWorkingSetBytes) / kBytesPerMiB);
+			ImGui::Text("Process private bytes: %.2f MiB",
+				static_cast<double>(memoryStats.processPrivateBytes) / kBytesPerMiB);
+
+			static const char* categoryNames[] = {
+				"Textures",
+				"Mesh CPU",
+				"Mesh GPU",
+				"Render targets"
+			};
+			ImGui::Columns(4, "memory_categories", true);
+			ImGui::TextUnformatted("Category"); ImGui::NextColumn();
+			ImGui::TextUnformatted("Current"); ImGui::NextColumn();
+			ImGui::TextUnformatted("Peak"); ImGui::NextColumn();
+			ImGui::TextUnformatted("Resources"); ImGui::NextColumn();
+			ImGui::Separator();
+			for (std::size_t i = 0; i < memoryStats.categories.size(); ++i) {
+				const auto& category = memoryStats.categories[i];
+				ImGui::TextUnformatted(categoryNames[i]); ImGui::NextColumn();
+				ImGui::Text("%.2f MiB", static_cast<double>(category.currentBytes) / kBytesPerMiB); ImGui::NextColumn();
+				ImGui::Text("%.2f MiB", static_cast<double>(category.peakBytes) / kBytesPerMiB); ImGui::NextColumn();
+				ImGui::Text("%llu", static_cast<unsigned long long>(category.resourceCount)); ImGui::NextColumn();
+			}
+			ImGui::Columns(1);
+			ImGui::Text("Texture cache hits / misses: %llu / %llu",
+				static_cast<unsigned long long>(memoryStats.textureCacheHits),
+				static_cast<unsigned long long>(memoryStats.textureCacheMisses));
+		}
+
 		ImGui::End();
 	}
 
