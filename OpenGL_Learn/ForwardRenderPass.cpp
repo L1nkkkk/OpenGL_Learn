@@ -24,8 +24,11 @@ FBOAttributes ForwardRenderPass::BuildAttributesFromSystemProperties()
 	// color[2] = optional world-space normal
 	attr.textureAttrs.clear();
 	attr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_RGBA16F, GL_RGBA, GL_FLOAT }); // scene HDR
-	attr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_RGBA16F, GL_RGBA, GL_FLOAT }); // bloom bright
-	if (SystemProperties::GetInstance().FORWARD_NORMAL_BUFFER) {
+	const auto& properties = SystemProperties::GetInstance();
+	if (attr.isBloom || properties.FORWARD_NORMAL_BUFFER) {
+		attr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_RGBA16F, GL_RGBA, GL_FLOAT }); // bloom bright
+	}
+	if (properties.FORWARD_NORMAL_BUFFER) {
 		attr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_RGB16F, GL_RGB, GL_FLOAT }); // normal
 	}
 	return attr;
@@ -51,6 +54,8 @@ void ForwardRenderPass::Render(Scene* scene, const FBO* inputFBO)
 		SystemProperties::GetInstance().FORWARD_NORMAL_BUFFER &&
 		m_outputFBO &&
 		m_outputFBO->textureIDs.size() > 2;
+	const bool renderBrightAttachment1 =
+		m_outputFBO && m_outputFBO->textureIDs.size() > 1;
 
 	GLState::StencilFunc(GL_ALWAYS, 0, 0xFF);
 	GLState::StencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
@@ -64,9 +69,12 @@ void ForwardRenderPass::Render(Scene* scene, const FBO* inputFBO)
 		GLenum allDrawBuffersForClear[3] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 };
 		glDrawBuffers(3, allDrawBuffersForClear);
 	}
-	else {
+	else if (renderBrightAttachment1) {
 		GLenum allDrawBuffersForClear[2] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
 		glDrawBuffers(2, allDrawBuffersForClear);
+	}
+	else {
+		glDrawBuffer(GL_COLOR_ATTACHMENT0);
 	}
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 	GLState::StencilMask(0x00);
@@ -77,8 +85,11 @@ void ForwardRenderPass::Render(Scene* scene, const FBO* inputFBO)
 		GLenum drawBuffers3[3] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 };
 		glDrawBuffers(3, drawBuffers3);
 	}
-	else {
+	else if (renderBrightAttachment1) {
 		glDrawBuffers(2, colorDrawBuffers);
+	}
+	else {
+		glDrawBuffer(GL_COLOR_ATTACHMENT0);
 	}
 
 	//Draw scene in the following order
@@ -102,7 +113,12 @@ void ForwardRenderPass::Render(Scene* scene, const FBO* inputFBO)
 	}
 
 	// After opaque pass: don't overwrite attachment2 during lighting/skybox/transparent.
-	glDrawBuffers(2, colorDrawBuffers);
+	if (renderBrightAttachment1) {
+		glDrawBuffers(2, colorDrawBuffers);
+	}
+	else {
+		glDrawBuffer(GL_COLOR_ATTACHMENT0);
+	}
 
 	{
 		MaterialBatchScope materialBatch;
@@ -147,4 +163,6 @@ void ForwardRenderPass::Render(Scene* scene, const FBO* inputFBO)
 void ForwardRenderPass::Destroy()
 {
 	FramebuffersManager::GetInstance().ReleaseFBO(m_outputFBO);
+	m_outputFBO = nullptr;
+	m_hasAttr = false;
 }

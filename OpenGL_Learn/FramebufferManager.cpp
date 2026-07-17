@@ -1,9 +1,98 @@
 #include "Global.h"
 #include "GLStateCache.h"
+#include "Profiler.h"
 #include <sstream>
+
+namespace {
+    std::uint64_t BytesPerPixel(const TextureAttributes& attr)
+    {
+        switch (attr.internalFormat) {
+        case GL_R8: return 1;
+        case GL_R16F: return 2;
+        case GL_RG8: return 2;
+        case GL_RG16F: return 4;
+        case GL_RGB:
+        case GL_RGB8:
+        case GL_SRGB: return 3;
+        case GL_RGB16F: return 6;
+        case GL_RGB32F: return 12;
+        case GL_RGBA:
+        case GL_RGBA8:
+        case GL_SRGB_ALPHA:
+        case GL_DEPTH_COMPONENT:
+        case GL_DEPTH_COMPONENT24:
+        case GL_DEPTH_COMPONENT32:
+        case GL_DEPTH_COMPONENT32F:
+        case GL_DEPTH24_STENCIL8: return 4;
+        case GL_RGBA16F: return 8;
+        case GL_RGBA32F: return 16;
+        default:
+            // Conservative fallback for formats not yet listed above.
+            return attr.format == GL_RED ? 1 : (attr.format == GL_RGB ? 3 : 4);
+        }
+    }
+
+    std::uint64_t EstimateRenderTargetBytes(const FBOAttributes& attr)
+    {
+        const auto& properties = SystemProperties::GetInstance();
+        const std::uint64_t width = static_cast<std::uint64_t>(
+            attr.isShadowMap ? properties.SHADOW_WIDTH : properties.SCREEN_WIDTH);
+        const std::uint64_t height = static_cast<std::uint64_t>(
+            attr.isShadowMap ? properties.SHADOW_HEIGHT : properties.SCREEN_HEIGHT);
+        std::uint64_t bytes = 0;
+
+        for (const auto& textureAttr : attr.textureAttrs) {
+            const std::uint64_t faces = textureAttr.target == GL_TEXTURE_CUBE_MAP ? 6u : 1u;
+            const std::uint64_t samples =
+                textureAttr.target == GL_TEXTURE_2D_MULTISAMPLE ? 4u : 1u;
+            bytes += width * height * faces * samples * BytesPerPixel(textureAttr);
+        }
+
+        if (attr.hasDepthTexture && !attr.isShadowMap) {
+            bytes += width * height * 4u; // GL_DEPTH_COMPONENT32F
+        }
+        if (!attr.isShadowMap) {
+            const std::uint64_t samples =
+                attr.aaType == AntiAliasManager::AntiAliasType::MSAA ? 4u : 1u;
+            bytes += width * height * samples * 4u; // GL_DEPTH24_STENCIL8
+        }
+        return bytes;
+    }
+}
+
+void FBO::Delete() {
+    if (m_trackedBytes != 0) {
+        PerformanceProfiler::GetInstance().RecordMemoryRelease(
+            MemoryResourceType::RenderTarget,
+            m_trackedBytes);
+        m_trackedBytes = 0;
+    }
+    if (framebufferID != 0) {
+        GLState::ForgetFramebuffer(framebufferID);
+        glDeleteFramebuffers(1, &framebufferID);
+        framebufferID = 0;
+    }
+    if (!textureIDs.empty()) {
+        GLState::ForgetTextures(static_cast<GLsizei>(textureIDs.size()), textureIDs.data());
+        glDeleteTextures(static_cast<GLsizei>(textureIDs.size()), textureIDs.data());
+        textureIDs.clear();
+    }
+    if (rboID != 0) {
+        glDeleteRenderbuffers(1, &rboID);
+        rboID = 0;
+    }
+    if (depthTextureID != 0) {
+        GLState::ForgetTexture(depthTextureID);
+        glDeleteTextures(1, &depthTextureID);
+        depthTextureID = 0;
+    }
+    init = false;
+}
 
 void FBO::Init(FBOAttributes attr) {
     this->attr = attr;
+    width = attr.isShadowMap ? properties.SHADOW_WIDTH : properties.SCREEN_WIDTH;
+    height = attr.isShadowMap ? properties.SHADOW_HEIGHT : properties.SCREEN_HEIGHT;
     float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
     depthTextureID = 0;
 
@@ -139,6 +228,10 @@ void FBO::Init(FBOAttributes attr) {
 
     GLState::BindFramebuffer(GL_FRAMEBUFFER, 0);
     this->init = true;
+    m_trackedBytes = EstimateRenderTargetBytes(attr);
+    PerformanceProfiler::GetInstance().RecordMemoryAllocation(
+        MemoryResourceType::RenderTarget,
+        m_trackedBytes);
 }
 
 FBO* FramebuffersManager::GetFBO(FBOAttributes attr) {
@@ -165,6 +258,47 @@ void FramebuffersManager::Resize() {
 			fbo->Resize();
 		}
 	}
+}
+
+void FramebuffersManager::TrimUnusedFBOs() {
+    for (auto mapIt = m_hashMapFBO.begin(); mapIt != m_hashMapFBO.end();) {
+        auto& fbos = mapIt->second;
+        for (auto fboIt = fbos.begin(); fboIt != fbos.end();) {
+            FBO* fbo = *fboIt;
+            if (fbo && fbo->isBusy) {
+                ++fboIt;
+                continue;
+            }
+
+            for (auto registryIt = m_fboMap.begin(); registryIt != m_fboMap.end();) {
+                if (registryIt->second == fbo) {
+                    registryIt = m_fboMap.erase(registryIt);
+                }
+                else {
+                    ++registryIt;
+                }
+            }
+            delete fbo;
+            fboIt = fbos.erase(fboIt);
+        }
+
+        if (fbos.empty()) {
+            mapIt = m_hashMapFBO.erase(mapIt);
+        }
+        else {
+            ++mapIt;
+        }
+    }
+}
+
+void FramebuffersManager::Shutdown() {
+    for (auto& entry : m_hashMapFBO) {
+        for (FBO* fbo : entry.second) {
+            delete fbo;
+        }
+    }
+    m_hashMapFBO.clear();
+    m_fboMap.clear();
 }
 
 std::vector<FBO*> FramebuffersManager::GetBusyFBOs() const {

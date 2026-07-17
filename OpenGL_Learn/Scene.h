@@ -138,8 +138,6 @@ public:
 		camera_ptr = camera;
 		lightSource.pointLightVAO = globalVAOs.sphereVAO;
 		lightSource.vertexCount = 262;
-		FBOAttributes attr;
-		fboTemp = FramebuffersManager::GetInstance().GetFBO(attr);
 		deferShader = ShaderManager::GetInstance().GetShader(ShaderManager::DeferProcess);
 
 		

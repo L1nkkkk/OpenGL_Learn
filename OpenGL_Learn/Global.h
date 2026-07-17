@@ -5,6 +5,7 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <string>
+#include <cstdint>
 #include <unordered_map>
 #include <vector>
 #include <functional>
@@ -577,9 +578,9 @@ public:
 		"BrightColor",
 	};
 	bool isBusy = false;
-	unsigned int framebufferID;
+	unsigned int framebufferID = 0;
 	std::vector<unsigned int> textureIDs;
-	unsigned int rboID;
+	unsigned int rboID = 0;
 	// When attr.hasDepthTexture == true, depth is stored in this texture.
 	unsigned int depthTextureID = 0;
 	bool init = false;
@@ -603,25 +604,15 @@ public:
         Init(attr);
 	}
 
-    FBO(int w, int h, FBOAttributes attr, std::string pass) {
+	FBO(int w, int h, FBOAttributes attr, std::string pass) {
         width = w;
         height = h;
         passName = pass;
-        Init(attr);
-    }
-
-	void Delete() {
-		GLState::ForgetFramebuffer(framebufferID);
-		glDeleteFramebuffers(1, &framebufferID);
-		GLState::ForgetTextures(static_cast<GLsizei>(textureIDs.size()), textureIDs.data());
-		glDeleteTextures(static_cast<GLsizei>(textureIDs.size()), textureIDs.data());
-		glDeleteRenderbuffers(1, &rboID);
-		if (depthTextureID != 0) {
-			GLState::ForgetTexture(depthTextureID);
-			glDeleteTextures(1, &depthTextureID);
-			depthTextureID = 0;
-		}
+		Init(attr);
 	}
+
+	~FBO() { Delete(); }
+	void Delete();
 	void Init(FBOAttributes attr);
 
 	void Resize() {
@@ -630,6 +621,7 @@ public:
 	}
 private:
 	SystemProperties& properties = SystemProperties::GetInstance();
+	std::uint64_t m_trackedBytes = 0;
 };
 
 class FramebuffersManager {
@@ -687,6 +679,8 @@ public:
 	FBO* GetFBO(FBOAttributes);
 
 	void Resize();
+	void TrimUnusedFBOs();
+	void Shutdown();
 
 	// ?????????? isBusy ?? FBO ?????????? Viewport ??????? FBO ????????????
 	std::vector<FBO*> GetBusyFBOs() const;

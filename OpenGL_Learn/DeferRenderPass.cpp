@@ -6,7 +6,6 @@
 
 void DeferRenderPass::Init(int width, int height)
 {
-	UpdateFBOFromSystemProperties();
 	m_ssao.Init(width, height);
 }
 
@@ -144,7 +143,12 @@ void DeferRenderPass::DrawPointLightVolumesDeferred(Scene* scene)
 		lightVolumeShader->setVec3("pointLight.specular", pointLight.specular);
 		lightVolumeShader->setFloat("pointLight.far_plane", pointLight.far);
 		GLState::ActiveTexture(GL_TEXTURE4);
-		GLState::BindTexture(GL_TEXTURE_CUBE_MAP, pointLight.shadowFBO->textureIDs[0]);
+		FBO* pointShadowFBO = pointLight.useShadowMap ? pointLight.EnsureShadowFBO() : nullptr;
+		GLState::BindTexture(
+			GL_TEXTURE_CUBE_MAP,
+			pointShadowFBO && !pointShadowFBO->textureIDs.empty()
+				? pointShadowFBO->textureIDs[0]
+				: 0);
 		lightVolumeShader->setInt("pointLight.shadowCubeMap", 4);
 		lightVolumeShader->setBool("pointLight.useShadowMap", pointLight.useShadowMap);
 		lightVolumeShader->setMat4("model", pointLight.getModelMatrix());
@@ -198,13 +202,11 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 		if (m_gbufferFBO) {
 			m_gbufferFBO->passName = "DeferRenderPass_GBuffer";
 		}
+		fbMgr.TrimUnusedFBOs();
 	}
 	if (!m_gbufferFBO || m_gbufferFBO->textureIDs.size() < 4) return;
 
 	auto& properties = SystemProperties::GetInstance();
-	const FBO* ssaoFBO = properties.SSAO ? m_ssao.GetOutputFBO() : nullptr;
-	const bool useSSAOInLighting = ssaoFBO && !ssaoFBO->textureIDs.empty();
-
 	scene->PrepareRenderData();
 	scene->DrawShadowMap();
 
@@ -243,6 +245,12 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 	if (properties.SSAO) {
 		m_ssao.Render(scene, m_gbufferFBO);
 	}
+	else if (m_ssao.GetOutputFBO()) {
+		m_ssao.Destroy();
+		fbMgr.TrimUnusedFBOs();
+	}
+	const FBO* ssaoFBO = properties.SSAO ? m_ssao.GetOutputFBO() : nullptr;
+	const bool useSSAOInLighting = ssaoFBO && !ssaoFBO->textureIDs.empty();
 
 	// Copy depth to output target so skybox / transparent passes can share it.
 	GLState::BindFramebuffer(GL_READ_FRAMEBUFFER, m_gbufferFBO->framebufferID);
@@ -333,4 +341,6 @@ void DeferRenderPass::Destroy()
 	m_gbufferFBO = nullptr;
 	FramebuffersManager::GetInstance().ReleaseFBO(m_outputFBO);
 	m_outputFBO = nullptr;
+	m_hasAttr = false;
+	FramebuffersManager::GetInstance().TrimUnusedFBOs();
 }

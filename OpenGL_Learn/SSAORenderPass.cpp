@@ -19,8 +19,8 @@ FBOAttributes SSAORenderPass::BuildAttributesFromSystemProperties()
 
 void SSAORenderPass::Init(int width, int height)
 {
-	UpdateFBOFromSystemProperties();
-	EnsureKernelAndNoise();
+	(void)width;
+	(void)height;
 }
 
 void SSAORenderPass::EnsureKernelAndNoise()
@@ -120,4 +120,5 @@ void SSAORenderPass::Destroy()
 	m_kernel.clear();
 	FramebuffersManager::GetInstance().ReleaseFBO(m_outputFBO);
 	m_outputFBO = nullptr;
+	m_hasAttr = false;
 }

@@ -15,8 +15,8 @@ public:
 	float linear;
 	float quadratic;
 
-	bool useShadowMap;
-	FBO* shadowFBO;
+	bool useShadowMap = false;
+	FBO* shadowFBO = nullptr;
 	
 	float near = 1.0f;
 	float far = 25.0f;
@@ -29,15 +29,10 @@ public:
 		constant = 1.0f;
 		linear = 0.09f;
 		quadratic = 0.032f;
-		FBOAttributes attr;
-		attr.isShadowMap = true;
-		attr.shadowType = FBOAttributes::FramebufferType::ShadowBox;
-		attr.textureAttrs.push_back({ GL_TEXTURE_CUBE_MAP, GL_DEPTH_COMPONENT, GL_DEPTH_COMPONENT, GL_FLOAT });
-		shadowFBO = FramebuffersManager::GetInstance().GetFBO(attr);
-		useShadowMap = false;
 	}
 
 	void DrawPointLight();
+	FBO* EnsureShadowFBO();
 
 	void SetLightUniforms(Shader& shader, int index);
 
@@ -73,8 +68,8 @@ public:
 	float distance;
 	float width;
 
-	bool useShadowMap;
-	FBO* shadowFBO;
+	bool useShadowMap = false;
+	FBO* shadowFBO = nullptr;
 
 	DirectionLight(const glm::vec3& dir, const glm::vec3& amb, const glm::vec3& diff, const glm::vec3& spec)
 		: direction(dir), ambient(amb), diffuse(diff), specular(spec) {
@@ -82,13 +77,8 @@ public:
 		far_plane = 7.5f;
 		distance = 5.f;
 		width = 10.f;
-		FBOAttributes attr;
-		attr.isShadowMap = true;
-		attr.shadowType = FBOAttributes::FramebufferType::ShadowMap;
-		attr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_DEPTH_COMPONENT, GL_DEPTH_COMPONENT, GL_FLOAT });
-		shadowFBO = FramebuffersManager::GetInstance().GetFBO(attr);
-		useShadowMap = false;
 	}
+	FBO* EnsureShadowFBO();
 	glm::mat4 GetLightSpaceMatrix() {
 		glm::mat4 lightProjection = glm::ortho(
 			-width,width,-width,width,

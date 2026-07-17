@@ -50,7 +50,20 @@ bool PostprocessRenderPass::EnsureBloomTargets() {
 
 	m_bloomBlurFBO->passName = "PostprocessRenderPass_BloomBlur";
 	m_bloomPingFBO->passName = "PostprocessRenderPass_BloomPing";
+	framebufferManager.TrimUnusedFBOs();
 	return true;
+}
+
+void PostprocessRenderPass::ReleaseBloomTargets() {
+	if (!m_bloomBlurFBO && !m_bloomPingFBO) {
+		return;
+	}
+	auto& framebufferManager = FramebuffersManager::GetInstance();
+	framebufferManager.ReleaseFBO(m_bloomBlurFBO);
+	framebufferManager.ReleaseFBO(m_bloomPingFBO);
+	m_bloomBlurFBO = nullptr;
+	m_bloomPingFBO = nullptr;
+	framebufferManager.TrimUnusedFBOs();
 }
 
 void PostprocessRenderPass::Render(Scene* scene, const FBO* inputFBO) {
@@ -72,6 +85,9 @@ void PostprocessRenderPass::Render(Scene* scene, const FBO* inputFBO) {
         PERF_GPU_SCOPE("Bloom Blur");
         bloomReady = Blur(properties.BLOOM_BLUR_ITERATIONS, inputFBO->textureIDs[1]);
     }
+	else {
+		ReleaseBloomTargets();
+	}
 
     // 2) Final composite (HDR -> tone map, gamma, bloom add) into m_outputFBO
     auto screenShader = ShaderManager::GetInstance().GetShader(ShaderManager::Scene);
@@ -104,18 +120,14 @@ void PostprocessRenderPass::Render(Scene* scene, const FBO* inputFBO) {
 }
 
 void PostprocessRenderPass::Destroy() {
+	auto& framebufferManager = FramebuffersManager::GetInstance();
     if (m_outputFBO) {
-        FramebuffersManager::GetInstance().ReleaseFBO(m_outputFBO);
+		framebufferManager.ReleaseFBO(m_outputFBO);
         m_outputFBO = nullptr;
     }
-    if (m_bloomBlurFBO) {
-        FramebuffersManager::GetInstance().ReleaseFBO(m_bloomBlurFBO);
-        m_bloomBlurFBO = nullptr;
-    }
-    if (m_bloomPingFBO) {
-        FramebuffersManager::GetInstance().ReleaseFBO(m_bloomPingFBO);
-        m_bloomPingFBO = nullptr;
-    }
+	ReleaseBloomTargets();
+	m_hasAttr = false;
+	framebufferManager.TrimUnusedFBOs();
 }
 
 void PostprocessRenderPass::ProcessBloom(FBO* input) {

@@ -20,5 +20,6 @@ protected:
     FBOAttributes BuildAttributesFromSystemProperties() override;
 	FBOAttributes BuildBloomAttributes() const;
 	bool EnsureBloomTargets();
+	void ReleaseBloomTargets();
 	bool Blur(int times, unsigned int textureID);
 };

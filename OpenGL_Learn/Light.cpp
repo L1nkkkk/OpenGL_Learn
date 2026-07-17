@@ -12,6 +12,21 @@ void PointLight::DrawPointLight() {
 	}
 }
 
+FBO* PointLight::EnsureShadowFBO() {
+	if (shadowFBO) {
+		return shadowFBO;
+	}
+	FBOAttributes attr;
+	attr.isShadowMap = true;
+	attr.shadowType = FBOAttributes::FramebufferType::ShadowBox;
+	attr.textureAttrs.push_back({ GL_TEXTURE_CUBE_MAP, GL_DEPTH_COMPONENT, GL_DEPTH_COMPONENT, GL_FLOAT });
+	shadowFBO = FramebuffersManager::GetInstance().GetFBO(attr);
+	if (shadowFBO) {
+		shadowFBO->passName = "PointLight_ShadowCube";
+	}
+	return shadowFBO;
+}
+
 void PointLight::SetLightUniforms(Shader& shader, int index) {
 	auto& properties = SystemProperties::GetInstance();
 	if (GetActiveStatus() == false) return;
@@ -26,11 +41,31 @@ void PointLight::SetLightUniforms(Shader& shader, int index) {
 	shader.setFloat(baseName + ".quadratic", quadratic);
 	GLState::ActiveTexture(GL_TEXTURE0 + properties.USED_TEXTURE_NUM);
 	GLState::BindTexture(GL_TEXTURE_2D, 0);
-	GLState::BindTexture(GL_TEXTURE_CUBE_MAP, shadowFBO->textureIDs[0]);
+	FBO* activeShadowFBO = useShadowMap ? EnsureShadowFBO() : nullptr;
+	GLState::BindTexture(
+		GL_TEXTURE_CUBE_MAP,
+		activeShadowFBO && !activeShadowFBO->textureIDs.empty()
+			? activeShadowFBO->textureIDs[0]
+			: 0);
 	shader.setBool(baseName + ".useShadowMap", useShadowMap);
 	shader
 		.setInt(baseName + ".shadowCubeMap", properties.USED_TEXTURE_NUM++);
 	shader.setFloat(baseName + ".far_plane", far);
+}
+
+FBO* DirectionLight::EnsureShadowFBO() {
+	if (shadowFBO) {
+		return shadowFBO;
+	}
+	FBOAttributes attr;
+	attr.isShadowMap = true;
+	attr.shadowType = FBOAttributes::FramebufferType::ShadowMap;
+	attr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_DEPTH_COMPONENT, GL_DEPTH_COMPONENT, GL_FLOAT });
+	shadowFBO = FramebuffersManager::GetInstance().GetFBO(attr);
+	if (shadowFBO) {
+		shadowFBO->passName = "DirectionLight_ShadowMap";
+	}
+	return shadowFBO;
 }
 
 void DirectionLight::SetLightUniforms(Shader& shader, int index) {
@@ -43,7 +78,12 @@ void DirectionLight::SetLightUniforms(Shader& shader, int index) {
 	shader.setVec3(baseName + ".diffuse", diffuse);
 	shader.setVec3(baseName + ".specular", specular);
 	GLState::ActiveTexture(GL_TEXTURE0 + properties.USED_TEXTURE_NUM);
-	GLState::BindTexture(GL_TEXTURE_2D, shadowFBO->textureIDs[0]);
+	FBO* activeShadowFBO = useShadowMap ? EnsureShadowFBO() : nullptr;
+	GLState::BindTexture(
+		GL_TEXTURE_2D,
+		activeShadowFBO && !activeShadowFBO->textureIDs.empty()
+			? activeShadowFBO->textureIDs[0]
+			: 0);
 	GLState::BindTexture(GL_TEXTURE_CUBE_MAP, 0);
 	shader.setBool(baseName + ".useShadowMap", useShadowMap);
 	shader.setInt(baseName + ".shadowMap", properties.USED_TEXTURE_NUM++);

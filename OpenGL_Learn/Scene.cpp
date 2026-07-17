@@ -356,7 +356,12 @@ void Scene::DrawDefferedModels()
             lightVolumeShader->setVec3("pointLight.specular", pointLight.specular);
             lightVolumeShader->setFloat("pointLight.far_plane", pointLight.far);
             GLState::ActiveTexture(GL_TEXTURE4);
-            GLState::BindTexture(GL_TEXTURE_CUBE_MAP, pointLight.shadowFBO->textureIDs[0]);
+            FBO* pointShadowFBO = pointLight.useShadowMap ? pointLight.EnsureShadowFBO() : nullptr;
+            GLState::BindTexture(
+                GL_TEXTURE_CUBE_MAP,
+                pointShadowFBO && !pointShadowFBO->textureIDs.empty()
+                    ? pointShadowFBO->textureIDs[0]
+                    : 0);
             lightVolumeShader->setInt("pointLight.shadowCubeMap", 4);
             lightVolumeShader->setBool("pointLight.useShadowMap", pointLight.useShadowMap);
             lightVolumeShader->setMat4("model", pointLight.getModelMatrix());
@@ -539,7 +544,12 @@ unsigned int Scene::SetShadowMap(Shader& shader) {
         shader.setBool("pointLights[" + std::to_string(i) + "].useShadowMap", pointLight.useShadowMap);
         GLState::ActiveTexture(GL_TEXTURE0 + shadowMapCount);
         GLState::BindTexture(GL_TEXTURE_2D, 0);
-        GLState::BindTexture(GL_TEXTURE_CUBE_MAP, pointLight.shadowFBO->textureIDs[0]);
+        FBO* pointShadowFBO = pointLight.useShadowMap ? pointLight.EnsureShadowFBO() : nullptr;
+        GLState::BindTexture(
+            GL_TEXTURE_CUBE_MAP,
+            pointShadowFBO && !pointShadowFBO->textureIDs.empty()
+                ? pointShadowFBO->textureIDs[0]
+                : 0);
         shader.setInt("pointLights[" + std::to_string(i) + "].shadowCubeMap", shadowMapCount);
         shader.setFloat("pointLights[" + std::to_string(i) + "].far_plane", pointLight.far);
         shadowMapCount++;
@@ -550,7 +560,12 @@ unsigned int Scene::SetShadowMap(Shader& shader) {
         //if (!dirLight.GetActiveStatus()) continue;
         shader.setBool("dirLights[" + std::to_string(i) + "].useShadowMap", dirLight.useShadowMap);
         GLState::ActiveTexture(GL_TEXTURE0 + shadowMapCount);
-        GLState::BindTexture(GL_TEXTURE_2D, dirLight.shadowFBO->textureIDs[0]);
+        FBO* dirShadowFBO = dirLight.useShadowMap ? dirLight.EnsureShadowFBO() : nullptr;
+        GLState::BindTexture(
+            GL_TEXTURE_2D,
+            dirShadowFBO && !dirShadowFBO->textureIDs.empty()
+                ? dirShadowFBO->textureIDs[0]
+                : 0);
         GLState::BindTexture(GL_TEXTURE_CUBE_MAP, 0);
         shader.setInt("dirLights[" + std::to_string(i) + "].shadowMap", shadowMapCount);
         shader.setMat4("dirLights[" + std::to_string(i) + "].lightSpaceMatrix", dirLight.GetLightSpaceMatrix());
@@ -653,6 +668,39 @@ void Scene::DrawNormalLines()
 void Scene::DrawShadowMap() {
     PERF_CPU_SCOPE("Shadow Maps");
     PERF_GPU_SCOPE("Shadow Maps");
+
+    auto& framebufferManager = FramebuffersManager::GetInstance();
+    bool hasEnabledShadow = false;
+	bool releasedShadowTarget = false;
+    for (auto& dirLight : lightSource.directionLights) {
+        if (!dirLight.useShadowMap) {
+			if (dirLight.shadowFBO) {
+				framebufferManager.ReleaseFBO(dirLight.shadowFBO);
+				releasedShadowTarget = true;
+			}
+            dirLight.shadowFBO = nullptr;
+            continue;
+        }
+        hasEnabledShadow = dirLight.EnsureShadowFBO() != nullptr || hasEnabledShadow;
+    }
+    for (auto& pointLight : lightSource.pointLights) {
+        if (!pointLight.useShadowMap) {
+			if (pointLight.shadowFBO) {
+				framebufferManager.ReleaseFBO(pointLight.shadowFBO);
+				releasedShadowTarget = true;
+			}
+            pointLight.shadowFBO = nullptr;
+            continue;
+        }
+        hasEnabledShadow = pointLight.EnsureShadowFBO() != nullptr || hasEnabledShadow;
+    }
+	if (releasedShadowTarget) {
+		framebufferManager.TrimUnusedFBOs();
+	}
+    if (!hasEnabledShadow) {
+        return;
+    }
+
     GLState::CullFace(GL_FRONT);
     GLState::Enable(GL_DEPTH_TEST);
     GLState::Disable(GL_STENCIL_TEST);
@@ -664,7 +712,9 @@ void Scene::DrawShadowMap() {
     shadowShader->use();
     for (auto& dirLight : lightSource.directionLights) {
         if (!dirLight.useShadowMap) continue;
-        GLState::BindFramebuffer(GL_FRAMEBUFFER, dirLight.shadowFBO->framebufferID);
+        FBO* shadowFBO = dirLight.EnsureShadowFBO();
+        if (!shadowFBO) continue;
+        GLState::BindFramebuffer(GL_FRAMEBUFFER, shadowFBO->framebufferID);
         glClear(GL_DEPTH_BUFFER_BIT);
         shadowShader->setMat4("lightSpaceMatrix", dirLight.GetLightSpaceMatrix());
         RenderScene(*shadowShader);
@@ -675,7 +725,9 @@ void Scene::DrawShadowMap() {
     shadowCubeShader->use();
     for (auto& pointLight : lightSource.pointLights) {
         if (!pointLight.useShadowMap) continue;
-        GLState::BindFramebuffer(GL_FRAMEBUFFER, pointLight.shadowFBO->framebufferID);
+        FBO* shadowFBO = pointLight.EnsureShadowFBO();
+        if (!shadowFBO) continue;
+        GLState::BindFramebuffer(GL_FRAMEBUFFER, shadowFBO->framebufferID);
         glClear(GL_DEPTH_BUFFER_BIT);
         auto& lightSpaceMatrices = pointLight.GetLightSpaceMatrices();
         for (int i = 0; i < 6; ++i) {
@@ -731,7 +783,10 @@ FBO* Scene::GetNeedShowFramebuffer() {
         else ret = fbo;
     }
     else if (FramebuffersManager::GetInstance().useType == FBO::ShadowMap_FrameRenderType) {
-        return lightSource.directionLights[0].shadowFBO;
+        if (lightSource.directionLights.empty()) {
+            return nullptr;
+        }
+        return lightSource.directionLights[0].EnsureShadowFBO();
     }
     else if (FramebuffersManager::GetInstance().useType == FBO::BrightColor_FrameRenderType) {
         if (properties.BLOOM) {

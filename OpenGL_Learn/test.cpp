@@ -27,6 +27,7 @@
 #include "GLStateCache.h"
 #include "SceneStateIO.h"
 #include <algorithm>
+#include <iomanip>
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
@@ -120,7 +121,13 @@ void SetUniformBuffer() {
 	ShaderMgr.UpdateSystemUBO();
 }
 
-int main() {
+int main(int argc, char** argv) {
+	bool resourceSmokeTest = false;
+	for (int i = 1; i < argc; ++i) {
+		if (std::string(argv[i]) == "--resource-smoke-test") {
+			resourceSmokeTest = true;
+		}
+	}
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -277,6 +284,24 @@ int main() {
 	// PostprocessRenderPass 当前主循环未使用（最终图直接画到 postProcessFBO），若 Init 会多占一个同类型 FBO，导致列表里多一个 Forward+Gamma
 	auto postprocessRenderPass = new PostprocessRenderPass();
 	postprocessRenderPass->Init(properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
+	bool deferredPassActive = properties.DEFER_RENDERING;
+	int resourceSmokeFrames = 0;
+	bool resourceSmokeFailed = false;
+	auto reportResourceState = [&](const char* stage, std::size_t expectedBusyFBOs) {
+		const auto busyFBOs = FramebuffersManager::GetInstance().GetBusyFBOs();
+		const auto& memoryStats = PerformanceProfiler::GetInstance().GetMemoryStats();
+		const auto& renderTargets = memoryStats.categories[
+			static_cast<std::size_t>(MemoryResourceType::RenderTarget)];
+		const double renderTargetMiB =
+			static_cast<double>(renderTargets.currentBytes) / (1024.0 * 1024.0);
+		std::cout << "[ResourceSmoke] stage=" << stage
+			<< " busyFBOs=" << busyFBOs.size()
+			<< " renderTargetMiB=" << std::fixed << std::setprecision(2)
+			<< renderTargetMiB << std::endl;
+		if (busyFBOs.size() != expectedBusyFBOs) {
+			resourceSmokeFailed = true;
+		}
+	};
 	double nextHotReloadPollTime = 0.0;
 
 	while (!glfwWindowShouldClose(window)) {
@@ -285,6 +310,43 @@ int main() {
 		{
 			PERF_CPU_SCOPE("Async Model Loads");
 			SceneStateIO::UpdateAsyncLoads(scene, 1);
+		}
+		if (resourceSmokeTest && !SceneStateIO::HasPendingAsyncLoads()) {
+			++resourceSmokeFrames;
+			if (resourceSmokeFrames == 30) {
+				reportResourceState("forward-default", 2);
+				properties.BLOOM = true;
+			}
+			else if (resourceSmokeFrames == 60) {
+				reportResourceState("forward-bloom", 4);
+				properties.DEFER_RENDERING = true;
+				properties.SSAO = true;
+			}
+			else if (resourceSmokeFrames == 90) {
+				reportResourceState("deferred-ssao-bloom", 6);
+				for (auto& light : scene.lightSource.pointLights) {
+					light.useShadowMap = true;
+				}
+				for (auto& light : scene.lightSource.directionLights) {
+					light.useShadowMap = true;
+				}
+			}
+			else if (resourceSmokeFrames == 120) {
+				reportResourceState("all-effects", 8);
+				properties.BLOOM = false;
+				properties.SSAO = false;
+				properties.DEFER_RENDERING = false;
+				for (auto& light : scene.lightSource.pointLights) {
+					light.useShadowMap = false;
+				}
+				for (auto& light : scene.lightSource.directionLights) {
+					light.useShadowMap = false;
+				}
+			}
+			else if (resourceSmokeFrames == 150) {
+				reportResourceState("reclaimed-default", 2);
+				glfwSetWindowShouldClose(window, true);
+			}
 		}
 
 		//calculate FPS
@@ -353,6 +415,16 @@ int main() {
 #ifdef USE_SCENE_SHADER
 		//first pass: render scene to framebuffer (HDR)
 		FBO* sceneFBO = nullptr;
+		if (properties.DEFER_RENDERING != deferredPassActive) {
+			if (properties.DEFER_RENDERING) {
+				forwardRenderPass->Destroy();
+			}
+			else {
+				deferRenderPass->Destroy();
+			}
+			FramebuffersManager::GetInstance().TrimUnusedFBOs();
+			deferredPassActive = properties.DEFER_RENDERING;
+		}
 		if (properties.DEFER_RENDERING) {
 			deferRenderPass->Render(&scene);
 			sceneFBO = deferRenderPass->GetOutputFBO();
@@ -482,11 +554,14 @@ int main() {
 	delete deferRenderPass;
 	postprocessRenderPass->Destroy();
 	delete postprocessRenderPass;
-	SceneStateIO::Save(scene, camera, sceneStatePath);
+	if (!resourceSmokeTest) {
+		SceneStateIO::Save(scene, camera, sceneStatePath);
+	}
 	skybox.Release();
 	DestroyTextureCache();
+	FramebuffersManager::GetInstance().Shutdown();
 	PerformanceProfiler::GetInstance().Shutdown();
 
 	glfwTerminate();
-	return 0;
+	return resourceSmokeFailed ? 2 : 0;
 }

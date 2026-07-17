@@ -43,14 +43,18 @@ protected:
 	void UpdateFBOFromSystemProperties() {
 		FBOAttributes attr = BuildAttributesFromSystemProperties();
 		if (!m_hasAttr || !(attr == m_lastAttr)) {
-			FramebuffersManager::GetInstance().ReleaseFBO(m_outputFBO);
+			auto& framebufferManager = FramebuffersManager::GetInstance();
+			framebufferManager.ReleaseFBO(m_outputFBO);
 			m_lastAttr = attr;
 			m_hasAttr = true;
-			m_outputFBO = FramebuffersManager::GetInstance().GetFBO(attr);
+			m_outputFBO = framebufferManager.GetFBO(attr);
 			if (m_outputFBO) {
 				m_outputFBO->passName = GetPassName();
-				FramebuffersManager::GetInstance().RegisterFBO(GetPassName(), m_outputFBO);
+				framebufferManager.RegisterFBO(GetPassName(), m_outputFBO);
 			}
+			// Configuration switches are infrequent; release the old backing storage
+			// instead of retaining every historical render-target variant forever.
+			framebufferManager.TrimUnusedFBOs();
 		}
 	}
 };
