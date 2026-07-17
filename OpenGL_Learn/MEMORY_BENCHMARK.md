@@ -121,6 +121,32 @@ This phase compared the candidate against the matched `f781e27` control (binary-
 - All observed memory changes were below 0.3% and are treated as measurement noise. This change removes transient allocator work, not retained mesh or GPU storage.
 - Release x64 built successfully. The resource smoke test passed with the expected FBO sequence **2 -> 4 -> 6 -> 8 -> 2**, while every stage remained at **0.00 MiB Mesh CPU** and **43.57 MiB Mesh GPU**.
 
+## Removed unused Assimp tangent generation
+
+The importer previously requested `aiProcess_CalcTangentSpace`, but `Model::processMesh` never copied Assimp's tangent or bitangent arrays. `Mesh` instead expands indexed triangles and computes the TBN basis with `ComputeTBNVertices`. Removing the unused Assimp post-process avoids generating temporary per-vertex tangent data without changing the vertex data uploaded by this application.
+
+This phase used parent commit `f29a557` as the matched control; its executable is binary-equivalent to the originally measured `d4bc160` control because the rewrite changed documentation only. The candidate was the uncommitted working tree that became this commit. The Release x64, 1440 x 900 scene, warm-up, fresh-process order, load-ready signal, and memory sampling window were identical to the preceding experiment.
+
+| Order | Variant | Load ready (ms) | Peak working set (MiB) | Peak private bytes (MiB) | Stable working set (MiB) | Stable private bytes (MiB) |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | A - `f29a557` control | 2781.9 | 333.19 | 1117.49 | 224.94 | 1024.57 |
+| 2 | B - no Assimp TBN | 2994.6 | 326.68 | 1080.38 | 228.96 | 1026.14 |
+| 3 | B - no Assimp TBN | 2640.4 | 327.47 | 1043.93 | 220.79 | 1007.71 |
+| 4 | A - `f29a557` control | 2883.0 | 322.54 | 1086.78 | 224.95 | 1021.08 |
+| 5 | A - `f29a557` control | 2810.4 | 325.74 | 1086.72 | 220.90 | 1027.36 |
+| 6 | B - no Assimp TBN | 2620.6 | 326.42 | 1081.65 | 224.80 | 1025.91 |
+
+| Average | Load ready (ms) | Peak working set (MiB) | Peak private bytes (MiB) | Stable working set (MiB) | Stable private bytes (MiB) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| A - `f29a557` control | 2825.1 | 327.16 | 1097.00 | 223.60 | 1024.34 |
+| B - no Assimp TBN | 2751.9 | 326.86 | 1068.65 | 224.85 | 1019.92 |
+| Delta | **-73.2 (-2.59%)** | -0.30 (-0.09%) | **-28.34 (-2.58%)** | +1.25 (+0.56%) | -4.42 (-0.43%) |
+
+- Peak private bytes fell by **28.34 MiB (2.58%)** on average, and every candidate peak was below every control peak. This is the primary retained-memory-window result for the removed temporary tangent arrays.
+- Load-ready time improved by **73.2 ms (2.59%)** on average. Two candidate launches were faster than every control launch, while the first candidate launch was a high outlier; the raw values are retained above.
+- Peak working-set and both stable-memory changes were below 0.6% and are treated as noise. No steady-state memory or GPU-memory reduction is claimed.
+- Release x64 built successfully, and the resource smoke test again passed the **2 -> 4 -> 6 -> 8 -> 2** FBO lifecycle with **0.00 MiB Mesh CPU** and **43.57 MiB Mesh GPU** throughout.
+
 ## Resource lifecycle smoke test
 
 Run the built-in OpenGL lifecycle test from the project directory:
