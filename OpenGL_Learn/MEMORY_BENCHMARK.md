@@ -8,7 +8,7 @@
 - GPU: NVIDIA GeForce RTX 5060 Ti, driver 32.0.15.9186
 - CPU: Intel Core i7-12700KF
 - OS: Windows 11 Pro
-- Method: three cold process launches per variant; wait until the async model queue is empty, wait two additional seconds, then sample process and Windows GPU-process counters.
+- Method: three cold process launches per variant; wait until the async model queue is empty, wait two additional seconds, then sample process and Windows GPU-process counters. The CPU-staging phase also used one unmeasured warm-up per binary to exclude first-path executable scanning.
 
 ## Results
 
@@ -18,6 +18,9 @@
 | Single-copy color-space-aware textures | 1792.1 | 891.33 | 49.10 | 305.30 | 1257.09 | 165 |
 | Textures + on-demand render targets | 1739.2 | 786.75 | 47.77 | 303.86 | 1130.67 | 165 |
 | Textures + on-demand targets + shared geometry | 1668.9 | 742.83 | 44.43 | 215.01 | 981.55 | 165.3 |
+| Previous phases + released CPU mesh staging | 1977.7 | 742.83 | 45.77 | 158.41 | 941.93 | 165.0 |
+
+Absolute rows are representative averages from each phase's benchmark session. The contemporaneous control tables below are authoritative for per-phase deltas.
 
 ## Texture optimization delta
 
@@ -60,13 +63,34 @@ This phase used an interleaved A/B/A test order against `75abe29`. Previously, c
 
 The profiler reports one live copy of the default scene geometry: **43.57 MiB Mesh CPU + 43.57 MiB Mesh GPU**. Cache hits no longer increase either category.
 
-Relative to the original `b3becc4` baseline, all retained memory phases total:
+Relative to the original `b3becc4` baseline, the retained phases through shared geometry total:
 
 - Dedicated GPU memory: **-706.69 MiB (-48.75%)**
 - Private bytes: **-841.18 MiB (-46.15%)**
 - Working set: **-89.09 MiB (-29.30%)**
 - Load-ready time: **-1174.2 ms (-41.30%)**
 - FPS: **165 -> 165.3 (no material change)**
+
+## Released CPU mesh-staging delta
+
+This phase used a balanced interleaved `A/B/B/A/A/B` order against `2889d7f`, after one unmeasured warm-up launch for each binary. Every measured run was a fresh process using the same scene and assets.
+
+| Variant | Load ready (ms) | Dedicated GPU (MiB) | Shared GPU (MiB) | Working set (MiB) | Private bytes (MiB) | FPS |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Matched control (`2889d7f`) | 1971.8 | 742.82 | 44.43 | 200.19 | 981.18 | 165.1 |
+| Release CPU staging after upload | 1977.7 | 742.83 | 45.77 | 158.41 | 941.93 | 165.0 |
+
+- Live profiler Mesh CPU memory: **-43.57 MiB (-100.00%)**
+- Process private bytes: **-39.25 MiB (-4.00%)**
+- Working set: **-41.78 MiB (-20.87%)**
+- Load-ready time: **+5.8 ms (+0.30%, treated as noise)**
+- Dedicated GPU memory: **unchanged at two-decimal resolution**
+- FPS: **-0.1 (-0.06%, treated as noise)**
+- Shared-GPU change was 1.33 MiB and treated as measurement noise.
+
+Mesh upload data now exists only while a VBO is being created. Each shared geometry retains its vertex count, AABB, and a compact conservative bounding sphere, then frees the `std::vector<Vertex>` capacity immediately after `glBufferData`. Cached model instances can therefore calculate safe frustum-culling bounds without retaining or reconstructing CPU vertex arrays.
+
+Adding the matched per-phase deltas to the original baseline gives a normalized cumulative result of **-706.69 MiB dedicated GPU (-48.75%)**, **-880.43 MiB private bytes (-48.30%)**, and **-130.87 MiB working set (-43.03%)**. Normalized load-ready time remains **-1168.4 ms (-41.10%)**, with no material FPS change.
 
 ## Resource lifecycle smoke test
 
@@ -80,11 +104,11 @@ The test enables each large target group, checks the number of live FBOs, disabl
 
 | Stage | Busy FBOs | Render targets (MiB) | Mesh CPU (MiB) | Mesh GPU (MiB) |
 | --- | ---: | ---: | ---: | ---: |
-| Forward default | 2 | 24.72 | 43.57 | 43.57 |
-| Forward + bloom | 4 | 64.27 | 43.57 | 43.57 |
-| Deferred + SSAO + bloom | 6 | 107.53 | 43.57 | 43.57 |
-| All effects + point/directional shadows | 8 | 135.53 | 43.57 | 43.57 |
-| Reclaimed forward default | 2 | 24.72 | 43.57 | 43.57 |
+| Forward default | 2 | 24.72 | 0.00 | 43.57 |
+| Forward + bloom | 4 | 64.27 | 0.00 | 43.57 |
+| Deferred + SSAO + bloom | 6 | 107.53 | 0.00 | 43.57 |
+| All effects + point/directional shadows | 8 | 135.53 | 0.00 | 43.57 |
+| Reclaimed forward default | 2 | 24.72 | 0.00 | 43.57 |
 
 ## Rejected indexed-mesh experiment
 

@@ -40,15 +40,21 @@ public:
 	MeshGeometry(const MeshGeometry&) = delete;
 	MeshGeometry& operator=(const MeshGeometry&) = delete;
 
-	const std::vector<Vertex>& GetVertices() const { return m_vertices; }
-	std::size_t GetVertexCount() const { return m_vertices.size(); }
+	std::size_t GetVertexCount() const { return m_vertexCount; }
+	const glm::vec3& GetBoundsMin() const { return m_boundsMin; }
+	const glm::vec3& GetBoundsMax() const { return m_boundsMax; }
+	const glm::vec3& GetBoundsCenter() const { return m_boundsCenter; }
+	float GetBoundingRadius() const { return m_boundingRadius; }
 	unsigned int GetVAO() const { return m_vao; }
 
 private:
-	std::vector<Vertex> m_vertices;
+	std::size_t m_vertexCount = 0;
+	glm::vec3 m_boundsMin = glm::vec3(0.0f);
+	glm::vec3 m_boundsMax = glm::vec3(0.0f);
+	glm::vec3 m_boundsCenter = glm::vec3(0.0f);
+	float m_boundingRadius = 0.0f;
 	unsigned int m_vao = 0;
 	unsigned int m_vbo = 0;
-	std::uint64_t m_trackedCpuBytes = 0;
 	std::uint64_t m_trackedGpuBytes = 0;
 };
 
@@ -80,7 +86,10 @@ public:
 
 	unsigned int GetVAO() const;
 	std::size_t GetVertexCount() const;
-	const std::vector<Vertex>& GetVertices() const;
+	const glm::vec3& GetBoundsMin() const;
+	const glm::vec3& GetBoundsMax() const;
+	const glm::vec3& GetBoundsCenter() const;
+	float GetBoundingRadius() const;
 
 	bool GetActiveStatus() const {
 		return m_active;

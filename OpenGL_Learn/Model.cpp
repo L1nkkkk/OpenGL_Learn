@@ -2,6 +2,8 @@
 #include "GLStateCache.h"
 #include "Profiler.h"
 #include "XmlMaterialManager.h"
+#include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <unordered_map>
 
@@ -23,8 +25,32 @@ void Model::DestroyMeshCache()
 }
 
 MeshGeometry::MeshGeometry(std::vector<Vertex> vertices)
-	: m_vertices(std::move(vertices))
 {
+	m_vertexCount = vertices.size();
+	if (!vertices.empty()) {
+		m_boundsMin = vertices.front().Position;
+		m_boundsMax = vertices.front().Position;
+		m_boundsCenter = vertices.front().Position;
+		for (const auto& vertex : vertices) {
+			m_boundsMin.x = (std::min)(m_boundsMin.x, vertex.Position.x);
+			m_boundsMin.y = (std::min)(m_boundsMin.y, vertex.Position.y);
+			m_boundsMin.z = (std::min)(m_boundsMin.z, vertex.Position.z);
+			m_boundsMax.x = (std::max)(m_boundsMax.x, vertex.Position.x);
+			m_boundsMax.y = (std::max)(m_boundsMax.y, vertex.Position.y);
+			m_boundsMax.z = (std::max)(m_boundsMax.z, vertex.Position.z);
+
+			const glm::vec3 delta = vertex.Position - m_boundsCenter;
+			const float distanceSquared = glm::dot(delta, delta);
+			const float radiusSquared = m_boundingRadius * m_boundingRadius;
+			if (distanceSquared > radiusSquared) {
+				const float distance = std::sqrt(distanceSquared);
+				const float expandedRadius = (m_boundingRadius + distance) * 0.5f;
+				m_boundsCenter += delta * ((expandedRadius - m_boundingRadius) / distance);
+				m_boundingRadius = expandedRadius;
+			}
+		}
+	}
+
 	glGenVertexArrays(1, &m_vao);
 	glGenBuffers(1, &m_vbo);
 
@@ -32,8 +58,8 @@ MeshGeometry::MeshGeometry(std::vector<Vertex> vertices)
 	glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
 	glBufferData(
 		GL_ARRAY_BUFFER,
-		m_vertices.size() * sizeof(Vertex),
-		m_vertices.empty() ? nullptr : m_vertices.data(),
+		vertices.size() * sizeof(Vertex),
+		vertices.empty() ? nullptr : vertices.data(),
 		GL_STATIC_DRAW
 	);
 
@@ -49,23 +75,27 @@ MeshGeometry::MeshGeometry(std::vector<Vertex> vertices)
 	glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Bitangent));
 	GLState::BindVertexArray(0);
 
-	m_trackedCpuBytes = static_cast<std::uint64_t>(m_vertices.capacity() * sizeof(Vertex));
-	m_trackedGpuBytes = static_cast<std::uint64_t>(m_vertices.size() * sizeof(Vertex));
+	const std::uint64_t stagingBytes = static_cast<std::uint64_t>(vertices.capacity() * sizeof(Vertex));
+	m_trackedGpuBytes = static_cast<std::uint64_t>(m_vertexCount * sizeof(Vertex));
 	auto& profiler = PerformanceProfiler::GetInstance();
-	if (m_trackedCpuBytes != 0) {
-		profiler.RecordMemoryAllocation(MemoryResourceType::MeshCpu, m_trackedCpuBytes);
+	if (stagingBytes != 0) {
+		profiler.RecordMemoryAllocation(MemoryResourceType::MeshCpu, stagingBytes);
 	}
 	if (m_trackedGpuBytes != 0) {
 		profiler.RecordMemoryAllocation(MemoryResourceType::MeshGpu, m_trackedGpuBytes);
+	}
+
+	// The VBO and compact bounds are the long-lived representation. Release the
+	// upload vector immediately so cached geometry does not pin a CPU-side copy.
+	std::vector<Vertex>().swap(vertices);
+	if (stagingBytes != 0) {
+		profiler.RecordMemoryRelease(MemoryResourceType::MeshCpu, stagingBytes);
 	}
 }
 
 MeshGeometry::~MeshGeometry()
 {
 	auto& profiler = PerformanceProfiler::GetInstance();
-	if (m_trackedCpuBytes != 0) {
-		profiler.RecordMemoryRelease(MemoryResourceType::MeshCpu, m_trackedCpuBytes);
-	}
 	if (m_trackedGpuBytes != 0) {
 		profiler.RecordMemoryRelease(MemoryResourceType::MeshGpu, m_trackedGpuBytes);
 	}
@@ -119,10 +149,27 @@ std::size_t Mesh::GetVertexCount() const
 	return m_geometry ? m_geometry->GetVertexCount() : 0;
 }
 
-const std::vector<Vertex>& Mesh::GetVertices() const
+const glm::vec3& Mesh::GetBoundsMin() const
 {
-	static const std::vector<Vertex> empty;
-	return m_geometry ? m_geometry->GetVertices() : empty;
+	static const glm::vec3 empty(0.0f);
+	return m_geometry ? m_geometry->GetBoundsMin() : empty;
+}
+
+const glm::vec3& Mesh::GetBoundsMax() const
+{
+	static const glm::vec3 empty(0.0f);
+	return m_geometry ? m_geometry->GetBoundsMax() : empty;
+}
+
+const glm::vec3& Mesh::GetBoundsCenter() const
+{
+	static const glm::vec3 empty(0.0f);
+	return m_geometry ? m_geometry->GetBoundsCenter() : empty;
+}
+
+float Mesh::GetBoundingRadius() const
+{
+	return m_geometry ? m_geometry->GetBoundingRadius() : 0.0f;
 }
 
 void Mesh::Draw(Shader* shader)
@@ -420,28 +467,26 @@ std::vector<Texture> Model::loadMaterialTextures(aiMaterial* mat, aiTextureType 
 glm::vec3 Model::CalculateLocalCenter()
 {
 	bool first = true;
-	float minX = 0.0f, maxX = 0.0f;
-	float minY = 0.0f, maxY = 0.0f;
-	float minZ = 0.0f, maxZ = 0.0f;
-	for (auto& mesh : meshes) {
-		for (const auto& vertice : mesh.GetVertices()) {
-			const glm::vec3& pos = vertice.Position;
-			if (first) {
-				first = false;
-				minX = pos.x; maxX = pos.x;
-				minY = pos.y; maxY = pos.y;
-				minZ = pos.z; maxZ = pos.z;
-			}
-			else {
-				minX = std::min(minX, pos.x);
-				maxX = std::max(maxX, pos.x);
-
-				minY = std::min(minY, pos.y);
-				maxY = std::max(maxY, pos.y);
-
-				minZ = std::min(minZ, pos.z);
-				maxZ = std::max(maxZ, pos.z);
-			}
+	glm::vec3 boundsMin(0.0f);
+	glm::vec3 boundsMax(0.0f);
+	for (const auto& mesh : meshes) {
+		if (mesh.GetVertexCount() == 0) {
+			continue;
+		}
+		if (first) {
+			first = false;
+			boundsMin = mesh.GetBoundsMin();
+			boundsMax = mesh.GetBoundsMax();
+		}
+		else {
+			const glm::vec3& meshMin = mesh.GetBoundsMin();
+			const glm::vec3& meshMax = mesh.GetBoundsMax();
+			boundsMin.x = (std::min)(boundsMin.x, meshMin.x);
+			boundsMin.y = (std::min)(boundsMin.y, meshMin.y);
+			boundsMin.z = (std::min)(boundsMin.z, meshMin.z);
+			boundsMax.x = (std::max)(boundsMax.x, meshMax.x);
+			boundsMax.y = (std::max)(boundsMax.y, meshMax.y);
+			boundsMax.z = (std::max)(boundsMax.z, meshMax.z);
 		}
 	}
 
@@ -450,18 +495,18 @@ glm::vec3 Model::CalculateLocalCenter()
 		return glm::vec3(0.0f);
 	}
 
-	const glm::vec3 center(
-		(minX + maxX) * 0.5f,
-		(minY + maxY) * 0.5f,
-		(minZ + maxZ) * 0.5f);
-	float radiusSquared = 0.0f;
+	const glm::vec3 center = (boundsMin + boundsMax) * 0.5f;
+	float radius = 0.0f;
 	for (const auto& mesh : meshes) {
-		for (const auto& vertex : mesh.GetVertices()) {
-			const glm::vec3 delta = vertex.Position - center;
-			radiusSquared = (std::max)(radiusSquared, glm::dot(delta, delta));
+		if (mesh.GetVertexCount() != 0) {
+			// Combining the per-mesh spheres remains conservative, so releasing
+			// source vertices cannot introduce false-positive frustum culls.
+			const float meshRadius = glm::length(mesh.GetBoundsCenter() - center) +
+				mesh.GetBoundingRadius();
+			radius = (std::max)(radius, meshRadius);
 		}
 	}
-	localBoundingRadius = std::sqrt(radiusSquared);
+	localBoundingRadius = radius;
 	return center;
 }
 
