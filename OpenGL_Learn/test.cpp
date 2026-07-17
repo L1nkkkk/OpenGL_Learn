@@ -483,6 +483,8 @@ int main() {
 	postprocessRenderPass->Destroy();
 	delete postprocessRenderPass;
 	SceneStateIO::Save(scene, camera, sceneStatePath);
+	skybox.Release();
+	DestroyTextureCache();
 	PerformanceProfiler::GetInstance().Shutdown();
 
 	glfwTerminate();

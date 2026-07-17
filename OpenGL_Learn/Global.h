@@ -726,6 +726,7 @@ public:
 };
 
 unsigned int TextureFromFile(const char* path, const std::string& directory, bool alpha = false, bool gamma = false);
+void DestroyTextureCache();
 
 class BaseObject {
 public:

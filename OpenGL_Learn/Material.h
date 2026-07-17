@@ -26,8 +26,8 @@ struct Texture {
 
 class CubeTexture {
 public:
-	unsigned int textureID;
-	unsigned int textureGammaID;
+	unsigned int textureID = 0;
+	unsigned int textureGammaID = 0;
 	CubeTexture(std::string path) {
 		int width, height, nrChannels;
 		unsigned char* data;
@@ -45,26 +45,9 @@ public:
 		for (int i = 0; i < 6; ++i) {
 			data = stbi_load((path + '/' + items[i]).c_str(), &width, &height, &nrChannels, 0);
 			if (data) {
-				glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-				stbi_image_free(data);
-			}
-			else {
-				std::cout << "Cubemap texture failed to load at path: " << items[i] << std::endl;
-				stbi_image_free(data);
-			}
-		}
-		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-
-		glGenTextures(1, &textureGammaID);
-		GLState::BindTexture(GL_TEXTURE_CUBE_MAP, textureGammaID);
-		for (int i = 0; i < 6; ++i) {
-			data = stbi_load((path + '/' + items[i]).c_str(), &width, &height, &nrChannels, 0);
-			if (data) {
 				glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_SRGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+				m_estimatedBytes += static_cast<std::uint64_t>(width) *
+					static_cast<std::uint64_t>(height) * 3u;
 				stbi_image_free(data);
 			}
 			else {
@@ -77,11 +60,36 @@ public:
 		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+		textureGammaID = textureID;
+		PerformanceProfiler::GetInstance().RecordMemoryAllocation(
+			MemoryResourceType::Texture,
+			m_estimatedBytes);
 		GLState::BindTexture(GL_TEXTURE_CUBE_MAP, 0);
 		stbi_set_flip_vertically_on_load(true);
 	}
+	~CubeTexture() {
+		Release();
+	}
+
+	CubeTexture(const CubeTexture&) = delete;
+	CubeTexture& operator=(const CubeTexture&) = delete;
+
+	void Release() {
+		if (textureID == 0) {
+			return;
+		}
+		GLState::ForgetTexture(textureID);
+		glDeleteTextures(1, &textureID);
+		textureID = 0;
+		textureGammaID = 0;
+		PerformanceProfiler::GetInstance().RecordMemoryRelease(
+			MemoryResourceType::Texture,
+			m_estimatedBytes);
+		m_estimatedBytes = 0;
+	}
 private:
 	CubeTexture() = default;
+	std::uint64_t m_estimatedBytes = 0;
 };
 
 enum class MaterialPropertyType {

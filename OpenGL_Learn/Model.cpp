@@ -455,8 +455,9 @@ std::vector<Texture> Model::loadMaterialTextures(aiMaterial* mat, aiTextureType 
 		if (!skip)
 		{   // ???????????��?????????????
 			Texture texture;
-			texture.textureID = TextureFromFile(str.C_Str(), directory,false,false);
-			texture.textureGammaID = TextureFromFile(str.C_Str(), directory, false, true);
+			const bool srgb = typeName == "texture_diffuse";
+			texture.textureID = TextureFromFile(str.C_Str(), directory, false, srgb);
+			texture.textureGammaID = texture.textureID;
 			texture.type = typeName;
 			texture.path = str.C_Str();
 			textures.push_back(texture);

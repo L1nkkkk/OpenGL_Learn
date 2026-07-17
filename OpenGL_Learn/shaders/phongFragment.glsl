@@ -98,6 +98,20 @@ layout(std140) uniform Matrices{
     mat4 projection;
 };
 
+vec3 LinearToSrgb(vec3 value)
+{
+	vec3 low = value * 12.92;
+	vec3 high = 1.055 * pow(max(value, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055;
+	return mix(low, high, step(vec3(0.0031308), value));
+}
+
+vec4 SampleColorTexture(sampler2D source, vec2 uv)
+{
+	vec4 sampleValue = texture(source, uv);
+	if (!useGamma) sampleValue.rgb = LinearToSrgb(sampleValue.rgb);
+	return sampleValue;
+}
+
 #define EPS 1e-5
 #define PI 3.141592653589793
 #define PI2 6.283185307179586
@@ -299,7 +313,7 @@ float ShadowCalculation(vec3 fragPos,PointLight light){
 
 vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir,float shadow)
 {
-	vec3 color = texture(material.texture_diffuse1, fs_in.TexCoords).rgb;
+	vec3 color = SampleColorTexture(material.texture_diffuse1, fs_in.TexCoords).rgb;
 	//After this below, BUG
 	
 	vec3 lightDir = normalize(-light.direction);
@@ -317,7 +331,7 @@ vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir,float shadow)
 
 vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir,float shadow)
 {
-	vec3 color = texture(material.texture_diffuse1, fs_in.TexCoords).rgb;
+	vec3 color = SampleColorTexture(material.texture_diffuse1, fs_in.TexCoords).rgb;
 	vec3 lightDir = normalize(light.position - fragPos);
 	// diffuse shading
 	float diff = max(dot(normal, lightDir), 0.0);
@@ -339,7 +353,7 @@ vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir,fl
 
 vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir,float shadow)
 {
-	vec3 color = texture(material.texture_diffuse1, fs_in.TexCoords).rgb;
+	vec3 color = SampleColorTexture(material.texture_diffuse1, fs_in.TexCoords).rgb;
 	vec3 lightDir = normalize(light.position - fragPos);
 	// diffuse shading
 	float diff = max(dot(normal, lightDir), 0.0);
@@ -378,7 +392,7 @@ void main()
 	
 	vec3 results = vec3(0);
 	float alpha = 1.0;
-	if(material.use_texture_diffuse) alpha = texture(material.texture_diffuse1,fs_in.TexCoords).a;
+	if(material.use_texture_diffuse) alpha = SampleColorTexture(material.texture_diffuse1,fs_in.TexCoords).a;
 	if (material.useAlphaCutoff && alpha < material.alphaCutoff) {
 		discard;
 	}
