@@ -366,7 +366,7 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 		<< " | MatID: " << mesh->mMaterialIndex << std::endl;
 	std::string xmlPath;
 	if(mat) {
-		return Mesh(vertices, indices, mat, std::shared_ptr<Material>(), std::string());
+		return Mesh(std::move(vertices), std::move(indices), mat, std::shared_ptr<Material>(), std::string());
 	}
 	else if (mesh->mMaterialIndex >= 0) {
 		aiMaterial* aiMat = scene->mMaterials[mesh->mMaterialIndex];
@@ -386,7 +386,7 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 			std::shared_ptr<Material> ownedMaterial = std::make_shared<Material>(materialShaderName);
 			material = ownedMaterial.get();
 			prosessMaterial(aiMat, material);
-			return Mesh(vertices, indices, material, ownedMaterial, std::string());
+			return Mesh(std::move(vertices), std::move(indices), material, ownedMaterial, std::string());
 		}
 	}
 	else {
@@ -398,10 +398,10 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 		if (!material) {
 			std::shared_ptr<Material> ownedMaterial = std::make_shared<Material>(materialShaderName);
 			material = ownedMaterial.get();
-			return Mesh(vertices,indices, material, ownedMaterial, std::string());
+			return Mesh(std::move(vertices), std::move(indices), material, ownedMaterial, std::string());
         }
 	}
-	return Mesh(vertices,indices, material, nullptr, xmlPath);
+	return Mesh(std::move(vertices), std::move(indices), material, nullptr, xmlPath);
 }
 
 void Model::prosessMaterial(aiMaterial* mat,Material* material)

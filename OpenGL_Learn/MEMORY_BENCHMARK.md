@@ -147,6 +147,32 @@ This phase used parent commit `f29a557` as the matched control; its executable i
 - Peak working-set and both stable-memory changes were below 0.6% and are treated as noise. No steady-state memory or GPU-memory reduction is claimed.
 - Release x64 built successfully, and the resource smoke test again passed the **2 -> 4 -> 6 -> 8 -> 2** FBO lifecycle with **0.00 MiB Mesh CPU** and **43.57 MiB Mesh GPU** throughout.
 
+## Moved mesh staging vectors into construction
+
+`Model::processMesh` fills one vertex vector and one index vector per Assimp mesh, then previously passed both as lvalues to `Mesh`'s by-value constructor. That copied the complete staging arrays immediately before `ComputeTBNVertices` expanded them. All return paths now transfer the two vectors with `std::move`; the constructor receives the same contents and remains their sole owner.
+
+This phase used parent commit `0c0da2d` as the matched control; its executable is binary-equivalent to the originally measured `d5a87a7` control because the rewrite changed documentation only. The candidate was the uncommitted working tree that became this commit. The Release x64, 1440 x 900 scene, warm-up, fresh-process `A/B/B/A/A/B` order, load-ready signal, and memory sampling window were unchanged.
+
+| Order | Variant | Load ready (ms) | Peak working set (MiB) | Peak private bytes (MiB) | Stable working set (MiB) | Stable private bytes (MiB) |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | A - `0c0da2d` control | 2626.7 | 314.32 | 1076.37 | 224.94 | 1023.81 |
+| 2 | B - moved vectors | 2730.3 | 310.83 | 1066.24 | 224.84 | 1022.47 |
+| 3 | B - moved vectors | 2595.6 | 326.85 | 1067.36 | 224.23 | 1023.20 |
+| 4 | A - `0c0da2d` control | 2637.4 | 328.21 | 1111.87 | 224.83 | 1028.46 |
+| 5 | A - `0c0da2d` control | 2750.6 | 311.19 | 1112.41 | 224.80 | 1026.16 |
+| 6 | B - moved vectors | 2567.0 | 325.07 | 1067.80 | 224.81 | 1027.42 |
+
+| Average | Load ready (ms) | Peak working set (MiB) | Peak private bytes (MiB) | Stable working set (MiB) | Stable private bytes (MiB) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| A - `0c0da2d` control | 2671.6 | 317.91 | 1100.22 | 224.86 | 1026.14 |
+| B - moved vectors | 2631.0 | 320.92 | 1067.13 | 224.63 | 1024.36 |
+| Delta | **-40.6 (-1.52%)** | +3.01 (+0.95%) | **-33.08 (-3.01%)** | -0.23 (-0.10%) | -1.78 (-0.17%) |
+
+- Peak private bytes fell by **33.08 MiB (3.01%)** on average, and every candidate peak was below every control peak. This matches the eliminated duplicate vertex and index allocations.
+- Load-ready time improved by **40.6 ms (1.52%)** on average. Two candidate launches were faster than every control launch, while the first candidate launch was slower; all raw samples remain visible above.
+- Peak working-set and stable-memory changes were below 1% and are treated as noise. The vectors were always temporary, so no steady-state or GPU-memory reduction is claimed.
+- Release x64 built successfully, and the resource smoke test passed the **2 -> 4 -> 6 -> 8 -> 2** FBO lifecycle with **0.00 MiB Mesh CPU** and **43.57 MiB Mesh GPU** throughout.
+
 ## Resource lifecycle smoke test
 
 Run the built-in OpenGL lifecycle test from the project directory:
