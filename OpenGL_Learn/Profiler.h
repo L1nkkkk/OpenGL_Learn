@@ -78,6 +78,16 @@ struct MemoryStats {
 	std::uint64_t textureCacheMisses = 0;
 };
 
+struct ProfilerBenchmarkSamples {
+	std::vector<double> wallFrameMs;
+	std::vector<double> cpuFrameMs;
+	std::vector<double> gpuFrameMs;
+	std::unordered_map<std::string, std::vector<double>> cpuZoneMs;
+	std::unordered_map<std::string, std::vector<double>> gpuZoneMs;
+	std::vector<RenderStats> renderStats;
+	std::vector<MemoryStats> memoryStats;
+};
+
 class PerformanceProfiler {
 public:
 	struct GpuScopeToken {
@@ -131,6 +141,11 @@ public:
 	void RecordMemoryAllocation(MemoryResourceType type, std::uint64_t bytes);
 	void RecordMemoryRelease(MemoryResourceType type, std::uint64_t bytes);
 	void RecordTextureCacheLookup(bool cacheHit);
+	void BeginBenchmarkCapture(std::size_t expectedFrameCount);
+	void RecordBenchmarkWallFrame(double elapsedMs);
+	void FinishBenchmarkCapture();
+	bool IsBenchmarkCaptureActive() const { return m_benchmarkCaptureActive; }
+	const ProfilerBenchmarkSamples& GetBenchmarkSamples() const { return m_benchmarkSamples; }
 
 	const ProfilerFrameSummary& GetFrameSummary() const { return m_frameSummary; }
 	const RenderStats& GetRenderStats() const { return m_lastRenderStats; }
@@ -150,6 +165,7 @@ private:
 		unsigned int startQuery = 0;
 		unsigned int endQuery = 0;
 		bool pending = false;
+		bool benchmarkSample = false;
 	};
 
 	struct GpuZoneRuntime {
@@ -161,7 +177,7 @@ private:
 
 	std::size_t GetOrCreateCpuZone(const char* name);
 	std::size_t GetOrCreateGpuZone(const char* name);
-	void ResolveGpuQueries();
+	void ResolveGpuQueries(bool waitForResults = false);
 	void FinalizeCpuZones();
 	void UpdateZoneStats(ProfilerZoneStats& stats, double elapsedMs);
 	void AddFrameHistorySample(std::vector<float>& history, double elapsedMs);
@@ -194,6 +210,8 @@ private:
 	RenderStats m_lastRenderStats;
 	MemoryStats m_memoryStats;
 	std::chrono::steady_clock::time_point m_lastMemoryPoll{};
+	bool m_benchmarkCaptureActive = false;
+	ProfilerBenchmarkSamples m_benchmarkSamples;
 };
 
 class ProfilerFrameScope {

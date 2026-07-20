@@ -57,6 +57,7 @@ dlldata.c
 
 # Benchmark Results
 BenchmarkDotNet.Artifacts/
+OpenGL_Learn/benchmark-results/
 
 # .NET Core
 project.lock.json

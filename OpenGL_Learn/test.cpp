@@ -24,6 +24,7 @@
 #include "DeferRenderPass.h"
 #include "PostprocessRenderPass.h"
 #include "Profiler.h"
+#include "PerformanceBenchmark.h"
 #include "GLStateCache.h"
 #include "SceneStateIO.h"
 #include <algorithm>
@@ -122,11 +123,22 @@ void SetUniformBuffer() {
 }
 
 int main(int argc, char** argv) {
+	const auto applicationStart = PerformanceBenchmarkSession::Clock::now();
 	bool resourceSmokeTest = false;
+	PerformanceBenchmarkOptions benchmarkOptions;
+	std::string benchmarkOptionError;
+	if (!ParsePerformanceBenchmarkOptions(argc, argv, benchmarkOptions, benchmarkOptionError)) {
+		std::cerr << "Performance benchmark option error: " << benchmarkOptionError << std::endl;
+		return 4;
+	}
 	for (int i = 1; i < argc; ++i) {
 		if (std::string(argv[i]) == "--resource-smoke-test") {
 			resourceSmokeTest = true;
 		}
+	}
+	if (resourceSmokeTest && benchmarkOptions.enabled) {
+		std::cerr << "--resource-smoke-test and --performance-benchmark cannot run together" << std::endl;
+		return 4;
 	}
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -142,11 +154,20 @@ int main(int argc, char** argv) {
 		return -1;
 	}
 	glfwMakeContextCurrent(window);
-	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	if (benchmarkOptions.enabled) {
+		// Make the benchmark request explicit. GPU timestamp zones remain the
+		// authoritative metric if a driver-level frame limiter is still active.
+		glfwSwapInterval(0);
+	}
+	else {
+		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	}
 	//register function after initializing window and before renderering
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-	glfwSetCursorPosCallback(window, mouse_callback);
-	glfwSetScrollCallback(window, scroll_callback);
+	if (!benchmarkOptions.enabled) {
+		glfwSetCursorPosCallback(window, mouse_callback);
+		glfwSetScrollCallback(window, scroll_callback);
+	}
 	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
 		std::cout << "Fail to initialize GLAD" << std::endl;
 		return -1;
@@ -160,6 +181,13 @@ int main(int argc, char** argv) {
 
 	MyGui& mygui = MyGui::GetInstance();
 	mygui.Init(window);
+	if (benchmarkOptions.enabled || resourceSmokeTest) {
+		// Automated runs must not modify the user's editor layout or depend on
+		// ImGui's periodic ini writes while checks are being collected.
+		ImGuiIO& io = ImGui::GetIO();
+		io.IniFilename = nullptr;
+		io.ConfigFlags |= ImGuiConfigFlags_NoMouse | ImGuiConfigFlags_NoKeyboard;
+	}
 
 	ShaderManager& shaderManager = ShaderManager::GetInstance();
 	shaderManager.Init();
@@ -312,8 +340,66 @@ int main(int argc, char** argv) {
 		}
 	};
 	double nextHotReloadPollTime = 0.0;
+	PerformanceBenchmarkSession benchmarkSession(benchmarkOptions, applicationStart);
+	if (benchmarkOptions.enabled) {
+		GLint windowSampleBuffers = 0;
+		GLint windowSamples = 0;
+		glGetIntegerv(GL_SAMPLE_BUFFERS, &windowSampleBuffers);
+		glGetIntegerv(GL_SAMPLES, &windowSamples);
+		auto glString = [](GLenum name) -> std::string {
+			const GLubyte* value = glGetString(name);
+			return value ? reinterpret_cast<const char*>(value) : std::string();
+		};
+
+		int shadowCastingLights = 0;
+		for (auto& light : scene.lightSource.pointLights) {
+			if (light.GetActiveStatus() && light.useShadowMap) ++shadowCastingLights;
+		}
+		for (auto& light : scene.lightSource.directionLights) {
+			if (light.GetActiveStatus() && light.useShadowMap) ++shadowCastingLights;
+		}
+
+		PerformanceBenchmarkMetadata metadata;
+		metadata.scenePath = sceneStatePath;
+		metadata.glVendor = glString(GL_VENDOR);
+		metadata.glRenderer = glString(GL_RENDERER);
+		metadata.glVersion = glString(GL_VERSION);
+#ifdef NDEBUG
+		metadata.buildConfiguration = "Release";
+#else
+		metadata.buildConfiguration = "Debug";
+#endif
+#ifdef _WIN64
+		metadata.architecture = "x64";
+#else
+		metadata.architecture = "Win32";
+#endif
+		metadata.width = properties.SCREEN_WIDTH;
+		metadata.height = properties.SCREEN_HEIGHT;
+		metadata.windowSampleBuffers = windowSampleBuffers;
+		metadata.windowSamples = windowSamples;
+		metadata.requestedSwapInterval = 0;
+		metadata.pointLights = static_cast<int>(scene.lightSource.pointLights.size());
+		metadata.directionLights = static_cast<int>(scene.lightSource.directionLights.size());
+		metadata.spotLights = static_cast<int>(scene.lightSource.spotLights.size());
+		metadata.shadowCastingLights = shadowCastingLights;
+		metadata.bloom = properties.BLOOM;
+		metadata.deferredRendering = properties.DEFER_RENDERING;
+		metadata.ssao = properties.SSAO;
+		metadata.forwardNormalBuffer = properties.FORWARD_NORMAL_BUFFER;
+		metadata.gammaCorrection = properties.GAMMA_CORRECTION;
+		metadata.autoReloadShaders = properties.AUTO_RELOAD_SHADERS;
+		metadata.autoReloadMaterials = properties.AUTO_RELOAD_MATERIALS;
+		metadata.inputFrozen = true;
+		metadata.gpuTimingSupported = PerformanceProfiler::GetInstance().IsGpuTimingSupported();
+		benchmarkSession.SetMetadata(metadata);
+	}
 
 	while (!glfwWindowShouldClose(window)) {
+		if (benchmarkOptions.enabled &&
+			!benchmarkSession.OnFrameBoundary(!SceneStateIO::HasPendingAsyncLoads())) {
+			break;
+		}
 		PERF_FRAME_SCOPE();
 		// 分帧异步恢复存档里的文件模型，减少单帧加载峰值。
 		{
@@ -413,7 +499,9 @@ int main(int argc, char** argv) {
 		//process input
 		{
 			PERF_CPU_SCOPE("Input and Frame Uniforms");
-			ProcessInput(window);
+			if (!benchmarkOptions.enabled) {
+				ProcessInput(window);
+			}
 		//reset used texture num
 		properties.ResetUsedTextureNum();
 		//before pass: set uniform buffer
@@ -556,6 +644,9 @@ int main(int argc, char** argv) {
 		}
 		
 	}
+	if (benchmarkOptions.enabled && !benchmarkSession.IsComplete()) {
+		benchmarkSession.Abort();
+	}
 
 	forwardRenderPass->Destroy();
 	delete forwardRenderPass;
@@ -563,7 +654,7 @@ int main(int argc, char** argv) {
 	delete deferRenderPass;
 	postprocessRenderPass->Destroy();
 	delete postprocessRenderPass;
-	if (!resourceSmokeTest) {
+	if (!resourceSmokeTest && !benchmarkOptions.enabled) {
 		SceneStateIO::Save(scene, camera, sceneStatePath);
 	}
 	scene.SetSelectedModelForMaterials(nullptr);
@@ -578,5 +669,11 @@ int main(int argc, char** argv) {
 	PerformanceProfiler::GetInstance().Shutdown();
 
 	glfwTerminate();
-	return resourceSmokeFailed ? 2 : 0;
+	if (resourceSmokeFailed) {
+		return 2;
+	}
+	if (benchmarkOptions.enabled && !benchmarkSession.WasSuccessful()) {
+		return 3;
+	}
+	return 0;
 }

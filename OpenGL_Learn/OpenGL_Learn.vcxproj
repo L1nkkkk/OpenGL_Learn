@@ -164,6 +164,7 @@
     <ClCompile Include="Learn.cpp" />
     <ClCompile Include="Model.cpp" />
     <ClCompile Include="Object.cpp" />
+    <ClCompile Include="PerformanceBenchmark.cpp" />
     <ClCompile Include="PostprocessRenderPass.cpp" />
     <ClCompile Include="Profiler.cpp" />
     <ClCompile Include="SceneStateIO.cpp" />
@@ -188,6 +189,7 @@
     <ClInclude Include="Model.h" />
     <ClInclude Include="ModelsLoader.h" />
     <ClInclude Include="mygui.h" />
+    <ClInclude Include="PerformanceBenchmark.h" />
     <ClInclude Include="PostprocessRenderPass.h" />
     <ClInclude Include="Profiler.h" />
     <ClInclude Include="RenderPass.h" />

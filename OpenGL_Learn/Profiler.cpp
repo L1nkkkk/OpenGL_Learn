@@ -78,6 +78,7 @@ void PerformanceProfiler::Shutdown()
 				slot.endQuery = 0;
 			}
 			slot.pending = false;
+			slot.benchmarkSample = false;
 		}
 	}
 
@@ -87,6 +88,8 @@ void PerformanceProfiler::Shutdown()
 	m_gpuTimingSupported = false;
 	m_gpuTimingEnabled = false;
 	m_frameActive = false;
+	m_benchmarkCaptureActive = false;
+	m_benchmarkSamples = {};
 	m_initialized = false;
 }
 
@@ -151,6 +154,11 @@ void PerformanceProfiler::EndFrame()
 
 	m_lastRenderStats = m_currentRenderStats;
 	AddFrameHistorySample(m_cpuFrameHistory, frameMs);
+	if (m_benchmarkCaptureActive) {
+		m_benchmarkSamples.cpuFrameMs.push_back(frameMs);
+		m_benchmarkSamples.renderStats.push_back(m_currentRenderStats);
+		m_benchmarkSamples.memoryStats.push_back(m_memoryStats);
+	}
 	UpdateFrameSummary();
 	m_frameActive = false;
 }
@@ -226,6 +234,7 @@ PerformanceProfiler::GpuScopeToken PerformanceProfiler::BeginGpuScope(const char
 		}
 
 		glQueryCounter(slot.startQuery, GL_TIMESTAMP);
+		slot.benchmarkSample = m_benchmarkCaptureActive;
 		runtime.nextSlot = (slotIndex + 1) % kGpuQueryLatency;
 		token.zoneIndex = zoneIndex;
 		token.slotIndex = slotIndex;
@@ -249,26 +258,34 @@ void PerformanceProfiler::EndGpuScope(const GpuScopeToken& token)
 	slot.pending = true;
 }
 
-void PerformanceProfiler::ResolveGpuQueries()
+void PerformanceProfiler::ResolveGpuQueries(bool waitForResults)
 {
 	for (std::size_t zoneIndex = 0; zoneIndex < m_gpuZoneRuntime.size(); ++zoneIndex) {
 		auto& runtime = m_gpuZoneRuntime[zoneIndex];
-		for (auto& slot : runtime.slots) {
+		// nextSlot points just past the newest issued query. Walking from it in a
+		// ring preserves submission order when several tail queries resolve at once.
+		for (std::size_t offset = 0; offset < kGpuQueryLatency; ++offset) {
+			const std::size_t slotIndex = (runtime.nextSlot + offset) % kGpuQueryLatency;
+			auto& slot = runtime.slots[slotIndex];
 			if (!slot.pending) {
 				continue;
 			}
 
-			int available = GL_FALSE;
-			glGetQueryObjectiv(slot.endQuery, GL_QUERY_RESULT_AVAILABLE, &available);
-			if (available != GL_TRUE) {
-				continue;
+			if (!waitForResults) {
+				int available = GL_FALSE;
+				glGetQueryObjectiv(slot.endQuery, GL_QUERY_RESULT_AVAILABLE, &available);
+				if (available != GL_TRUE) {
+					continue;
+				}
 			}
 
 			GLuint64 startTimestamp = 0;
 			GLuint64 endTimestamp = 0;
 			glGetQueryObjectui64v(slot.startQuery, GL_QUERY_RESULT, &startTimestamp);
 			glGetQueryObjectui64v(slot.endQuery, GL_QUERY_RESULT, &endTimestamp);
+			const bool benchmarkSample = slot.benchmarkSample;
 			slot.pending = false;
+			slot.benchmarkSample = false;
 
 			if (endTimestamp < startTimestamp) {
 				continue;
@@ -276,6 +293,15 @@ void PerformanceProfiler::ResolveGpuQueries()
 
 			const double elapsedMs = static_cast<double>(endTimestamp - startTimestamp) / 1000000.0;
 			UpdateZoneStats(m_gpuZoneStats[zoneIndex], elapsedMs);
+			if (benchmarkSample) {
+				const std::string& zoneName = m_gpuZoneStats[zoneIndex].name;
+				if (zoneName == "GPU Frame") {
+					m_benchmarkSamples.gpuFrameMs.push_back(elapsedMs);
+				}
+				else {
+					m_benchmarkSamples.gpuZoneMs[zoneName].push_back(elapsedMs);
+				}
+			}
 			if (m_gpuZoneStats[zoneIndex].name == "GPU Frame") {
 				m_frameSummary.gpuFrameMs = elapsedMs;
 				AddFrameHistorySample(m_gpuFrameHistory, elapsedMs);
@@ -294,6 +320,65 @@ void PerformanceProfiler::FinalizeCpuZones()
 			continue;
 		}
 		UpdateZoneStats(m_cpuZoneStats[i], m_cpuZoneAccumulators[i]);
+		if (m_benchmarkCaptureActive && m_cpuZoneStats[i].name != "CPU Frame") {
+			m_benchmarkSamples.cpuZoneMs[m_cpuZoneStats[i].name].push_back(
+				m_cpuZoneAccumulators[i]);
+		}
+	}
+}
+
+void PerformanceProfiler::BeginBenchmarkCapture(std::size_t expectedFrameCount)
+{
+	if (!m_initialized) {
+		Initialize();
+	}
+
+	// Drain warm-up timestamps before tagging measured scopes. This synchronization
+	// happens outside the measured interval and prevents warm-up samples from
+	// consuming the small asynchronous query ring during the first capture frames.
+	if (m_gpuTimingSupported) {
+		glFinish();
+		ResolveGpuQueries(true);
+	}
+
+	m_benchmarkSamples = {};
+	m_benchmarkSamples.wallFrameMs.reserve(expectedFrameCount);
+	m_benchmarkSamples.cpuFrameMs.reserve(expectedFrameCount);
+	m_benchmarkSamples.gpuFrameMs.reserve(expectedFrameCount);
+	m_benchmarkSamples.renderStats.reserve(expectedFrameCount);
+	m_benchmarkSamples.memoryStats.reserve(expectedFrameCount);
+	for (const auto& stats : m_cpuZoneStats) {
+		if (stats.name != "CPU Frame") {
+			m_benchmarkSamples.cpuZoneMs[stats.name].reserve(expectedFrameCount);
+		}
+	}
+	for (const auto& stats : m_gpuZoneStats) {
+		if (stats.name != "GPU Frame") {
+			m_benchmarkSamples.gpuZoneMs[stats.name].reserve(expectedFrameCount);
+		}
+	}
+	m_benchmarkCaptureActive = true;
+}
+
+void PerformanceProfiler::RecordBenchmarkWallFrame(double elapsedMs)
+{
+	if (m_benchmarkCaptureActive) {
+		m_benchmarkSamples.wallFrameMs.push_back(elapsedMs);
+	}
+}
+
+void PerformanceProfiler::FinishBenchmarkCapture()
+{
+	if (!m_benchmarkCaptureActive) {
+		return;
+	}
+
+	m_benchmarkCaptureActive = false;
+	if (m_gpuTimingSupported) {
+		// The measured frames have already ended. Waiting here only guarantees that
+		// every timestamp belonging to the capture reaches the exported report.
+		glFinish();
+		ResolveGpuQueries(true);
 	}
 }
 
