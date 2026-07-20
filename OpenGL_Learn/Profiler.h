@@ -76,6 +76,8 @@ struct MemoryStats {
 	std::array<MemoryCategoryStats, static_cast<std::size_t>(MemoryResourceType::Count)> categories{};
 	std::uint64_t textureCacheHits = 0;
 	std::uint64_t textureCacheMisses = 0;
+	std::uint64_t modelImportCacheHits = 0;
+	std::uint64_t modelImportCacheMisses = 0;
 };
 
 struct ProfilerBenchmarkSamples {
@@ -141,6 +143,7 @@ public:
 	void RecordMemoryAllocation(MemoryResourceType type, std::uint64_t bytes);
 	void RecordMemoryRelease(MemoryResourceType type, std::uint64_t bytes);
 	void RecordTextureCacheLookup(bool cacheHit);
+	void RecordModelImportCacheLookup(bool cacheHit);
 	void BeginBenchmarkCapture(std::size_t expectedFrameCount);
 	void RecordBenchmarkWallFrame(double elapsedMs);
 	void FinishBenchmarkCapture();

@@ -44,7 +44,7 @@ JSON 使用 schema version 1，并包含以下信息：
 - `gpuFrameMs`：包围场景、后处理和 ImGui GPU 命令的 timestamp query 时间。
 - CPU/GPU zones：每个实际执行 zone 的原始时间样本及 mean、min、max、median、P95、P99。
 - Render stats：每帧 draw、vertex/triangle、uniform、material/state/cache、文件检查和 UI 计数。
-- Memory：每帧进程 working set/private bytes 快照，以及 Texture、Mesh CPU、Mesh GPU、Render target 的 current/peak/count。
+- Memory：每帧进程 working set/private bytes 快照，Texture、Mesh CPU、Mesh GPU、Render target 的 current/peak/count，以及 texture/model import cache 的 hit/miss 计数。
 
 百分位使用 nearest-rank 方法。Zone 只在实际执行的帧中产生样本，因此必须同时检查 zone 的 `count`；例如每 0.25 秒触发一次的热重载轮询不会拥有与总帧数相同的样本量。
 
@@ -71,6 +71,15 @@ A / B / B / A / A / B
 ```
 
 正式性能报告需要保留每次运行的核心原始样本或完整汇总、A/B 平均值、绝对变化、百分比变化、样本范围和噪声判断。FPS 只作辅助信息。
+
+### Cache-sensitive experiments
+
+文件缓存、着色器缓存或其他跨进程缓存会改变加载路径时，冷缓存和热缓存必须分开测量和报告，不能混为同一组平均值：
+
+- 冷缓存：每次 B 运行使用独立且初始为空的缓存目录；记录首次生成时间、hit/miss 和落盘体积。
+- 热缓存：正式采样前用一次不计入结果的完整运行填充缓存；每次 B 必须核对预期 hit/miss。
+- A/B 仍使用新进程和平衡交错顺序。冷缓存 B 不能先做会填充同一目录的额外导入预热，但进程内的 300 帧渲染 warm-up 保持不变。
+- 报告必须同时给出首次使用代价、后续命中收益和回本次数；如果失效策略或缓存清理有边界，也必须记录。
 
 ## P0 infrastructure validation
 

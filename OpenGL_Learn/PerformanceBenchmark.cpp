@@ -255,6 +255,12 @@ namespace {
 		writer.Key("textureCacheMisses");
 		WriteDistribution(writer, ExtractMemoryField(samples,
 			[](const MemoryStats& value) { return value.textureCacheMisses; }));
+		writer.Key("modelImportCacheHits");
+		WriteDistribution(writer, ExtractMemoryField(samples,
+			[](const MemoryStats& value) { return value.modelImportCacheHits; }));
+		writer.Key("modelImportCacheMisses");
+		WriteDistribution(writer, ExtractMemoryField(samples,
+			[](const MemoryStats& value) { return value.modelImportCacheMisses; }));
 
 		writer.Key("categories");
 		writer.StartObject();
@@ -285,6 +291,8 @@ namespace {
 			writer.Key("processPrivateBytes"); writer.Uint64(sample.processPrivateBytes);
 			writer.Key("textureCacheHits"); writer.Uint64(sample.textureCacheHits);
 			writer.Key("textureCacheMisses"); writer.Uint64(sample.textureCacheMisses);
+			writer.Key("modelImportCacheHits"); writer.Uint64(sample.modelImportCacheHits);
+			writer.Key("modelImportCacheMisses"); writer.Uint64(sample.modelImportCacheMisses);
 			writer.Key("categories");
 			writer.StartObject();
 			for (std::size_t index = 0; index < static_cast<std::size_t>(MemoryResourceType::Count); ++index) {

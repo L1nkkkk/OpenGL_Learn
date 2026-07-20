@@ -587,6 +587,16 @@ void PerformanceProfiler::RecordTextureCacheLookup(bool cacheHit)
 	}
 }
 
+void PerformanceProfiler::RecordModelImportCacheLookup(bool cacheHit)
+{
+	if (cacheHit) {
+		++m_memoryStats.modelImportCacheHits;
+	}
+	else {
+		++m_memoryStats.modelImportCacheMisses;
+	}
+}
+
 void PerformanceProfiler::AddFrameHistorySample(std::vector<float>& history, double elapsedMs)
 {
 	if (history.size() >= kFrameHistorySize) {
@@ -645,6 +655,8 @@ void PerformanceProfiler::ResetStatistics()
 	m_lastRenderStats = {};
 	m_memoryStats.textureCacheHits = 0;
 	m_memoryStats.textureCacheMisses = 0;
+	m_memoryStats.modelImportCacheHits = 0;
+	m_memoryStats.modelImportCacheMisses = 0;
 	for (auto& category : m_memoryStats.categories) {
 		category.peakBytes = category.currentBytes;
 	}

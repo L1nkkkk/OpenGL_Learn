@@ -2,9 +2,14 @@
 #include "GLStateCache.h"
 #include "Profiler.h"
 #include "XmlMaterialManager.h"
+#include <assimp/Exporter.hpp>
+#include <assimp/version.h>
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
+#include <iomanip>
+#include <sstream>
 #include <unordered_map>
 
 namespace {
@@ -16,6 +21,133 @@ namespace {
 		PerformanceProfiler::GetInstance().RecordFileSystemCheck();
 		std::error_code error;
 		return std::filesystem::exists(path, error);
+	}
+
+	constexpr unsigned int kModelImportFlags =
+		aiProcess_Triangulate |
+		aiProcess_FlipUVs |
+		aiProcess_CalcTangentSpace |
+		aiProcess_JoinIdenticalVertices;
+	constexpr std::uint64_t kModelImportCacheVersion = 1;
+
+	bool IsValidScene(const aiScene* scene)
+	{
+		return scene &&
+			!(scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE) &&
+			scene->mRootNode;
+	}
+
+	std::uint64_t HashCacheFingerprint(const std::string& fingerprint)
+	{
+		std::uint64_t hash = 14695981039346656037ull;
+		for (unsigned char value : fingerprint) {
+			hash ^= value;
+			hash *= 1099511628211ull;
+		}
+		return hash;
+	}
+
+	std::filesystem::path BuildModelImportCachePath(const std::string& sourcePath)
+	{
+		namespace fs = std::filesystem;
+		std::error_code error;
+		fs::path absolutePath = fs::absolute(sourcePath, error);
+		if (error) {
+			return {};
+		}
+		absolutePath = absolutePath.lexically_normal();
+
+		PerformanceProfiler::GetInstance().RecordFileSystemCheck();
+		const std::uintmax_t sourceSize = fs::file_size(absolutePath, error);
+		if (error) {
+			return {};
+		}
+		PerformanceProfiler::GetInstance().RecordFileSystemCheck();
+		const auto sourceWriteTime = fs::last_write_time(absolutePath, error);
+		if (error) {
+			return {};
+		}
+
+		std::ostringstream fingerprint;
+		fingerprint << absolutePath.generic_string()
+			<< "|size=" << sourceSize
+			<< "|write=" << sourceWriteTime.time_since_epoch().count()
+			<< "|cache=" << kModelImportCacheVersion
+			<< "|flags=" << kModelImportFlags
+			<< "|vertex=" << sizeof(Vertex)
+			<< "|assimp=" << aiGetVersionMajor() << '.' << aiGetVersionMinor() << '.' << aiGetVersionPatch();
+
+		if (absolutePath.extension() == ".obj") {
+			std::ifstream source(absolutePath);
+			std::string line;
+			for (int lineCount = 0; lineCount < 256 && std::getline(source, line); ++lineCount) {
+				if (line.rfind("mtllib ", 0) != 0) {
+					continue;
+				}
+				std::istringstream materialLibraries(line.substr(7));
+				std::string materialLibrary;
+				while (materialLibraries >> materialLibrary) {
+					const fs::path dependencyPath =
+						(absolutePath.parent_path() / materialLibrary).lexically_normal();
+					PerformanceProfiler::GetInstance().RecordFileSystemCheck();
+					const std::uintmax_t dependencySize = fs::file_size(dependencyPath, error);
+					if (error) {
+						fingerprint << "|dependency-missing=" << dependencyPath.generic_string();
+						error.clear();
+						continue;
+					}
+					PerformanceProfiler::GetInstance().RecordFileSystemCheck();
+					const auto dependencyWriteTime = fs::last_write_time(dependencyPath, error);
+					if (error) {
+						fingerprint << "|dependency-time-error=" << dependencyPath.generic_string();
+						error.clear();
+						continue;
+					}
+					fingerprint << "|dependency=" << dependencyPath.generic_string()
+						<< ':' << dependencySize
+						<< ':' << dependencyWriteTime.time_since_epoch().count();
+				}
+				break;
+			}
+		}
+
+		std::ostringstream fileName;
+		fileName << std::hex << std::setfill('0') << std::setw(16)
+			<< HashCacheFingerprint(fingerprint.str()) << ".assbin";
+		return fs::path("model-cache") / fileName.str();
+	}
+
+	void WriteModelImportCache(const aiScene* scene, const std::filesystem::path& cachePath)
+	{
+		if (!scene || cachePath.empty()) {
+			return;
+		}
+
+		namespace fs = std::filesystem;
+		std::error_code error;
+		fs::create_directories(cachePath.parent_path(), error);
+		if (error) {
+			std::cout << "[Model Import Cache] cannot create directory: "
+				<< error.message() << std::endl;
+			return;
+		}
+
+		fs::path temporaryPath = cachePath;
+		temporaryPath += ".tmp";
+		Assimp::Exporter exporter;
+		if (exporter.Export(scene, "assbin", temporaryPath.string()) != AI_SUCCESS) {
+			std::cout << "[Model Import Cache] export failed: "
+				<< exporter.GetErrorString() << std::endl;
+			return;
+		}
+
+		fs::remove(cachePath, error);
+		error.clear();
+		fs::rename(temporaryPath, cachePath, error);
+		if (error) {
+			std::cout << "[Model Import Cache] publish failed: "
+				<< error.message() << std::endl;
+		}
 	}
 }
 
@@ -286,14 +418,29 @@ void Model::loadModel(std::string path,Material* mat)
 	}
 
 	Assimp::Importer importer;
-	const aiScene* scene = importer.ReadFile(
-		path,
-		aiProcess_Triangulate |
-		aiProcess_FlipUVs |
-		aiProcess_CalcTangentSpace |
-		aiProcess_JoinIdenticalVertices);
+	const std::filesystem::path importCachePath = BuildModelImportCachePath(path);
+	const aiScene* scene = nullptr;
+	bool importCacheHit = false;
+	if (!importCachePath.empty() && FileExists(importCachePath.string())) {
+		scene = importer.ReadFile(importCachePath.string(), 0);
+		importCacheHit = IsValidScene(scene);
+		if (!importCacheHit) {
+			std::cout << "[Model Import Cache] invalid entry, rebuilding "
+				<< importCachePath.string() << std::endl;
+		}
+	}
 
-	if(!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
+	if (!importCacheHit) {
+		scene = importer.ReadFile(path, kModelImportFlags);
+		if (IsValidScene(scene)) {
+			WriteModelImportCache(scene, importCachePath);
+		}
+	}
+	PerformanceProfiler::GetInstance().RecordModelImportCacheLookup(importCacheHit);
+	std::cout << "[Model Import Cache] " << (importCacheHit ? "hit " : "miss ")
+		<< path << std::endl;
+
+	if(!IsValidScene(scene)) {
 		std::cout << "ERROR::ASSIMP:: " << importer.GetErrorString() << std::endl;
 		return;
 	}
