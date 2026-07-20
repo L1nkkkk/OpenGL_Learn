@@ -523,11 +523,24 @@ std::vector<Vertex> ComputeTBNVertices(
 		return vertices;
 	}
 
-	for (unsigned int idx : indices) {
+	bool hasSequentialIndices = indices.size() == vertices.size();
+	for (size_t i = 0; i < indices.size(); ++i) {
+		const unsigned int idx = indices[i];
 		if (idx >= vertices.size()) {
 			std::cout << "warning: index out of range, skip TBN recompute" << std::endl;
 			return vertices;
 		}
+		if (idx != i) {
+			hasSequentialIndices = false;
+		}
+	}
+
+	if (hasSequentialIndices) {
+		for (size_t i = 0; i < vertices.size(); i += 3) {
+			ComputeTBN(vertices[i], vertices[i + 1], vertices[i + 2]);
+		}
+		// The Mesh constructor does not reuse its staging vector after this call.
+		return std::move(vertices);
 	}
 
 	std::vector<Vertex> ret;

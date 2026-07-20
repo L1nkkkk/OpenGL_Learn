@@ -173,6 +173,39 @@ This phase used parent commit `0c0da2d` as the matched control; its executable i
 - Peak working-set and stable-memory changes were below 1% and are treated as noise. The vectors were always temporary, so no steady-state or GPU-memory reduction is claimed.
 - Release x64 built successfully, and the resource smoke test passed the **2 -> 4 -> 6 -> 8 -> 2** FBO lifecycle with **0.00 MiB Mesh CPU** and **43.57 MiB Mesh GPU** throughout.
 
+## In-place TBN generation for sequential meshes
+
+`ComputeTBNVertices` previously allocated an expanded output vector for every mesh, even when Assimp had already produced one unique vertex per triangle corner and the indices were exactly `0..N-1`. The retained fast path validates that condition, computes the same TBN values directly in the staging vector, and moves that storage into `MeshGeometry`. Non-sequential indexed meshes keep the original expansion path.
+
+This experiment ran on 2026-07-20 against parent commit `822c5be`. The candidate was the uncommitted working tree that became this commit. Both binaries used Release x64, 1440 x 900, and `saved/last_scene.json`. After one unmeasured warm-up per binary, the initial `A/B/B/A/A/B` block showed enough launch variation that the same balanced block was repeated. The table therefore retains six fresh-process samples per variant rather than discarding either block.
+
+| Order | Variant | Load ready (ms) | Peak working set (MiB) | Peak private bytes (MiB) | Stable working set (MiB) | Stable private bytes (MiB) |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | A - `822c5be` control | 2156.1 | 263.38 | 1054.00 | 159.10 | 974.20 |
+| 2 | B - in-place TBN | 2062.5 | 254.36 | 1045.90 | 155.45 | 971.47 |
+| 3 | B - in-place TBN | 2027.3 | 255.59 | 1012.68 | 155.34 | 969.05 |
+| 4 | A - `822c5be` control | 2000.3 | 263.00 | 1049.06 | 155.04 | 969.57 |
+| 5 | A - `822c5be` control | 2026.6 | 245.13 | 1049.28 | 155.21 | 970.72 |
+| 6 | B - in-place TBN | 1977.6 | 252.23 | 1014.65 | 155.18 | 969.95 |
+| 7 | A - `822c5be` control | 2072.0 | 244.19 | 1050.01 | 159.21 | 970.00 |
+| 8 | B - in-place TBN | 2024.5 | 245.98 | 1052.83 | 159.28 | 978.28 |
+| 9 | B - in-place TBN | 2072.1 | 245.09 | 1015.42 | 163.22 | 971.78 |
+| 10 | A - `822c5be` control | 1962.2 | 242.63 | 1015.15 | 155.29 | 969.72 |
+| 11 | A - `822c5be` control | 1961.9 | 267.25 | 1024.70 | 163.23 | 966.72 |
+| 12 | B - in-place TBN | 1935.9 | 253.21 | 1046.78 | 155.15 | 971.81 |
+
+| Average | Load ready (ms) | Peak working set (MiB) | Peak private bytes (MiB) | Stable working set (MiB) | Stable private bytes (MiB) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| A - `822c5be` control | 2029.85 | 254.26 | 1040.37 | 157.85 | 970.16 |
+| B - in-place TBN | 2016.65 | 251.08 | 1031.38 | 157.27 | 972.06 |
+| Delta | -13.20 (-0.65%) | -3.19 (-1.25%) | -8.99 (-0.86%) | -0.58 (-0.37%) | +1.90 (+0.20%) |
+
+- Runtime path diagnostics confirmed **36 in-place meshes / 818,724 vertices**, including all **34 imported character meshes / 812,964 vertices**. Ten small indexed quad meshes correctly retained the fallback path.
+- The fast path eliminates **43.72 MiB of cumulative temporary vertex allocation and copy traffic (-100% for matched meshes)**. Because meshes load serially, the theoretical process peak reduction is bounded by the largest matched mesh, **9.50 MiB**, rather than the cumulative total.
+- Mean peak private bytes fell by **8.99 MiB (0.86%)**, close to that theoretical bound, but the A/B ranges overlap. Load ready improved by **13.20 ms (0.65%)**; working-set and stable-memory ranges also overlap. These process-level changes are classified as noise, so no stable process-memory or load-time gain is claimed.
+- The change is retained for the deterministic removal of 43.72 MiB of allocator/copy traffic, with the original indexed fallback preserved and no measured regression.
+- Release x64 built successfully. The resource smoke test passed the **2 -> 4 -> 6 -> 8 -> 2** FBO lifecycle, with **0.00 MiB Mesh CPU** and **43.57 MiB Mesh GPU** throughout.
+
 ## Resource lifecycle smoke test
 
 Run the built-in OpenGL lifecycle test from the project directory:
