@@ -24,9 +24,10 @@ void Model::DestroyMeshCache()
 	g_modelMeshCache.clear();
 }
 
-MeshGeometry::MeshGeometry(std::vector<Vertex> vertices)
+MeshGeometry::MeshGeometry(std::vector<Vertex> vertices, std::vector<unsigned int> indices)
 {
 	m_vertexCount = vertices.size();
+	m_indexCount = indices.size();
 	if (!vertices.empty()) {
 		m_boundsMin = vertices.front().Position;
 		m_boundsMax = vertices.front().Position;
@@ -53,6 +54,9 @@ MeshGeometry::MeshGeometry(std::vector<Vertex> vertices)
 
 	glGenVertexArrays(1, &m_vao);
 	glGenBuffers(1, &m_vbo);
+	if (m_indexCount != 0) {
+		glGenBuffers(1, &m_ebo);
+	}
 
 	GLState::BindVertexArray(m_vao);
 	glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
@@ -62,6 +66,15 @@ MeshGeometry::MeshGeometry(std::vector<Vertex> vertices)
 		vertices.empty() ? nullptr : vertices.data(),
 		GL_STATIC_DRAW
 	);
+	if (m_ebo != 0) {
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ebo);
+		glBufferData(
+			GL_ELEMENT_ARRAY_BUFFER,
+			indices.size() * sizeof(unsigned int),
+			indices.data(),
+			GL_STATIC_DRAW
+		);
+	}
 
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
@@ -75,8 +88,12 @@ MeshGeometry::MeshGeometry(std::vector<Vertex> vertices)
 	glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Bitangent));
 	GLState::BindVertexArray(0);
 
-	const std::uint64_t stagingBytes = static_cast<std::uint64_t>(vertices.capacity() * sizeof(Vertex));
-	m_trackedGpuBytes = static_cast<std::uint64_t>(m_vertexCount * sizeof(Vertex));
+	const std::uint64_t stagingBytes =
+		static_cast<std::uint64_t>(vertices.capacity() * sizeof(Vertex)) +
+		static_cast<std::uint64_t>(indices.capacity() * sizeof(unsigned int));
+	m_trackedGpuBytes =
+		static_cast<std::uint64_t>(m_vertexCount * sizeof(Vertex)) +
+		static_cast<std::uint64_t>(m_indexCount * sizeof(unsigned int));
 	auto& profiler = PerformanceProfiler::GetInstance();
 	if (stagingBytes != 0) {
 		profiler.RecordMemoryAllocation(MemoryResourceType::MeshCpu, stagingBytes);
@@ -88,6 +105,7 @@ MeshGeometry::MeshGeometry(std::vector<Vertex> vertices)
 	// The VBO and compact bounds are the long-lived representation. Release the
 	// upload vector immediately so cached geometry does not pin a CPU-side copy.
 	std::vector<Vertex>().swap(vertices);
+	std::vector<unsigned int>().swap(indices);
 	if (stagingBytes != 0) {
 		profiler.RecordMemoryRelease(MemoryResourceType::MeshCpu, stagingBytes);
 	}
@@ -106,15 +124,34 @@ MeshGeometry::~MeshGeometry()
 	if (m_vbo != 0) {
 		glDeleteBuffers(1, &m_vbo);
 	}
+	if (m_ebo != 0) {
+		glDeleteBuffers(1, &m_ebo);
+	}
 }
 
 Mesh::Mesh(std::vector<Vertex> vertices,
 		std::vector<unsigned int> indices,
 		   Material* material,
 		   std::shared_ptr<Material> ownedMaterial,
-           const std::string& materialXmlPathIn)
+           const std::string& materialXmlPathIn,
+		   bool tangentBasisReady)
 {
-	m_geometry = std::make_shared<MeshGeometry>(ComputeTBNVertices(vertices, indices));
+	if (!indices.empty()) {
+		const bool malformed = indices.size() % 3 != 0 ||
+			std::any_of(indices.begin(), indices.end(),
+				[vertexCount = vertices.size()](unsigned int index) {
+					return index >= vertexCount;
+				});
+		if (malformed) {
+			std::cout << "warning: invalid mesh indices, falling back to non-indexed draw" << std::endl;
+			indices.clear();
+			tangentBasisReady = false;
+		}
+	}
+	if (!tangentBasisReady) {
+		vertices = ComputeTBNVertices(vertices, indices);
+	}
+	m_geometry = std::make_shared<MeshGeometry>(std::move(vertices), std::move(indices));
 	this->material_owner = std::move(ownedMaterial);
 	if(material) {
 		this->material_ptr = material;
@@ -147,6 +184,21 @@ unsigned int Mesh::GetVAO() const
 std::size_t Mesh::GetVertexCount() const
 {
 	return m_geometry ? m_geometry->GetVertexCount() : 0;
+}
+
+std::size_t Mesh::GetIndexCount() const
+{
+	return m_geometry ? m_geometry->GetIndexCount() : 0;
+}
+
+std::size_t Mesh::GetDrawCount() const
+{
+	return m_geometry ? m_geometry->GetDrawCount() : 0;
+}
+
+bool Mesh::UsesIndices() const
+{
+	return m_geometry && m_geometry->UsesIndices();
 }
 
 const glm::vec3& Mesh::GetBoundsMin() const
@@ -182,8 +234,13 @@ void Mesh::Draw(Shader* shader)
 	auto materialGaurd = MaterialGaurd(*material_ptr, shader);
 	GLState::ActiveTexture(GL_TEXTURE0);
 	GLState::BindVertexArray(GetVAO());
-	PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, GetVertexCount());
-	glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(GetVertexCount()));
+	PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, GetDrawCount());
+	if (UsesIndices()) {
+		glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(GetIndexCount()), GL_UNSIGNED_INT, nullptr);
+	}
+	else {
+		glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(GetVertexCount()));
+	}
 }
 
 void Model::Draw(Shader* shader, unsigned int start_tex_index )
@@ -229,7 +286,12 @@ void Model::loadModel(std::string path,Material* mat)
 	}
 
 	Assimp::Importer importer;
-	const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs);
+	const aiScene* scene = importer.ReadFile(
+		path,
+		aiProcess_Triangulate |
+		aiProcess_FlipUVs |
+		aiProcess_CalcTangentSpace |
+		aiProcess_JoinIdenticalVertices);
 
 	if(!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
 		std::cout << "ERROR::ASSIMP:: " << importer.GetErrorString() << std::endl;
@@ -331,6 +393,7 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 	std::vector<unsigned int>indices;
 	Material* material = mat;
 	const std::string materialShaderName = m_shader ? m_shader->shaderName : std::string("phong");
+	const bool tangentBasisReady = mesh->HasTangentsAndBitangents();
 	vertices.reserve(mesh->mNumVertices);
 	indices.reserve(static_cast<size_t>(mesh->mNumFaces) * 3);
 	for (unsigned int i = 0; i < mesh->mNumVertices; ++i) {
@@ -353,6 +416,16 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 		else {
 			vertex.TexCoords = glm::vec2(0.0f, 0.0f);
 		}
+		if (tangentBasisReady) {
+			vertex.Tangent = glm::vec3(
+				mesh->mTangents[i].x,
+				mesh->mTangents[i].y,
+				mesh->mTangents[i].z);
+			vertex.Bitangent = glm::vec3(
+				mesh->mBitangents[i].x,
+				mesh->mBitangents[i].y,
+				mesh->mBitangents[i].z);
+		}
 		vertices.push_back(vertex);
 	}
 	for (unsigned int i = 0; i < mesh->mNumFaces; ++i) {
@@ -363,10 +436,11 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 	}
 	std::cout << "[Mesh Debug] Name: " << mesh->mName.C_Str()
 		<< " | Vertices: " << mesh->mNumVertices
+		<< " | Indices: " << indices.size()
 		<< " | MatID: " << mesh->mMaterialIndex << std::endl;
 	std::string xmlPath;
 	if(mat) {
-		return Mesh(std::move(vertices), std::move(indices), mat, std::shared_ptr<Material>(), std::string());
+		return Mesh(std::move(vertices), std::move(indices), mat, std::shared_ptr<Material>(), std::string(), tangentBasisReady);
 	}
 	else if (mesh->mMaterialIndex >= 0) {
 		aiMaterial* aiMat = scene->mMaterials[mesh->mMaterialIndex];
@@ -386,7 +460,7 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 			std::shared_ptr<Material> ownedMaterial = std::make_shared<Material>(materialShaderName);
 			material = ownedMaterial.get();
 			prosessMaterial(aiMat, material);
-			return Mesh(std::move(vertices), std::move(indices), material, ownedMaterial, std::string());
+			return Mesh(std::move(vertices), std::move(indices), material, ownedMaterial, std::string(), tangentBasisReady);
 		}
 	}
 	else {
@@ -398,10 +472,10 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 		if (!material) {
 			std::shared_ptr<Material> ownedMaterial = std::make_shared<Material>(materialShaderName);
 			material = ownedMaterial.get();
-			return Mesh(std::move(vertices), std::move(indices), material, ownedMaterial, std::string());
+			return Mesh(std::move(vertices), std::move(indices), material, ownedMaterial, std::string(), tangentBasisReady);
         }
 	}
-	return Mesh(std::move(vertices), std::move(indices), material, nullptr, xmlPath);
+	return Mesh(std::move(vertices), std::move(indices), material, nullptr, xmlPath, tangentBasisReady);
 }
 
 void Model::prosessMaterial(aiMaterial* mat,Material* material)
@@ -513,48 +587,83 @@ glm::vec3 Model::CalculateLocalCenter()
 std::vector<Vertex> ComputeTBNVertices(
 	std::vector<Vertex>& vertices,
 	const std::vector<unsigned int>& indices) {
-	// Assimp Triangulate 理论上应满足 size%3==0，但仍做防御：
-	// - 若 indices 不合法/为空，则保持原 vertices，避免生成空数组触发后续 UB。
-	if (vertices.empty() || indices.empty()) {
-		return vertices;
-	}
-	if (indices.size() % 3 != 0) {
-		std::cout << "warning: indices size is not multiple of 3, skip TBN recompute" << std::endl;
-		return vertices;
-	}
-
-	bool hasSequentialIndices = indices.size() == vertices.size();
-	for (size_t i = 0; i < indices.size(); ++i) {
-		const unsigned int idx = indices[i];
-		if (idx >= vertices.size()) {
-			std::cout << "warning: index out of range, skip TBN recompute" << std::endl;
-			return vertices;
-		}
-		if (idx != i) {
-			hasSequentialIndices = false;
-		}
-	}
-
-	if (hasSequentialIndices) {
-		for (size_t i = 0; i < vertices.size(); i += 3) {
-			ComputeTBN(vertices[i], vertices[i + 1], vertices[i + 2]);
-		}
-		// The Mesh constructor does not reuse its staging vector after this call.
+	if (vertices.empty()) {
 		return std::move(vertices);
 	}
 
-	std::vector<Vertex> ret;
-	ret.reserve(indices.size());
-	for (size_t i = 0; i < indices.size(); i += 3) {
-		auto aPoint = vertices[indices[i]];
-		auto bPoint = vertices[indices[i + 1]];
-		auto cPoint = vertices[indices[i + 2]];
-		ComputeTBN(aPoint, bPoint, cPoint);
-		ret.push_back(aPoint);
-		ret.push_back(bPoint);
-		ret.push_back(cPoint);
+	if (indices.empty()) {
+		if (vertices.size() % 3 == 0) {
+			for (size_t i = 0; i < vertices.size(); i += 3) {
+				ComputeTBN(vertices[i], vertices[i + 1], vertices[i + 2]);
+			}
+		}
+		return std::move(vertices);
 	}
-	return ret;
+
+	std::vector<glm::vec3> tangentSums(vertices.size(), glm::vec3(0.0f));
+	std::vector<glm::vec3> bitangentSums(vertices.size(), glm::vec3(0.0f));
+	constexpr float determinantEpsilon = 1.0e-8f;
+	for (size_t i = 0; i < indices.size(); i += 3) {
+		const unsigned int i0 = indices[i];
+		const unsigned int i1 = indices[i + 1];
+		const unsigned int i2 = indices[i + 2];
+		const Vertex& v0 = vertices[i0];
+		const Vertex& v1 = vertices[i1];
+		const Vertex& v2 = vertices[i2];
+		const glm::vec3 edge1 = v1.Position - v0.Position;
+		const glm::vec3 edge2 = v2.Position - v0.Position;
+		const glm::vec2 deltaUv1 = v1.TexCoords - v0.TexCoords;
+		const glm::vec2 deltaUv2 = v2.TexCoords - v0.TexCoords;
+		const float determinant = deltaUv1.x * deltaUv2.y - deltaUv2.x * deltaUv1.y;
+		if (std::abs(determinant) <= determinantEpsilon) {
+			continue;
+		}
+
+		const float inverseDeterminant = 1.0f / determinant;
+		const glm::vec3 tangent = inverseDeterminant *
+			(deltaUv2.y * edge1 - deltaUv1.y * edge2);
+		const glm::vec3 bitangent = inverseDeterminant *
+			(-deltaUv2.x * edge1 + deltaUv1.x * edge2);
+		for (unsigned int index : { i0, i1, i2 }) {
+			tangentSums[index] += tangent;
+			bitangentSums[index] += bitangent;
+		}
+	}
+
+	constexpr float vectorLengthEpsilon = 1.0e-12f;
+	for (size_t i = 0; i < vertices.size(); ++i) {
+		glm::vec3 normal = vertices[i].Normal;
+		if (glm::dot(normal, normal) <= vectorLengthEpsilon) {
+			normal = glm::vec3(0.0f, 1.0f, 0.0f);
+		}
+		normal = glm::normalize(normal);
+
+		glm::vec3 tangent = tangentSums[i] - normal * glm::dot(normal, tangentSums[i]);
+		glm::vec3 bitangent = bitangentSums[i] - normal * glm::dot(normal, bitangentSums[i]);
+		if (glm::dot(tangent, tangent) <= vectorLengthEpsilon &&
+			glm::dot(bitangent, bitangent) > vectorLengthEpsilon) {
+			tangent = glm::cross(normal, bitangent);
+		}
+		if (glm::dot(tangent, tangent) <= vectorLengthEpsilon) {
+			const glm::vec3 axis = std::abs(normal.y) < 0.999f
+				? glm::vec3(0.0f, 1.0f, 0.0f)
+				: glm::vec3(1.0f, 0.0f, 0.0f);
+			tangent = glm::cross(normal, axis);
+		}
+		tangent = glm::normalize(tangent);
+
+		bitangent -= tangent * glm::dot(tangent, bitangent);
+		if (glm::dot(bitangent, bitangent) <= vectorLengthEpsilon) {
+			bitangent = glm::cross(tangent, normal);
+		}
+		else {
+			bitangent = glm::normalize(bitangent);
+		}
+
+		vertices[i].Tangent = tangent;
+		vertices[i].Bitangent = bitangent;
+	}
+	return std::move(vertices);
 }
 
 void ComputeTBN(Vertex& aPoint, Vertex& bPoint, Vertex& cPoint) {

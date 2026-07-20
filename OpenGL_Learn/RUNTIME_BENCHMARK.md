@@ -1,6 +1,6 @@
 # Runtime performance benchmark
 
-本文档说明项目运行时性能基准工具的使用方式。正式优化结果仍需按 `PERFORMANCE_OPTIMIZATION_PROTOCOL.md` 的要求，以相邻版本执行独立 A/B、保留原始样本并记录到对应性能报告。
+本文档说明项目运行时性能基准工具的使用方式。正式优化结果仍需按 `PERFORMANCE_OPTIMIZATION_PROTOCOL.md` 的要求，以相邻版本执行独立 A/B、保留原始样本并记录到对应性能报告；已完成的稳态时间实验汇总在 `RUNTIME_PERFORMANCE.md`。
 
 ## Benchmark command
 
@@ -78,6 +78,6 @@ A / B / B / A / A / B
 
 随后使用默认规模再次验证：300 帧 warm-up、1200 帧 sample。进程以 code 0 自动退出，`capture.valid == true`，wall/CPU/GPU frame、render stats 和 memory snapshot 均完整捕获 1200 个样本，持续执行的 4 个 GPU zone 也各有 1200 个样本。非法的零 sample 参数在创建窗口前以 code 4 拒绝。资源 smoke test 仍通过，FBO 生命周期为 `2 -> 4 -> 6 -> 8 -> 2`，且自动流程没有改写 `imgui.ini`。
 
-视觉检查随后发现，存档恢复的是 `cameraFront`，旧的 view matrix 却读取只会由鼠标回调更新的 `cameraDirection`。自动模式冻结输入后，这会让基准相机无效并产生黑色 viewport。P0 因此改为直接用已恢复的 `cameraFront` 构造 view matrix；此前黑色 viewport 的运行只保留作采集链路验证，不能作为任何渲染性能基线。正式优化 A/B 必须基于包含该修复的 P0 提交，并先确认默认场景可见。
+视觉检查随后发现，存档恢复的是 `cameraFront`，旧的 view matrix 却读取只会由鼠标回调更新的 `cameraDirection`。自动模式冻结输入后，这会让基准相机无效并产生黑色 viewport。P0 因此改为直接用已恢复的 `cameraFront` 构造 view matrix；此前黑色 viewport 的运行只保留作采集链路验证，不能作为任何渲染性能基线。正式优化 A/B 必须基于包含该修复的 P0 提交，并确认所用场景夹具确实包含可见几何；如果当前存档相机本身朝向空场景，应使用隔离副本调整相机并在报告中记录差异。
 
 这些运行仅验证 benchmark 生命周期、GPU query 排空、JSON schema、参数校验和既有资源回归，不是性能 A/B 基线，不得用于宣称任何运行时收益。

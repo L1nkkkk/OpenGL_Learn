@@ -22,11 +22,11 @@
 
 
 struct Vertex {
-	glm::vec3 Position;
-	glm::vec3 Normal;
-	glm::vec2 TexCoords;
-	glm::vec3 Tangent;
-	glm::vec3 Bitangent;
+	glm::vec3 Position = glm::vec3(0.0f);
+	glm::vec3 Normal = glm::vec3(0.0f);
+	glm::vec2 TexCoords = glm::vec2(0.0f);
+	glm::vec3 Tangent = glm::vec3(0.0f);
+	glm::vec3 Bitangent = glm::vec3(0.0f);
 	Vertex() = default;
 	Vertex(glm::vec3 Pos,glm::vec3 Nor,glm::vec2 Tex):
 		Position(Pos),Normal(Nor),TexCoords(Tex){}
@@ -34,13 +34,16 @@ struct Vertex {
 
 class MeshGeometry {
 public:
-	explicit MeshGeometry(std::vector<Vertex> vertices);
+	MeshGeometry(std::vector<Vertex> vertices, std::vector<unsigned int> indices);
 	~MeshGeometry();
 
 	MeshGeometry(const MeshGeometry&) = delete;
 	MeshGeometry& operator=(const MeshGeometry&) = delete;
 
 	std::size_t GetVertexCount() const { return m_vertexCount; }
+	std::size_t GetIndexCount() const { return m_indexCount; }
+	std::size_t GetDrawCount() const { return m_indexCount != 0 ? m_indexCount : m_vertexCount; }
+	bool UsesIndices() const { return m_indexCount != 0; }
 	const glm::vec3& GetBoundsMin() const { return m_boundsMin; }
 	const glm::vec3& GetBoundsMax() const { return m_boundsMax; }
 	const glm::vec3& GetBoundsCenter() const { return m_boundsCenter; }
@@ -49,12 +52,14 @@ public:
 
 private:
 	std::size_t m_vertexCount = 0;
+	std::size_t m_indexCount = 0;
 	glm::vec3 m_boundsMin = glm::vec3(0.0f);
 	glm::vec3 m_boundsMax = glm::vec3(0.0f);
 	glm::vec3 m_boundsCenter = glm::vec3(0.0f);
 	float m_boundingRadius = 0.0f;
 	unsigned int m_vao = 0;
 	unsigned int m_vbo = 0;
+	unsigned int m_ebo = 0;
 	std::uint64_t m_trackedGpuBytes = 0;
 };
 
@@ -70,7 +75,8 @@ public:
 		std::vector<unsigned int> indices,
 		 Material* material,
 		 std::shared_ptr<Material> ownedMaterial = nullptr,
-         const std::string& materialXmlPathIn = std::string());
+         const std::string& materialXmlPathIn = std::string(),
+		 bool tangentBasisReady = false);
 	Mesh(std::vector<Vertex> vertices,
 		std::vector<unsigned int> indices,
 		Material* material,
@@ -86,6 +92,9 @@ public:
 
 	unsigned int GetVAO() const;
 	std::size_t GetVertexCount() const;
+	std::size_t GetIndexCount() const;
+	std::size_t GetDrawCount() const;
+	bool UsesIndices() const;
 	const glm::vec3& GetBoundsMin() const;
 	const glm::vec3& GetBoundsMax() const;
 	const glm::vec3& GetBoundsCenter() const;

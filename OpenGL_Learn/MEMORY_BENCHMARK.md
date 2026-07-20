@@ -224,13 +224,15 @@ The test enables each large target group, checks the number of live FBOs, disabl
 | All effects + point/directional shadows | 8 | 135.53 | 0.00 | 43.57 |
 | Reclaimed forward default | 2 | 24.72 | 0.00 | 43.57 |
 
-## Rejected indexed-mesh experiment
+## Rejected sequential-index EBO experiment
 
-An indexed-mesh implementation was tested and reverted. These character assets are already heavily split at material, normal, and UV boundaries, so index reuse is too low to offset the EBO and tangent-accumulation overhead.
+An early indexed-mesh implementation was tested and reverted. That experiment added an EBO after the application had already expanded every triangle to sequential vertices; it did **not** enable Assimp `aiProcess_JoinIdenticalVertices`. Its data remains valid evidence that an EBO over `0..N-1` indices only adds overhead, but the original conclusion that these assets lack useful vertex reuse was incorrect.
 
 | Variant | Load ready (ms) | Dedicated GPU (MiB) | Shared GPU (MiB) | Working set (MiB) | Private bytes (MiB) | FPS |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Texture-only control | 1809.1 | 891.33 | 49.10 | 306.98 | 1257.18 | 165 |
 | Indexed mesh experiment | 1770.7 | 897.32 | 46.43 | 319.65 | 1297.26 | 165 |
 
-The experiment increased dedicated GPU memory by **5.99 MiB (+0.67%)** and private bytes by **40.08 MiB (+3.19%)**. Its 38.4 ms load-time change did not compensate for the steady-state regression, so none of the indexed-mesh code is included in the retained implementation.
+The experiment increased dedicated GPU memory by **5.99 MiB (+0.67%)** and private bytes by **40.08 MiB (+3.19%)**. Its 38.4 ms load-time change did not compensate for the steady-state regression, so that sequential-index implementation remains rejected.
+
+The later P1 runtime experiment performs tangent-aware vertex joining before uploading a real EBO. It reduces imported unique vertices by 73.47% and is documented separately in `RUNTIME_PERFORMANCE.md`; it supersedes only the old asset-reuse interpretation, not the measurements above.
