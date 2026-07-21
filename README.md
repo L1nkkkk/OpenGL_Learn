@@ -5,7 +5,7 @@
 ## 功能特性
 
 ### 渲染管线
-- **前向渲染 / 延迟渲染**：可切换，延迟渲染写入 GBuffer（位置、法线、漫反射、材质）
+- **前向渲染 / 延迟渲染**：可切换，延迟渲染写入 GBuffer（位置、法线、Albedo、材质参数、Emissive）
 - **光体积优化**：点光源采用模板缓冲 + 球体几何体，仅对光体积内像素计算光照
 - **多 Pass 架构**：Geometry Pass → Lighting Pass → Forward（天空盒、透明、轮廓线）
 
@@ -13,6 +13,9 @@
 - 平行光、点光源、聚光灯
 - PCF / PCSS 软阴影
 - 点光源立方体贴图阴影
+- Metallic-roughness PBR（Cook-Torrance / GGX / Smith / Schlick）
+- Image-based lighting：irradiance cubemap、prefilter cubemap、BRDF LUT
+- PBR 实现、性能与验收详见 [OpenGL_Learn/PBR_IBL.md](OpenGL_Learn/PBR_IBL.md)
 
 ### 后处理
 - HDR
@@ -35,7 +38,8 @@
 ### 模型与材质
 - Assimp 加载 OBJ 模型
 - XML 材质系统，支持热重载
-- Phong / Mirror / Grass / Explode 等着色器
+- PBR / Phong / Mirror / Grass / Explode 等着色器
+- Assimp 导入 base color、normal、metallic、roughness、AO、emissive 材质数据
 - 材质面板支持按 Mesh 实时切换贴图（系统文件浏览器）
 
 ### 场景存档与加载优化
@@ -56,6 +60,7 @@ OpenGL_Learn/
 │   ├── materials/          # 材质 XML
 │   ├── DeferRenderPass.*   # 延迟渲染
 │   ├── ForwardRenderPass.* # 前向渲染
+│   ├── ImageBasedLighting.* # IBL 预计算与资源生命周期
 │   ├── PostprocessRenderPass.*
 │   ├── Scene.*             # 场景管理
 │   ├── Model.* / Light.*   # 模型与光源

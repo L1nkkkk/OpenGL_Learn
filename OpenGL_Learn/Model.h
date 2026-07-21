@@ -209,6 +209,9 @@ public:
 
 	void Draw(Shader* shader = nullptr, unsigned int start_tex_index = 0);
 	static void DestroyMeshCache();
+	static void SetImportedMaterialSharingEnabled(bool enabled) {
+		s_importedMaterialSharingEnabled = enabled;
+	}
 
 	std::unordered_map<int,bool> otherShaderUse;
 	std::unordered_map<int,std::shared_ptr<Shader>> otherShaderPtr;
@@ -278,6 +281,7 @@ public:
 private:
 	std::shared_ptr<Shader> m_shader;
 	std::vector<Texture> textures_loaded;
+	std::unordered_map<unsigned int, std::shared_ptr<Material>> m_importedMaterials;
 	std::string directory;
 	glm::vec3 localCenter;
 	float localBoundingRadius = 0.0f;
@@ -287,6 +291,7 @@ private:
 	std::string m_dataSourceGeneratorId;
 	size_t m_lastAppliedMaterialRevision = static_cast<size_t>(-1);
 	inline static unsigned int count = 0;
+	inline static bool s_importedMaterialSharingEnabled = true;
 protected:
 	std::vector<Mesh> meshes;
 	std::vector<MeshEntry> m_opaqueMeshes;

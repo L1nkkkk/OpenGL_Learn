@@ -607,10 +607,28 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 		}
 
 		if (!material) {
-			std::shared_ptr<Material> ownedMaterial = std::make_shared<Material>(materialShaderName);
+			std::shared_ptr<Material> ownedMaterial;
+			if (s_importedMaterialSharingEnabled) {
+				auto cachedMaterial = m_importedMaterials.find(mesh->mMaterialIndex);
+				if (cachedMaterial != m_importedMaterials.end()) {
+					ownedMaterial = cachedMaterial->second;
+				}
+			}
+			if (!ownedMaterial) {
+				ownedMaterial = std::make_shared<Material>(materialShaderName);
+				prosessMaterial(aiMat, ownedMaterial.get());
+				if (s_importedMaterialSharingEnabled) {
+					m_importedMaterials.emplace(mesh->mMaterialIndex, ownedMaterial);
+				}
+			}
 			material = ownedMaterial.get();
-			prosessMaterial(aiMat, material);
-			return Mesh(std::move(vertices), std::move(indices), material, ownedMaterial, std::string(), tangentBasisReady);
+			return Mesh(
+				std::move(vertices),
+				std::move(indices),
+				material,
+				std::move(ownedMaterial),
+				std::string(),
+				tangentBasisReady);
 		}
 	}
 	else {

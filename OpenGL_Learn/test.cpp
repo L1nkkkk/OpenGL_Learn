@@ -208,6 +208,7 @@ int main(int argc, char** argv) {
 	bool pbrSmokeFailed = false;
 	bool benchmarkPhongMaterialScene = false;
 	bool benchmarkPbrMaterialScene = false;
+	bool benchmarkUnsharedImportedMaterials = false;
 	PerformanceBenchmarkOptions benchmarkOptions;
 	std::string benchmarkOptionError;
 	if (!ParsePerformanceBenchmarkOptions(argc, argv, benchmarkOptions, benchmarkOptionError)) {
@@ -227,11 +228,16 @@ int main(int argc, char** argv) {
 		else if (std::string(argv[i]) == "--benchmark-pbr-material-scene") {
 			benchmarkPbrMaterialScene = true;
 		}
+		else if (std::string(argv[i]) == "--benchmark-unshared-imported-materials") {
+			benchmarkUnsharedImportedMaterials = true;
+		}
 	}
 	if ((resourceSmokeTest && benchmarkOptions.enabled) ||
 		(pbrSmokeTest && (resourceSmokeTest || benchmarkOptions.enabled)) ||
 		(benchmarkPhongMaterialScene && benchmarkPbrMaterialScene) ||
-		((benchmarkPhongMaterialScene || benchmarkPbrMaterialScene) && !benchmarkOptions.enabled)) {
+		((benchmarkPhongMaterialScene || benchmarkPbrMaterialScene) && !benchmarkOptions.enabled) ||
+		(benchmarkUnsharedImportedMaterials &&
+			(!benchmarkOptions.enabled || !benchmarkPbrMaterialScene))) {
 		std::cerr << "automated smoke modes and --performance-benchmark are mutually exclusive" << std::endl;
 		return 4;
 	}
@@ -330,6 +336,7 @@ int main(int argc, char** argv) {
 	const bool useBuiltInMaterialScene =
 		pbrSmokeTest || benchmarkPhongMaterialScene || benchmarkPbrMaterialScene;
 	if (useBuiltInMaterialScene) {
+		Model::SetImportedMaterialSharingEnabled(!benchmarkUnsharedImportedMaterials);
 		LoadDefaultLights(scene);
 		const bool usePbrMaterial = pbrSmokeTest || benchmarkPbrMaterialScene;
 		auto validationModel = std::make_shared<Model>(
@@ -561,7 +568,9 @@ int main(int argc, char** argv) {
 
 		PerformanceBenchmarkMetadata metadata;
 		metadata.scenePath = benchmarkPbrMaterialScene
-			? "builtin/backpack-pbr"
+			? (benchmarkUnsharedImportedMaterials
+				? "builtin/backpack-pbr-unshared-materials"
+				: "builtin/backpack-pbr")
 			: (benchmarkPhongMaterialScene ? "builtin/backpack-phong" : sceneStatePath);
 		metadata.glVendor = glString(GL_VENDOR);
 		metadata.glRenderer = glString(GL_RENDERER);
