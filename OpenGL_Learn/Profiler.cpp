@@ -520,6 +520,20 @@ void PerformanceProfiler::RecordFileSystemCheck()
 	}
 }
 
+void PerformanceProfiler::RecordAssetBrowserCacheLookup(bool cacheHit)
+{
+	if (!IsCollecting()) {
+		return;
+	}
+
+	if (cacheHit) {
+		++m_currentRenderStats.assetBrowserCacheHits;
+	}
+	else {
+		++m_currentRenderStats.assetBrowserCacheMisses;
+	}
+}
+
 void PerformanceProfiler::SetSceneSubmissionStats(
 	std::uint64_t activeModels,
 	std::uint64_t visibleModels,

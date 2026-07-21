@@ -604,17 +604,23 @@ int main(int argc, char** argv) {
 		}
 		{
 			PERF_CPU_SCOPE("Viewport and Assets UI");
-			mygui.SetViewportReadSource(
-				viewportReadFBO,
-				viewportReadAttachment,
-				viewportReadIsDepth,
-				viewportReadWidth,
-				viewportReadHeight
-			);
-			mygui.Viewport_UI(viewportTextureID);
+			{
+				PERF_CPU_SCOPE("Viewport UI");
+				mygui.SetViewportReadSource(
+					viewportReadFBO,
+					viewportReadAttachment,
+					viewportReadIsDepth,
+					viewportReadWidth,
+					viewportReadHeight
+				);
+				mygui.Viewport_UI(viewportTextureID);
+			}
 
 			// Assets ?????? models / materials / shaders ??
-			mygui.AssetsBrowser_UI();
+			{
+				PERF_CPU_SCOPE("Assets Browser UI");
+				mygui.AssetsBrowser_UI();
+			}
 		}
 
 		//Draw GUI

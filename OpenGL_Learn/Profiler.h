@@ -45,6 +45,8 @@ struct RenderStats {
 	std::uint64_t framebufferBinds = 0;
 	std::uint64_t framebufferBindCacheHits = 0;
 	std::uint64_t fileSystemChecks = 0;
+	std::uint64_t assetBrowserCacheHits = 0;
+	std::uint64_t assetBrowserCacheMisses = 0;
 	std::uint64_t activeModels = 0;
 	std::uint64_t visibleModels = 0;
 	std::uint64_t culledModels = 0;
@@ -132,6 +134,7 @@ public:
 	void RecordVertexArrayBind(bool cacheHit);
 	void RecordFramebufferBind(bool cacheHit);
 	void RecordFileSystemCheck();
+	void RecordAssetBrowserCacheLookup(bool cacheHit);
 	void SetSceneSubmissionStats(
 		std::uint64_t activeModels,
 		std::uint64_t visibleModels,

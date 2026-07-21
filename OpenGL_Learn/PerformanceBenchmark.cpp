@@ -55,6 +55,8 @@ namespace {
 		{ "framebufferBinds", &RenderStats::framebufferBinds },
 		{ "framebufferBindCacheHits", &RenderStats::framebufferBindCacheHits },
 		{ "fileSystemChecks", &RenderStats::fileSystemChecks },
+		{ "assetBrowserCacheHits", &RenderStats::assetBrowserCacheHits },
+		{ "assetBrowserCacheMisses", &RenderStats::assetBrowserCacheMisses },
 		{ "activeModels", &RenderStats::activeModels },
 		{ "visibleModels", &RenderStats::visibleModels },
 		{ "culledModels", &RenderStats::culledModels },

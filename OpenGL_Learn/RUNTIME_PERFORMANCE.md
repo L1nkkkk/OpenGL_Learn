@@ -255,3 +255,100 @@ Control 仍为 `2bc6bb4`。执行两轮平衡顺序、共 12 个新进程（A/B 
 ### Decision
 
 **Rejected and fully reverted.** 候选没有收回 Load ready，稳态时间也没有改善；仅减少 1.29% Mesh GPU 不足以用更多导入逻辑和切线边界风险交换。持久化已处理场景缓存随后作为独立候选实施和测量。
+
+## P2: cache Assets Browser directory snapshots
+
+### Goal and problem
+
+模型导入缓存解决重复启动时间后，默认场景已经更明显地受 CPU 和编辑器开销限制。P1 follow-up 的三个正式 B 样本中，CPU Frame median 平均为 1.520 ms，而 GPU Frame median 只有 0.494 ms。UI 相关 zone 的 median 分量合计约 0.549 ms；其中 `Viewport and Assets UI` 为 0.245 ms。
+
+代码检查发现 `AssetsBrowser_UI` 在面板可见时每帧对 `models`、`materials` 和 `shaders` 调用 `std::filesystem::exists`。正式基线也稳定记录到每帧 3 次 filesystem checks；目录节点展开后，旧实现还会每帧重新运行 `directory_iterator`、扩展名解析和目录递归。
+
+### Implementation
+
+- 为 Models、Materials 和 Shaders 建立进程内目录快照；根目录存在性只检查一次，不再每帧访问磁盘。
+- 每个目录的子节点在首次展开时按需加载并缓存。后续帧只遍历内存中的路径、名称、类型和 children。
+- 扩展名过滤列表在缓存初始化时构建一次，不再为每个可见根节点重复解析 CSV。
+- Assets 窗口聚焦时可按 F5 清空快照；刷新后的下一帧按需重建。
+- 保留原有 `Viewport and Assets UI` 外层 CPU zone，新增 `Viewport UI` 和 `Assets Browser UI` 子 zone，便于直接比较外层 A/B 并诊断内部组成。
+- Render telemetry 新增 `assetBrowserCacheHits` / `assetBrowserCacheMisses`。稳定正式样本的候选均为 1 hit / 0 misses。
+
+### Control and method
+
+- Date: 2026-07-21
+- Control A: `d455056` (`perf(model): cache processed imports on disk`)
+- Candidate B: 本节所在提交的未提交候选工作树
+- Control binary SHA-256: `8BDE6D0EBD6881114593694104C95D0AC52EC8BCC0EAC136A14A2C3EBB1BC772`
+- Measured candidate binary SHA-256: `6540C8EBA531EFABC5404347918216E5127448AAE76B96632097E3E616F08C19`
+- Release x64、1440 x 900、4x default framebuffer MSAA、requested swap interval 0；场景和可见相机副本与 P1/P1 follow-up 相同。
+- 固定默认 ImGui 布局，Assets tab 可见，三个资源根节点保持折叠。A 和 B 的 UI draw data 完全一致。
+- A/B 各执行一次不计入结果的完整运行，再按 `A/B/B/A/A/B` 启动六个新进程；每次 300 帧 warm-up、1200 帧 sample。
+- 六个 JSON 均为 `capture.valid == true`，wall/CPU/GPU、所有持续执行 zone、render stats 和 memory 均有完整 1200 个样本。
+- 原始 JSON 和进程日志保留在本地忽略目录：
+
+```text
+benchmark-results/2026-07-21-p2-asset-browser/formal-ab/
+```
+
+### Per-run results
+
+| Order | Variant | Wall median (ms) | CPU median (ms) | CPU P95 (ms) | Viewport + Assets median (ms) | Filesystem checks median |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | A - `d455056` | 1.6497 | 1.6175 | 3.0267 | 0.2462 | 3 |
+| 2 | B - cached | 1.2769 | 1.2472 | 2.4362 | 0.0131 | 0 |
+| 3 | B - cached | 1.3605 | 1.3301 | 2.4938 | 0.0136 | 0 |
+| 4 | A - `d455056` | 1.6357 | 1.6077 | 2.8427 | 0.2443 | 3 |
+| 5 | A - `d455056` | 1.6560 | 1.6258 | 2.8935 | 0.2477 | 3 |
+| 6 | B - cached | 1.3600 | 1.3294 | 2.5647 | 0.0140 | 0 |
+
+### Average result
+
+| Metric | A average | B average | Absolute delta | Relative delta | Assessment |
+| --- | ---: | ---: | ---: | ---: | --- |
+| CPU Frame median | 1.617000 ms | 1.302233 ms | **-0.314767 ms** | **-19.47%** | improvement; ranges do not overlap |
+| CPU Frame P95 | 2.920967 ms | 2.498233 ms | **-0.422733 ms** | **-14.47%** | improvement; ranges do not overlap |
+| CPU Frame P99 | 3.763267 ms | 3.550867 ms | -0.212400 ms | -5.64% | ranges overlap; no tail claim |
+| Wall frame median | 1.647133 ms | 1.332467 ms | **-0.314667 ms** | **-19.10%** | improvement; ranges do not overlap |
+| Wall frame P95 | 2.955233 ms | 2.537800 ms | **-0.417433 ms** | **-14.13%** | improvement; ranges do not overlap |
+| Wall frame P99 | 3.797100 ms | 3.582667 ms | -0.214433 ms | -5.65% | ranges overlap; no tail claim |
+| Viewport + Assets CPU median | 0.246067 ms | 0.013567 ms | **-0.232500 ms** | **-94.49%** | direct target improvement |
+| Viewport + Assets CPU P95 | 0.354133 ms | 0.024767 ms | **-0.329367 ms** | **-93.01%** | direct target improvement |
+| Viewport + Assets CPU P99 | 0.431767 ms | 0.035467 ms | **-0.396300 ms** | **-91.79%** | direct target improvement |
+| Filesystem checks median / P95 / P99 | 3 / 3 / 3 | 0 / 0 / 0 | **-3 / -3 / -3** | **-100%** | expected cache behavior |
+| GPU Frame median | 0.495723 ms | 0.493461 ms | -0.002261 ms | -0.46% | ranges overlap; noise |
+| GPU Frame P95 | 0.864533 ms | 0.867296 ms | +0.002763 ms | +0.32% | noise |
+| GPU Frame P99 | 0.965184 ms | 0.997376 ms | +0.032192 ms | +3.34% | ranges overlap; no regression claim |
+| Forward GPU median | 0.431317 ms | 0.429024 ms | -0.002293 ms | -0.53% | ranges overlap; noise |
+| Load ready | 1470.204 ms | 1482.520 ms | +12.316 ms | +0.84% | ranges overlap; unrelated noise |
+| Working set median | 136.823 MiB | 135.443 MiB | -1.380 MiB | -1.01% | noise; not a retention criterion |
+| Private bytes median | 920.453 MiB | 931.525 MiB | +11.072 MiB | +1.20% | noise; not a retention criterion |
+| Mesh GPU / Mesh CPU | 15,317,056 / 0 bytes | 15,317,056 / 0 bytes | 0 / 0 | 0% | unchanged |
+
+CPU Frame median 的 A 范围为 1.6077–1.6258 ms，B 为 1.2472–1.3301 ms；CPU P95 的 A 范围为 2.8427–3.0267 ms，B 为 2.4362–2.5647 ms，两项均完全不重叠。直接目标 zone 的 median 从 0.2443–0.2477 ms 降至 0.0131–0.0140 ms。
+
+候选内部拆分后，`Assets Browser UI` median 平均为 0.005667 ms，`Viewport UI` 为 0.007233 ms。外层 zone 还包含两个子 scope 的 profiling 和作用域开销，因此略高于二者之和。
+
+### Correctness
+
+- Release x64 构建成功；resource smoke test 通过，FBO 生命周期保持 `2 -> 4 -> 6 -> 8 -> 2`，所有阶段均为 `0.00 MiB Mesh CPU` 和 `14.61 MiB Mesh GPU`。
+- Smoke test 前后用户 `imgui.ini` SHA-256 相同；正式 benchmark 的隔离运行目录也没有生成 `imgui.ini`。
+- 所有六次运行均保持 47 draws、815,946 submitted indices/vertices、271,982 triangles、45 mesh resources、4 model-import cache hits。
+- A/B 的 ImGui draw data 完全一致：13 draw calls、2,258 vertices、4,845 indices。缓存没有改变正式布局中的可见 UI 几何。
+- 稳定 B 样本全部为 1 Assets Browser cache hit / 0 misses。Filesystem check 最大值仍可能达到 43，这是低频 shader/material hot-reload polling，不是 Assets Browser 每帧扫描。
+
+### Cache cost and behavior
+
+- 缓存只保存已访问目录的路径、显示名称、类型和 children vector；未展开目录不会递归扫描或占用完整树内存。
+- 第一次显示 Assets 面板时仍检查三个根目录，工作量与旧实现该帧的三个根检查相当；这发生在正式 300 帧 warm-up 内，不计入稳定样本。
+- 首次展开某个目录会产生一次 `directory_iterator` 和条目检查；后续帧复用快照。F5 会主动清空快照并重复这一过程。
+- 当前固定 benchmark 禁用键鼠并保持三个根节点折叠，因此本报告没有把完全展开目录树的潜在收益量化为正式数字。
+
+### Decision
+
+**Retained.** 该改动以很小的按需路径缓存消除稳定帧磁盘访问，使直接目标 zone median 降低 94.49%，并让完整 CPU Frame median 降低 19.47%、P95 降低 14.47%。GPU、加载、渲染资源和 UI 几何没有实质变化。结果符合时间优先策略，内存变化不作为保留理由。
+
+### Limitations
+
+- 外部工具新增、删除或重命名资产后，Assets Browser 不会自动轮询刷新；用户需要聚焦 Assets 窗口并按 F5。避免自动轮询是消除稳定帧磁盘访问的有意取舍。
+- 当前正式结果覆盖默认折叠根节点。目录完全展开时旧实现预期会产生更多重复访问，但在建立可重复的展开状态 fixture 前不作精确收益声明。
+- 缓存重建仍在主线程执行。当前资产规模很小；大目录的首次展开如果出现可见卡顿，应另行比较后台扫描或分帧构建，不能直接以更多复杂度替换。

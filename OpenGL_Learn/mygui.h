@@ -315,6 +315,9 @@ public:
 				static_cast<unsigned long long>(renderStats.framebufferBinds),
 				static_cast<unsigned long long>(renderStats.framebufferBindCacheHits));
 			ImGui::Text("Filesystem checks: %llu", static_cast<unsigned long long>(renderStats.fileSystemChecks));
+			ImGui::Text("Asset browser cache hits / misses: %llu / %llu",
+				static_cast<unsigned long long>(renderStats.assetBrowserCacheHits),
+				static_cast<unsigned long long>(renderStats.assetBrowserCacheMisses));
 			ImGui::Text("Models: %llu active / %llu visible / %llu culled",
 				static_cast<unsigned long long>(renderStats.activeModels),
 				static_cast<unsigned long long>(renderStats.visibleModels),
@@ -368,11 +371,18 @@ public:
 
 	// Assets 面板：浏览项目中的 models / materials 等资源（类似 Unity Project 窗口）
 	void AssetsBrowser_UI() {
-		namespace fs = std::filesystem;
 		if (!ImGui::Begin("Assets")) {
 			ImGui::End();
 			return;
 		}
+
+		if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+			ImGui::IsKeyPressed(ImGuiKey_F5, false)) {
+			ResetAssetBrowserCache();
+		}
+		const bool cacheHit = m_assetBrowserCacheInitialized;
+		InitializeAssetBrowserCache();
+		PerformanceProfiler::GetInstance().RecordAssetBrowserCacheLookup(cacheHit);
 
 		// 左：资源树  右：选中资源详情
 		static std::string selectedPath;
@@ -383,72 +393,9 @@ public:
 		ImGui::TextUnformatted("Project Assets");
 		ImGui::Separator();
 
-		auto drawDirTree = [&](const char* label,
-			const char* rootPath,
-			const char* extsCsv,
-			const char* category) {
-				PerformanceProfiler::GetInstance().RecordFileSystemCheck();
-				if (!fs::exists(rootPath))
-					return;
-				if (!ImGui::TreeNode(label))
-					return;
-
-				// 解析扩展名列表
-				std::vector<std::string> exts;
-				if (extsCsv && *extsCsv) {
-					std::string csv = extsCsv;
-					size_t start = 0;
-					while (start < csv.size()) {
-						size_t comma = csv.find(',', start);
-						if (comma == std::string::npos) comma = csv.size();
-						std::string e = csv.substr(start, comma - start);
-						if (!e.empty()) exts.push_back(e);
-						start = comma + 1;
-					}
-				}
-
-				std::function<void(const fs::path&)> drawNode = [&](const fs::path& dir) {
-					PerformanceProfiler::GetInstance().RecordFileSystemCheck();
-					for (auto& entry : fs::directory_iterator(dir)) {
-						PerformanceProfiler::GetInstance().RecordFileSystemCheck();
-						const auto& p = entry.path();
-						std::string name = p.filename().string();
-						if (entry.is_directory()) {
-							if (ImGui::TreeNode(name.c_str())) {
-								drawNode(p);
-								ImGui::TreePop();
-							}
-						}
-						else {
-							if (!exts.empty()) {
-								std::string ext = p.extension().string();
-								bool match = false;
-								for (auto& e : exts) {
-									if (_stricmp(ext.c_str(), e.c_str()) == 0) {
-										match = true;
-										break;
-									}
-								}
-								if (!match) continue;
-							}
-							bool isSelected = (p.string() == selectedPath);
-							if (ImGui::Selectable(name.c_str(), isSelected)) {
-								selectedPath = p.string();
-								selectedCategory = category;
-							}
-						}
-					}
-				};
-
-				drawNode(fs::path(rootPath));
-
-				ImGui::TreePop();
-		};
-
-		// 常见资源类别（根节点）
-		drawDirTree("Models", "models", ".obj,.fbx,.gltf,.glb", "Model");
-		drawDirTree("Materials", "materials", ".xml,.jpg,.png,.hdr", "Material");
-		drawDirTree("Shaders", "shaders", ".vs,.fs,.gs,.vert,.frag", "Shader");
+		for (auto& category : m_assetBrowserCategories) {
+			DrawAssetBrowserCategory(category, selectedPath, selectedCategory);
+		}
 
 		ImGui::NextColumn();
 
@@ -1191,6 +1138,145 @@ public:
 		ImGui::End();
 	}
 private:
+	struct AssetBrowserNode {
+		std::string path;
+		std::string name;
+		bool isDirectory = false;
+		bool childrenLoaded = false;
+		std::vector<AssetBrowserNode> children;
+	};
+
+	struct AssetBrowserCategory {
+		std::string label;
+		std::string rootPath;
+		std::string category;
+		std::vector<std::string> extensions;
+		bool rootChecked = false;
+		bool rootExists = false;
+		AssetBrowserNode root;
+	};
+
+	void InitializeAssetBrowserCache() {
+		if (m_assetBrowserCacheInitialized) {
+			return;
+		}
+
+		m_assetBrowserCategories = {{
+			{ "Models", "models", "Model", { ".obj", ".fbx", ".gltf", ".glb" } },
+			{ "Materials", "materials", "Material", { ".xml", ".jpg", ".png", ".hdr" } },
+			{ "Shaders", "shaders", "Shader", { ".vs", ".fs", ".gs", ".vert", ".frag" } }
+		}};
+		for (auto& category : m_assetBrowserCategories) {
+			category.root.path = category.rootPath;
+			category.root.name = category.label;
+			category.root.isDirectory = true;
+		}
+		m_assetBrowserCacheInitialized = true;
+	}
+
+	void ResetAssetBrowserCache() {
+		m_assetBrowserCategories = {};
+		m_assetBrowserCacheInitialized = false;
+	}
+
+	bool EnsureAssetBrowserRoot(AssetBrowserCategory& category) {
+		if (category.rootChecked) {
+			return category.rootExists;
+		}
+
+		PerformanceProfiler::GetInstance().RecordFileSystemCheck();
+		std::error_code error;
+		category.rootExists = std::filesystem::is_directory(category.rootPath, error);
+		category.rootChecked = true;
+		return category.rootExists;
+	}
+
+	bool MatchesAssetExtension(
+		const std::filesystem::path& path,
+		const std::vector<std::string>& extensions) const {
+		if (extensions.empty()) {
+			return true;
+		}
+
+		const std::string extension = path.extension().string();
+		for (const auto& candidate : extensions) {
+			if (_stricmp(extension.c_str(), candidate.c_str()) == 0) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	void LoadAssetBrowserChildren(
+		AssetBrowserNode& node,
+		const std::vector<std::string>& extensions) {
+		if (node.childrenLoaded) {
+			return;
+		}
+
+		node.childrenLoaded = true;
+		PerformanceProfiler::GetInstance().RecordFileSystemCheck();
+		std::error_code error;
+		std::filesystem::directory_iterator iterator(node.path, error);
+		const std::filesystem::directory_iterator end;
+		while (!error && iterator != end) {
+			const auto& entry = *iterator;
+			PerformanceProfiler::GetInstance().RecordFileSystemCheck();
+			std::error_code entryError;
+			const bool isDirectory = entry.is_directory(entryError);
+			const auto path = entry.path();
+			if (!entryError && (isDirectory || MatchesAssetExtension(path, extensions))) {
+				AssetBrowserNode child;
+				child.path = path.string();
+				child.name = path.filename().string();
+				child.isDirectory = isDirectory;
+				node.children.push_back(std::move(child));
+			}
+			iterator.increment(error);
+		}
+	}
+
+	void DrawAssetBrowserChildren(
+		AssetBrowserNode& node,
+		const AssetBrowserCategory& category,
+		std::string& selectedPath,
+		std::string& selectedCategory) {
+		LoadAssetBrowserChildren(node, category.extensions);
+		for (auto& child : node.children) {
+			ImGui::PushID(child.path.c_str());
+			if (child.isDirectory) {
+				if (ImGui::TreeNode(child.name.c_str())) {
+					DrawAssetBrowserChildren(child, category, selectedPath, selectedCategory);
+					ImGui::TreePop();
+				}
+			}
+			else {
+				const bool isSelected = child.path == selectedPath;
+				if (ImGui::Selectable(child.name.c_str(), isSelected)) {
+					selectedPath = child.path;
+					selectedCategory = category.category;
+				}
+			}
+			ImGui::PopID();
+		}
+	}
+
+	void DrawAssetBrowserCategory(
+		AssetBrowserCategory& category,
+		std::string& selectedPath,
+		std::string& selectedCategory) {
+		if (!EnsureAssetBrowserRoot(category)) {
+			return;
+		}
+
+		ImGui::PushID(category.rootPath.c_str());
+		if (ImGui::TreeNode(category.label.c_str())) {
+			DrawAssetBrowserChildren(category.root, category, selectedPath, selectedCategory);
+			ImGui::TreePop();
+		}
+		ImGui::PopID();
+	}
+
 	void ApplyEditorStyle() {
 		ImGui::StyleColorsDark();
 		ImGuiStyle& style = ImGui::GetStyle();
@@ -1294,6 +1380,8 @@ private:
 	int m_viewportReadWidth = 0;
 	int m_viewportReadHeight = 0;
 	bool m_layoutInitialized = false;
+	bool m_assetBrowserCacheInitialized = false;
+	std::array<AssetBrowserCategory, 3> m_assetBrowserCategories{};
 	bool m_hasPickedPixel = false;
 	int m_pickedX = 0;
 	int m_pickedY = 0;
