@@ -33,6 +33,36 @@ uniform bool hasDiffuseMap;
 
 uniform Material material;
 
+layout(std140) uniform SystemProperties {
+    bool useBloom;
+    bool useShadowMap;
+    bool useGamma;
+    bool useHDR;
+    float bloomThreshold;
+    float gamma;
+    float exposure;
+    int bloomBlurIterations;
+    int shadowSampleNum;
+    int shadowSampleRings;
+    int shadowType;
+    int screenWidth;
+    int screenHeight;
+};
+
+vec3 LinearToSrgb(vec3 value)
+{
+	vec3 low = value * 12.92;
+	vec3 high = 1.055 * pow(max(value, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055;
+	return mix(low, high, step(vec3(0.0031308), value));
+}
+
+vec4 SampleColorTexture(sampler2D source, vec2 uv)
+{
+	vec4 sampleValue = texture(source, uv);
+	if (!useGamma) sampleValue.rgb = LinearToSrgb(sampleValue.rgb);
+	return sampleValue;
+}
+
 void main()
 {
 	// Store linear view-space depth in alpha; >0 means valid geometry pixel.
@@ -51,7 +81,7 @@ void main()
 		gAlbedoSpec = material.diffuse;
 	}
 	else{
-		vec4 diffuseSample = texture(texture_diffuse1, vec2(fs_in.TexCoords));
+		vec4 diffuseSample = SampleColorTexture(texture_diffuse1, vec2(fs_in.TexCoords));
 		// Material-driven cutout for cloth/card-like geometry.
 		float cutoff = material.useAlphaCutoff ? material.alphaCutoff : 0.1;
 		if (diffuseSample.a < cutoff) {

@@ -1,4 +1,5 @@
 #include "XmlMaterialManager.h"
+#include "Profiler.h"
 
 #include <fstream>
 #include <iostream>
@@ -58,6 +59,7 @@ namespace {
 }
 
 bool XmlMaterialManager::TryGetWriteTime(const std::string& path, fs::file_time_type& outTime) {
+    PerformanceProfiler::GetInstance().RecordFileSystemCheck();
     try {
         if (!fs::exists(path)) {
             return false;
@@ -120,7 +122,7 @@ int XmlMaterialManager::ReloadChangedFiles() {
             continue;
         }
 
-        if (GetOrLoadMaterialByFile(path)) {
+        if (LoadMaterialFile(path)) {
             m_lastReloadSuccessful = true;
             m_lastReloadMessage = "Reloaded material file: " + path;
             ++m_reloadCount;
@@ -144,7 +146,7 @@ int XmlMaterialManager::ReloadAllFiles() {
 
     for (auto& [path, entry] : m_materialFiles) {
         entry.lastContent.clear();
-        if (GetOrLoadMaterialByFile(path)) {
+        if (LoadMaterialFile(path)) {
             m_lastReloadSuccessful = true;
             m_lastReloadMessage = "Reloaded material file: " + path;
             ++m_reloadCount;
@@ -167,13 +169,29 @@ Material* XmlMaterialManager::GetMaterialRaw(const std::string& name) {
 
 Material* XmlMaterialManager::GetOrLoadMaterialByFile(const std::string& xmlPath) {
     auto entryIt = m_materialFiles.find(xmlPath);
-    fs::file_time_type currentWriteTime;
-    if (entryIt != m_materialFiles.end() &&
-        entryIt->second.material &&
-        TryGetWriteTime(xmlPath, currentWriteTime) &&
-        currentWriteTime == entryIt->second.lastWriteTime) {
+    if (entryIt != m_materialFiles.end() && entryIt->second.material) {
         return entryIt->second.material.get();
     }
+
+    return LoadMaterialFile(xmlPath);
+}
+
+bool XmlMaterialManager::ReloadMaterialFile(const std::string& xmlPath) {
+    if (LoadMaterialFile(xmlPath)) {
+        m_lastReloadSuccessful = true;
+        m_lastReloadMessage = "Reloaded material file: " + xmlPath;
+        ++m_reloadCount;
+        return true;
+    }
+
+    m_lastReloadSuccessful = false;
+    m_lastReloadMessage = "Failed to reload material file: " + xmlPath;
+    return false;
+}
+
+Material* XmlMaterialManager::LoadMaterialFile(const std::string& xmlPath) {
+    auto entryIt = m_materialFiles.find(xmlPath);
+    fs::file_time_type currentWriteTime;
 
     std::ifstream file(xmlPath);
     if (!file.is_open()) {
@@ -374,8 +392,9 @@ void XmlMaterialManager::ParseMaterialBlock(const std::string& materialBlock) {
                 Texture tex{};
                 tex.type = propName;
                 tex.path = split.second.c_str();
-                tex.textureID = TextureFromFile(split.second.c_str(), split.first, false, false);
-                tex.textureGammaID = TextureFromFile(split.second.c_str(), split.first, false, true);
+                const bool srgb = propName == "texture_diffuse" || propName == "albedo" || propName == "baseColor";
+                tex.textureID = TextureFromFile(split.second.c_str(), split.first, false, srgb);
+                tex.textureGammaID = tex.textureID;
                 material->AddProperty(propName, MaterialProperty::CreateTexture({ tex }));
             }
         }
@@ -514,8 +533,9 @@ bool XmlMaterialManager::ParseSingleMaterial(const std::string& xmlContent, Mate
                 Texture tex{};
                 tex.type = propName;
                 tex.path = split.second.c_str();
-                tex.textureID = TextureFromFile(split.second.c_str(), split.first, false, false);
-                tex.textureGammaID = TextureFromFile(split.second.c_str(), split.first, false, true);
+                const bool srgb = propName == "texture_diffuse" || propName == "albedo" || propName == "baseColor";
+                tex.textureID = TextureFromFile(split.second.c_str(), split.first, false, srgb);
+                tex.textureGammaID = tex.textureID;
                 material->AddProperty(propName, MaterialProperty::CreateTexture({ tex }));
             }
         }

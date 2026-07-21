@@ -1,4 +1,6 @@
 #include "Learn.h"
+#include "GLStateCache.h"
+#include "Profiler.h"
 #include <cstdint>
 
 void Planet::Init() {
@@ -39,7 +41,7 @@ void Planet::Init() {
     for (unsigned int i = 0; i < meshes.size(); i++)
     {
         unsigned int VAO = meshes[i].GetVAO();
-        glBindVertexArray(VAO);
+        GLState::BindVertexArray(VAO);
 
 
         GLsizei vec4Size = static_cast<GLsizei>(sizeof(glm::vec4));
@@ -60,13 +62,13 @@ void Planet::Init() {
         glVertexAttribDivisor(5, 1);
         glVertexAttribDivisor(6, 1);
 
-        glBindVertexArray(0);
+        GLState::BindVertexArray(0);
     }
  }
 
 void Planet::Draw() {
 	
-    glEnable(GL_DEPTH_TEST);
+    GLState::Enable(GL_DEPTH_TEST);
 
     planetShader->use();
     glm::mat4 model = glm::mat4(1.0f);
@@ -80,15 +82,19 @@ void Planet::Draw() {
     auto& meshes = rockModel->GetMeshes();
     rockShader->use();
     rockShader->setInt("texture_diffuse1", 0);
-    glActiveTexture(GL_TEXTURE0);
+    GLState::ActiveTexture(GL_TEXTURE0);
     
-    glBindTexture(GL_TEXTURE_2D, rockModel->GetTextureID(0));
+    GLState::BindTexture(GL_TEXTURE_2D, rockModel->GetTextureID(0));
     for (unsigned int i = 0; i < meshes.size(); i++)
     {
-        glBindVertexArray(meshes[i].GetVAO());
+        GLState::BindVertexArray(meshes[i].GetVAO());
+        PerformanceProfiler::GetInstance().RecordDraw(
+            GL_TRIANGLES,
+            meshes[i].GetVertexCount(),
+            amount);
         glDrawArraysInstanced(
             GL_TRIANGLES, 0,
-            static_cast<GLsizei>(meshes[i].vertices.size()),
+            static_cast<GLsizei>(meshes[i].GetVertexCount()),
             static_cast<GLsizei>(amount)
         );
     }

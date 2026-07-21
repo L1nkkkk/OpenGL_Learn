@@ -17,16 +17,16 @@ void InitVAOs() {
 	glGenBuffers(1, &globalVAOs.quadVBO);
 	glBindBuffer(GL_ARRAY_BUFFER, globalVAOs.quadVBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(screenVertices), &screenVertices, GL_STATIC_DRAW);
-	glBindVertexArray(globalVAOs.quadVAO);
+	GLState::BindVertexArray(globalVAOs.quadVAO);
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
 	glEnableVertexAttribArray(1);
 	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
-	glBindVertexArray(0);
+	GLState::BindVertexArray(0);
 
 	glGenVertexArrays(1, &globalVAOs.cubeVAO);
 	glGenBuffers(1, &globalVAOs.cubeVBO);
-	glBindVertexArray(globalVAOs.cubeVAO);
+	GLState::BindVertexArray(globalVAOs.cubeVAO);
 	glBindBuffer(GL_ARRAY_BUFFER, globalVAOs.cubeVBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), &cubeVertices, GL_STATIC_DRAW);
 	glEnableVertexAttribArray(0);
@@ -36,7 +36,7 @@ void InitVAOs() {
 	glGenBuffers(1, &globalVAOs.sphereVBO);
 	glBindBuffer(GL_ARRAY_BUFFER, globalVAOs.sphereVBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(sphereVertices), &sphereVertices, GL_STATIC_DRAW);
-	glBindVertexArray(globalVAOs.sphereVAO);
+	GLState::BindVertexArray(globalVAOs.sphereVAO);
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 }

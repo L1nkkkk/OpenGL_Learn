@@ -9,6 +9,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <cstdint>
 #include <string>
 #include <vector>
 #include <tuple>
@@ -21,23 +22,52 @@
 
 
 struct Vertex {
-	glm::vec3 Position;
-	glm::vec3 Normal;
-	glm::vec2 TexCoords;
-	glm::vec3 Tangent;
-	glm::vec3 Bitangent;
+	glm::vec3 Position = glm::vec3(0.0f);
+	glm::vec3 Normal = glm::vec3(0.0f);
+	glm::vec2 TexCoords = glm::vec2(0.0f);
+	glm::vec3 Tangent = glm::vec3(0.0f);
+	glm::vec3 Bitangent = glm::vec3(0.0f);
 	Vertex() = default;
 	Vertex(glm::vec3 Pos,glm::vec3 Nor,glm::vec2 Tex):
 		Position(Pos),Normal(Nor),TexCoords(Tex){}
 };
 
+class MeshGeometry {
+public:
+	MeshGeometry(std::vector<Vertex> vertices, std::vector<unsigned int> indices);
+	~MeshGeometry();
+
+	MeshGeometry(const MeshGeometry&) = delete;
+	MeshGeometry& operator=(const MeshGeometry&) = delete;
+
+	std::size_t GetVertexCount() const { return m_vertexCount; }
+	std::size_t GetIndexCount() const { return m_indexCount; }
+	std::size_t GetDrawCount() const { return m_indexCount != 0 ? m_indexCount : m_vertexCount; }
+	bool UsesIndices() const { return m_indexCount != 0; }
+	const glm::vec3& GetBoundsMin() const { return m_boundsMin; }
+	const glm::vec3& GetBoundsMax() const { return m_boundsMax; }
+	const glm::vec3& GetBoundsCenter() const { return m_boundsCenter; }
+	float GetBoundingRadius() const { return m_boundingRadius; }
+	unsigned int GetVAO() const { return m_vao; }
+
+private:
+	std::size_t m_vertexCount = 0;
+	std::size_t m_indexCount = 0;
+	glm::vec3 m_boundsMin = glm::vec3(0.0f);
+	glm::vec3 m_boundsMax = glm::vec3(0.0f);
+	glm::vec3 m_boundsCenter = glm::vec3(0.0f);
+	float m_boundingRadius = 0.0f;
+	unsigned int m_vao = 0;
+	unsigned int m_vbo = 0;
+	unsigned int m_ebo = 0;
+	std::uint64_t m_trackedGpuBytes = 0;
+};
+
 class Mesh {
 public:
-	std::vector<Vertex> vertices;
-
-	Material* material_ptr;
+	Material* material_ptr = nullptr;
 	std::shared_ptr<Material> material_owner;
-	unsigned int start_tex_index;
+	unsigned int start_tex_index = 0;
     // 可选：该 Mesh 对应的材质 XML 路径（如 "materials/Wood.xml"），用于懒加载 + 热重载
     std::string materialXmlPath;
 
@@ -45,23 +75,30 @@ public:
 		std::vector<unsigned int> indices,
 		 Material* material,
 		 std::shared_ptr<Material> ownedMaterial = nullptr,
-         const std::string& materialXmlPathIn = std::string());
+         const std::string& materialXmlPathIn = std::string(),
+		 bool tangentBasisReady = false);
 	Mesh(std::vector<Vertex> vertices,
 		std::vector<unsigned int> indices,
 		Material* material,
 		const std::string& materialXmlPathIn);
 
-	Mesh(const Mesh& other);
-	Mesh& operator=(const Mesh& other);
-	Mesh(Mesh&& other) noexcept;
-	Mesh& operator=(Mesh&& other) noexcept;
-	~Mesh();
+	Mesh(const Mesh& other) = default;
+	Mesh& operator=(const Mesh& other) = default;
+	Mesh(Mesh&& other) noexcept = default;
+	Mesh& operator=(Mesh&& other) noexcept = default;
+	~Mesh() = default;
 
 	void Draw(Shader* shader = nullptr);
 
-	unsigned int GetVAO() {
-		return VAO;
-	}
+	unsigned int GetVAO() const;
+	std::size_t GetVertexCount() const;
+	std::size_t GetIndexCount() const;
+	std::size_t GetDrawCount() const;
+	bool UsesIndices() const;
+	const glm::vec3& GetBoundsMin() const;
+	const glm::vec3& GetBoundsMax() const;
+	const glm::vec3& GetBoundsCenter() const;
+	float GetBoundingRadius() const;
 
 	bool GetActiveStatus() const {
 		return m_active;
@@ -73,9 +110,7 @@ public:
 
 private:
 	bool m_active = true;
-	unsigned int VAO, VBO, EBO;
-	void ReleaseGL();
-	void setupMesh();
+	std::shared_ptr<MeshGeometry> m_geometry;
 };
 
 class Model : public BaseObject {
@@ -173,7 +208,7 @@ public:
 	}
 
 	void Draw(Shader* shader = nullptr, unsigned int start_tex_index = 0);
-	glm::mat4 modelMatrix = glm::mat4(1.0f);
+	static void DestroyMeshCache();
 
 	std::unordered_map<int,bool> otherShaderUse;
 	std::unordered_map<int,std::shared_ptr<Shader>> otherShaderPtr;
@@ -194,6 +229,10 @@ public:
 
 	glm::vec3 GetLoacalCenter() {
 		return localCenter;
+	}
+
+	float GetLocalBoundingRadius() const {
+		return localBoundingRadius;
 	}
 
 	void AddOtherShader(OtherShaderType type, std::shared_ptr<Shader> shader) {
@@ -241,6 +280,7 @@ private:
 	std::vector<Texture> textures_loaded;
 	std::string directory;
 	glm::vec3 localCenter;
+	float localBoundingRadius = 0.0f;
 	std::string name;
 	DataSourceType m_dataSourceType = DataSourceType::Generated;
 	std::string m_dataSourceFilePath;
@@ -262,6 +302,8 @@ protected:
 	SystemProperties& properties = SystemProperties::GetInstance();
 };
 
-std::vector<Vertex> ComputeTBNVertices(std::vector<Vertex>& vertices, std::vector<unsigned int> indices);
+std::vector<Vertex> ComputeTBNVertices(
+	std::vector<Vertex>& vertices,
+	const std::vector<unsigned int>& indices);
 
 void ComputeTBN(Vertex&, Vertex&, Vertex&);

@@ -14,6 +14,8 @@
 #include "ShaderManager.h"
 #include "stb_image.h"
 #include "Global.h"
+#include "GLStateCache.h"
+#include "Profiler.h"
 
 struct Texture {
 	unsigned int textureID;
@@ -24,8 +26,8 @@ struct Texture {
 
 class CubeTexture {
 public:
-	unsigned int textureID;
-	unsigned int textureGammaID;
+	unsigned int textureID = 0;
+	unsigned int textureGammaID = 0;
 	CubeTexture(std::string path) {
 		int width, height, nrChannels;
 		unsigned char* data;
@@ -39,30 +41,13 @@ public:
 		};
 		stbi_set_flip_vertically_on_load(false);
 		glGenTextures(1, &textureID);
-		glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
-		for (int i = 0; i < 6; ++i) {
-			data = stbi_load((path + '/' + items[i]).c_str(), &width, &height, &nrChannels, 0);
-			if (data) {
-				glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-				stbi_image_free(data);
-			}
-			else {
-				std::cout << "Cubemap texture failed to load at path: " << items[i] << std::endl;
-				stbi_image_free(data);
-			}
-		}
-		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-
-		glGenTextures(1, &textureGammaID);
-		glBindTexture(GL_TEXTURE_CUBE_MAP, textureGammaID);
+		GLState::BindTexture(GL_TEXTURE_CUBE_MAP, textureID);
 		for (int i = 0; i < 6; ++i) {
 			data = stbi_load((path + '/' + items[i]).c_str(), &width, &height, &nrChannels, 0);
 			if (data) {
 				glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_SRGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+				m_estimatedBytes += static_cast<std::uint64_t>(width) *
+					static_cast<std::uint64_t>(height) * 3u;
 				stbi_image_free(data);
 			}
 			else {
@@ -75,11 +60,36 @@ public:
 		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-		glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+		textureGammaID = textureID;
+		PerformanceProfiler::GetInstance().RecordMemoryAllocation(
+			MemoryResourceType::Texture,
+			m_estimatedBytes);
+		GLState::BindTexture(GL_TEXTURE_CUBE_MAP, 0);
 		stbi_set_flip_vertically_on_load(true);
+	}
+	~CubeTexture() {
+		Release();
+	}
+
+	CubeTexture(const CubeTexture&) = delete;
+	CubeTexture& operator=(const CubeTexture&) = delete;
+
+	void Release() {
+		if (textureID == 0) {
+			return;
+		}
+		GLState::ForgetTexture(textureID);
+		glDeleteTextures(1, &textureID);
+		textureID = 0;
+		textureGammaID = 0;
+		PerformanceProfiler::GetInstance().RecordMemoryRelease(
+			MemoryResourceType::Texture,
+			m_estimatedBytes);
+		m_estimatedBytes = 0;
 	}
 private:
 	CubeTexture() = default;
+	std::uint64_t m_estimatedBytes = 0;
 };
 
 enum class MaterialPropertyType {
@@ -191,26 +201,18 @@ public:
 
 	static RenderState GetCurrentRenderState() {
 		RenderState rs;
-
-		// ��Ȳ��Կ���
-		rs.depthTest = (glIsEnabled(GL_DEPTH_TEST) == GL_TRUE);
-
-		// ���д�루Depth Mask��
-		GLboolean depthMask = GL_TRUE;
-		glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMask);
-		rs.depthWrite = (depthMask == GL_TRUE);
-
-		// ģ����Կ���
-		rs.stencilTest = (glIsEnabled(GL_STENCIL_TEST) == GL_TRUE);
+		rs.depthTest = GLState::IsEnabled(GL_DEPTH_TEST);
+		rs.depthWrite = GLState::GetDepthMask();
+		rs.stencilTest = GLState::IsEnabled(GL_STENCIL_TEST);
 
 		// ���ģʽ
-		if (!glIsEnabled(GL_BLEND)) {
+		if (!GLState::IsEnabled(GL_BLEND)) {
 			rs.blendMode = BlendMode::None;
 		}
 		else {
-			GLint srcRGB = 0, dstRGB = 0;
-			glGetIntegerv(GL_BLEND_SRC_RGB, &srcRGB);
-			glGetIntegerv(GL_BLEND_DST_RGB, &dstRGB);
+			GLenum srcRGB = GL_ONE;
+			GLenum dstRGB = GL_ZERO;
+			GLState::GetBlendFunc(srcRGB, dstRGB);
 
 			if (srcRGB == GL_SRC_ALPHA && dstRGB == GL_ONE_MINUS_SRC_ALPHA) {
 				rs.blendMode = BlendMode::AlphaBlend;
@@ -225,12 +227,11 @@ public:
 		}
 
 		// ���޳�ģʽ
-		if (!glIsEnabled(GL_CULL_FACE)) {
+		if (!GLState::IsEnabled(GL_CULL_FACE)) {
 			rs.cullMode = CullMode::None;
 		}
 		else {
-			GLint mode = 0;
-			glGetIntegerv(GL_CULL_FACE_MODE, &mode);
+			const GLenum mode = GLState::GetCullFace();
 			if (mode == GL_FRONT) {
 				rs.cullMode = CullMode::Front;
 			}
@@ -247,43 +248,43 @@ public:
 
 	static void RecoverRenderState(RenderState rs) {
 		// ��Ȳ���
-		if (rs.depthTest) glEnable(GL_DEPTH_TEST);
-		else              glDisable(GL_DEPTH_TEST);
+		if (rs.depthTest) GLState::Enable(GL_DEPTH_TEST);
+		else              GLState::Disable(GL_DEPTH_TEST);
 
 		// ���д��
-		glDepthMask(rs.depthWrite ? GL_TRUE : GL_FALSE);
+		GLState::DepthMask(rs.depthWrite);
 
 		// ģ�����
-		if (rs.stencilTest) glEnable(GL_STENCIL_TEST);
-		else                glDisable(GL_STENCIL_TEST);
+		if (rs.stencilTest) GLState::Enable(GL_STENCIL_TEST);
+		else                GLState::Disable(GL_STENCIL_TEST);
 
 		// ���ģʽ
 		switch (rs.blendMode) {
 		case BlendMode::None:
-			glDisable(GL_BLEND);
+			GLState::Disable(GL_BLEND);
 			break;
 		case BlendMode::AlphaBlend:
-			glEnable(GL_BLEND);
-			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			GLState::Enable(GL_BLEND);
+			GLState::BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 			break;
 		case BlendMode::Additive:
-			glEnable(GL_BLEND);
-			glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+			GLState::Enable(GL_BLEND);
+			GLState::BlendFunc(GL_SRC_ALPHA, GL_ONE);
 			break;
 		}
 
 		// ���޳�
 		switch (rs.cullMode) {
 		case CullMode::None:
-			glDisable(GL_CULL_FACE);
+			GLState::Disable(GL_CULL_FACE);
 			break;
 		case CullMode::Front:
-			glEnable(GL_CULL_FACE);
-			glCullFace(GL_FRONT);
+			GLState::Enable(GL_CULL_FACE);
+			GLState::CullFace(GL_FRONT);
 			break;
 		case CullMode::Back:
-			glEnable(GL_CULL_FACE);
-			glCullFace(GL_BACK);
+			GLState::Enable(GL_CULL_FACE);
+			GLState::CullFace(GL_BACK);
 			break;
 		}
 	}
@@ -332,9 +333,9 @@ public:
 		if (overrideShader->shaderName == "shadow" || overrideShader->shaderName == "shadowCube") {
 			// Transparent materials often use depthWrite=false; shadow pass must still
 			// write depth, otherwise transparent meshes disappear from shadow maps.
-			glEnable(GL_DEPTH_TEST);
-			glDepthMask(GL_TRUE);
-			glDisable(GL_BLEND);
+			GLState::Enable(GL_DEPTH_TEST);
+			GLState::DepthMask(true);
+			GLState::Disable(GL_BLEND);
 			return;
 		}
 		ApplyRenderState();
@@ -342,13 +343,13 @@ public:
 		// Special-case: AOInfo pass needs stable depth testing to avoid overdraw/ghosting
 		// in the normal attachment (Color2).
 		if (overrideShader->shaderName == "aoInfo") {
-			glEnable(GL_DEPTH_TEST);
-			glDepthMask(GL_FALSE); // normal-only pass: don't modify depth buffer
-			glDisable(GL_BLEND);
-			glDisable(GL_STENCIL_TEST);
-			glStencilFunc(GL_ALWAYS, 0, 0xFF);
-			glStencilMask(0x00);
-			glCullFace(GL_BACK); // keep default culling behavior
+			GLState::Enable(GL_DEPTH_TEST);
+			GLState::DepthMask(false); // normal-only pass: don't modify depth buffer
+			GLState::Disable(GL_BLEND);
+			GLState::Disable(GL_STENCIL_TEST);
+			GLState::StencilFunc(GL_ALWAYS, 0, 0xFF);
+			GLState::StencilMask(0x00);
+			GLState::CullFace(GL_BACK); // keep default culling behavior
 		}
 
 		SetMaterialParamsToShader(*overrideShader, overrideShader->shaderName == "deferProcess");
@@ -378,29 +379,29 @@ protected:
 	// Ӧ����Ⱦ״̬���������д��
 	virtual void ApplyRenderState() {
 		// ��Ȳ���
-		if (m_renderState.depthTest) glEnable(GL_DEPTH_TEST);
-		else glDisable(GL_DEPTH_TEST);
+		if (m_renderState.depthTest) GLState::Enable(GL_DEPTH_TEST);
+		else GLState::Disable(GL_DEPTH_TEST);
 		// ���д��
-		glDepthMask(m_renderState.depthWrite ? GL_TRUE : GL_FALSE);
+		GLState::DepthMask(m_renderState.depthWrite);
 		// ���ģʽ
 		if (m_renderState.blendMode != BlendMode::None) {
-			glEnable(GL_BLEND);
+			GLState::Enable(GL_BLEND);
 			if (m_renderState.blendMode == BlendMode::AlphaBlend) {
-				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+				GLState::BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 			}
 			else if (m_renderState.blendMode == BlendMode::Additive) {
-				glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+				GLState::BlendFunc(GL_SRC_ALPHA, GL_ONE);
 			}
 		}
 		else {
-			glDisable(GL_BLEND);
+			GLState::Disable(GL_BLEND);
 		}
 		// �޳�ģʽ
-		glEnable(GL_CULL_FACE);
+		GLState::Enable(GL_CULL_FACE);
 		switch (m_renderState.cullMode) {
-		case CullMode::Front: glCullFace(GL_FRONT); break;
-		case CullMode::Back: glCullFace(GL_BACK); break;
-		case CullMode::None: glDisable(GL_CULL_FACE); break;
+		case CullMode::Front: GLState::CullFace(GL_FRONT); break;
+		case CullMode::Back: GLState::CullFace(GL_BACK); break;
+		case CullMode::None: GLState::Disable(GL_CULL_FACE); break;
 		}
 
 	};
@@ -440,11 +441,11 @@ protected:
 				if (!deferProcessMode) {
 					shader.setBool("material.use_" + propertyName, false);
 					for(int i = 0; i < property.textures.size(); ++i) {
-						glActiveTexture(GL_TEXTURE0 + properties.USED_TEXTURE_NUM);
+						GLState::ActiveTexture(GL_TEXTURE0 + properties.USED_TEXTURE_NUM);
 						if (properties.GAMMA_CORRECTION)
-							glBindTexture(GL_TEXTURE_2D, property.textures[i].textureGammaID);
+							GLState::BindTexture(GL_TEXTURE_2D, property.textures[i].textureGammaID);
 						else
-							glBindTexture(GL_TEXTURE_2D, property.textures[i].textureID);
+							GLState::BindTexture(GL_TEXTURE_2D, property.textures[i].textureID);
 						shader.setInt("material." + propertyName + std::to_string(i+1), properties.USED_TEXTURE_NUM++); // ������Ԫ
 						shader.setBool("material.use_" + propertyName, true);
 					}
@@ -470,11 +471,11 @@ protected:
 					}
 
 					if (samplerName && hasMapName) {
-						glActiveTexture(GL_TEXTURE0 + slot);
+						GLState::ActiveTexture(GL_TEXTURE0 + slot);
 						if (properties.GAMMA_CORRECTION)
-							glBindTexture(GL_TEXTURE_2D, property.textures[0].textureGammaID);
+							GLState::BindTexture(GL_TEXTURE_2D, property.textures[0].textureGammaID);
 						else
-							glBindTexture(GL_TEXTURE_2D, property.textures[0].textureID);
+							GLState::BindTexture(GL_TEXTURE_2D, property.textures[0].textureID);
 						shader.setInt(*samplerName, slot);
 						shader.setBool(*hasMapName, true);
 					}
@@ -485,23 +486,129 @@ protected:
 	}
 };
 
+class MaterialBatchScope {
+public:
+	MaterialBatchScope()
+	{
+		if (s_depth++ == 0) {
+			s_previousState = Material::GetCurrentRenderState();
+			s_baseTextureUnit = SystemProperties::GetInstance().USED_TEXTURE_NUM;
+			ResetBindingCache();
+		}
+	}
+
+	~MaterialBatchScope()
+	{
+		if (--s_depth == 0) {
+			SystemProperties::GetInstance().USED_TEXTURE_NUM = s_baseTextureUnit;
+			Material::RecoverRenderState(s_previousState);
+			ResetBindingCache();
+		}
+	}
+
+	MaterialBatchScope(const MaterialBatchScope&) = delete;
+	MaterialBatchScope& operator=(const MaterialBatchScope&) = delete;
+
+	static bool IsActive()
+	{
+		return s_depth > 0;
+	}
+
+	static bool CanReuse(
+		const Material* material,
+		const Shader* shader,
+		bool gammaCorrection,
+		int baseTextureUnit)
+	{
+		return IsActive() &&
+			shader != nullptr &&
+			s_lastMaterial == material &&
+			s_lastShader == shader &&
+			s_lastGammaCorrection == gammaCorrection &&
+			s_lastBaseTextureUnit == baseTextureUnit;
+	}
+
+	static void MarkBound(
+		const Material* material,
+		const Shader* shader,
+		bool gammaCorrection,
+		int baseTextureUnit)
+	{
+		if (!IsActive()) {
+			return;
+		}
+		s_lastMaterial = material;
+		s_lastShader = shader;
+		s_lastGammaCorrection = gammaCorrection;
+		s_lastBaseTextureUnit = baseTextureUnit;
+	}
+
+private:
+	static void ResetBindingCache()
+	{
+		s_lastMaterial = nullptr;
+		s_lastShader = nullptr;
+		s_lastGammaCorrection = false;
+		s_lastBaseTextureUnit = -1;
+	}
+
+	inline static thread_local int s_depth = 0;
+	inline static thread_local RenderState s_previousState{};
+	inline static thread_local int s_baseTextureUnit = 0;
+	inline static thread_local const Material* s_lastMaterial = nullptr;
+	inline static thread_local const Shader* s_lastShader = nullptr;
+	inline static thread_local bool s_lastGammaCorrection = false;
+	inline static thread_local int s_lastBaseTextureUnit = -1;
+};
+
 class MaterialGaurd {
 public:
-	MaterialGaurd(Material& material, Shader* overrideShader = nullptr) :m_material(material) {
-		m_previousState = Material::GetCurrentRenderState();
-		m_material.Activate(overrideShader);
-	}
-	~MaterialGaurd() {
-		// �������
-		auto& property = SystemProperties::GetInstance();
-		int TextureUsedNum = m_material.GetTextureCount();
-		for(int i = 0; i < TextureUsedNum; ++i) {
-			glActiveTexture(GL_TEXTURE0 + --property.USED_TEXTURE_NUM);
-			glBindTexture(GL_TEXTURE_2D, 0);
+	MaterialGaurd(Material& material, Shader* overrideShader = nullptr)
+		: m_material(material)
+	{
+		auto& properties = SystemProperties::GetInstance();
+		m_startTextureUnit = properties.USED_TEXTURE_NUM;
+		m_inBatch = MaterialBatchScope::IsActive();
+
+		Shader* resolvedShader = overrideShader;
+		if (!resolvedShader) {
+			auto shader = ShaderManager::GetInstance().GetShaderByName(m_material.GetShaderName());
+			resolvedShader = shader.get();
 		}
-		Material::RecoverRenderState(m_previousState);
+
+		const bool cacheHit = MaterialBatchScope::CanReuse(
+			&m_material,
+			resolvedShader,
+			properties.GAMMA_CORRECTION,
+			m_startTextureUnit);
+		PerformanceProfiler::GetInstance().RecordMaterialBind(cacheHit);
+		if (cacheHit) {
+			return;
+		}
+
+		if (!m_inBatch) {
+			m_previousState = Material::GetCurrentRenderState();
+		}
+		m_material.Activate(overrideShader);
+		m_activated = true;
+		MaterialBatchScope::MarkBound(
+			&m_material,
+			resolvedShader,
+			properties.GAMMA_CORRECTION,
+			m_startTextureUnit);
 	}
+
+	~MaterialGaurd() {
+		SystemProperties::GetInstance().USED_TEXTURE_NUM = m_startTextureUnit;
+		if (!m_inBatch && m_activated) {
+			Material::RecoverRenderState(m_previousState);
+		}
+	}
+
 private:
 	Material& m_material;
 	RenderState m_previousState;
+	int m_startTextureUnit = 0;
+	bool m_inBatch = false;
+	bool m_activated = false;
 };

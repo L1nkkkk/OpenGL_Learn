@@ -119,7 +119,8 @@ int ShaderManager::ReloadChangedShaders()
 		if (!shader || !shader->HasSourceChanges()) {
 			continue;
 		}
-		if (ReloadShader(name, false)) {
+		// HasSourceChanges already performed the timestamp check.
+		if (ReloadShader(name, true)) {
 			++reloads;
 		}
 	}

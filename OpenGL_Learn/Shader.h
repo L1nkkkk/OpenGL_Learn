@@ -9,10 +9,11 @@
 #include <sstream>
 #include <iostream>
 #include <filesystem>
+#include <unordered_map>
 
 class Shader {
 public:
-	unsigned int ID;
+	unsigned int ID = 0;
 	std::string shaderName;
 	Shader() = default;
 	Shader(std::string name) {
@@ -51,6 +52,7 @@ protected:
 	bool CompileStage(unsigned int& shaderHandle, unsigned int shaderType, const std::string& source, const char* stageName, std::string& errorMessage) const;
 	static bool TryGetWriteTime(const std::string& path, std::filesystem::file_time_type& outTime);
 	void UpdateCachedWriteTimes();
+	int GetUniformLocation(const std::string& name) const;
 
 	std::string m_vertexPath;
 	std::string m_fragmentPath;
@@ -59,6 +61,8 @@ protected:
 	std::filesystem::file_time_type m_fragmentWriteTime = {};
 	std::filesystem::file_time_type m_geometryWriteTime = {};
 	bool m_isGeometryShader = false;
+	mutable std::unordered_map<std::string, int> m_uniformLocationCache;
+	inline static unsigned int s_boundProgram = 0;
 };
 
 class GeometryShader : public Shader {

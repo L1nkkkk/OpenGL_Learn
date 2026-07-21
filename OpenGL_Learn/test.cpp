@@ -23,7 +23,12 @@
 #include "ForwardRenderPass.h"
 #include "DeferRenderPass.h"
 #include "PostprocessRenderPass.h"
+#include "Profiler.h"
+#include "PerformanceBenchmark.h"
+#include "GLStateCache.h"
 #include "SceneStateIO.h"
+#include <algorithm>
+#include <iomanip>
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
@@ -108,14 +113,33 @@ void SetGui() {
 
 void SetUniformBuffer() {
 	view = camera.GetViewMatrix();
-	projection = glm::perspective(glm::radians(camera.fov), (float)properties.SCREEN_WIDTH / (float)properties.SCREEN_HEIGHT, 0.1f, 100.0f);
+	const float aspectRatio = static_cast<float>(properties.SCREEN_WIDTH) /
+		static_cast<float>((std::max)(1, properties.SCREEN_HEIGHT));
+	projection = camera.GetProjectionMatrix(aspectRatio);
 	ShaderManager& ShaderMgr = ShaderManager::GetInstance();
 	ShaderMgr.SetUBOData(ShaderManager::Matrices, 0, sizeof(glm::mat4), &view);
 	ShaderMgr.SetUBOData(ShaderManager::Matrices, sizeof(glm::mat4), sizeof(glm::mat4), &projection);
 	ShaderMgr.UpdateSystemUBO();
 }
 
-int main() {
+int main(int argc, char** argv) {
+	const auto applicationStart = PerformanceBenchmarkSession::Clock::now();
+	bool resourceSmokeTest = false;
+	PerformanceBenchmarkOptions benchmarkOptions;
+	std::string benchmarkOptionError;
+	if (!ParsePerformanceBenchmarkOptions(argc, argv, benchmarkOptions, benchmarkOptionError)) {
+		std::cerr << "Performance benchmark option error: " << benchmarkOptionError << std::endl;
+		return 4;
+	}
+	for (int i = 1; i < argc; ++i) {
+		if (std::string(argv[i]) == "--resource-smoke-test") {
+			resourceSmokeTest = true;
+		}
+	}
+	if (resourceSmokeTest && benchmarkOptions.enabled) {
+		std::cerr << "--resource-smoke-test and --performance-benchmark cannot run together" << std::endl;
+		return 4;
+	}
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -130,22 +154,40 @@ int main() {
 		return -1;
 	}
 	glfwMakeContextCurrent(window);
-	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	if (benchmarkOptions.enabled) {
+		// Make the benchmark request explicit. GPU timestamp zones remain the
+		// authoritative metric if a driver-level frame limiter is still active.
+		glfwSwapInterval(0);
+	}
+	else {
+		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	}
 	//register function after initializing window and before renderering
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-	glfwSetCursorPosCallback(window, mouse_callback);
-	glfwSetScrollCallback(window, scroll_callback);
+	if (!benchmarkOptions.enabled) {
+		glfwSetCursorPosCallback(window, mouse_callback);
+		glfwSetScrollCallback(window, scroll_callback);
+	}
 	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
 		std::cout << "Fail to initialize GLAD" << std::endl;
 		return -1;
 	}
 	glfwGetFramebufferSize(window, &properties.SCREEN_WIDTH, &properties.SCREEN_HEIGHT);
 	glViewport(0, 0, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
+	PerformanceProfiler::GetInstance().Initialize();
+	GLState::Initialize();
 
 	InitVAOs();
 
 	MyGui& mygui = MyGui::GetInstance();
 	mygui.Init(window);
+	if (benchmarkOptions.enabled || resourceSmokeTest) {
+		// Automated runs must not modify the user's editor layout or depend on
+		// ImGui's periodic ini writes while checks are being collected.
+		ImGuiIO& io = ImGui::GetIO();
+		io.IniFilename = nullptr;
+		io.ConfigFlags |= ImGuiConfigFlags_NoMouse | ImGuiConfigFlags_NoKeyboard;
+	}
 
 	ShaderManager& shaderManager = ShaderManager::GetInstance();
 	shaderManager.Init();
@@ -162,7 +204,7 @@ int main() {
 	unsigned int VAO, VBO;
 	glGenVertexArrays(1, &VAO);
 	glGenBuffers(1, &VBO);
-	glBindVertexArray(VAO);
+	GLState::BindVertexArray(VAO);
 	glBindBuffer(GL_ARRAY_BUFFER, VBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(points), points, GL_STATIC_DRAW);
 	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
@@ -248,16 +290,16 @@ int main() {
 	glGenBuffers(1, &skyboxVBO);
 	glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
-	glBindVertexArray(skyboxVAO);
+	GLState::BindVertexArray(skyboxVAO);
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-	glBindVertexArray(0);
+	GLState::BindVertexArray(0);
 	scene.skyboxSource = SkyboxSource(skybox, skyboxVAO, shaderManager.GetShader(ShaderManager::Skybox));
 	
 	FramebuffersManager& framebuffersMgr = FramebuffersManager::GetInstance();
 	AntiAliasManager& antiAliasMgr = AntiAliasManager::GetInstance();
 
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	GLState::BindFramebuffer(GL_FRAMEBUFFER, 0);
 	//glEnable(GL_CULL_FACE);
 	//glCullFace(GL_BACK);
 
@@ -270,10 +312,137 @@ int main() {
 	// PostprocessRenderPass 当前主循环未使用（最终图直接画到 postProcessFBO），若 Init 会多占一个同类型 FBO，导致列表里多一个 Forward+Gamma
 	auto postprocessRenderPass = new PostprocessRenderPass();
 	postprocessRenderPass->Init(properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
+	bool deferredPassActive = properties.DEFER_RENDERING;
+	int resourceSmokeFrames = 0;
+	bool resourceSmokeFailed = false;
+	auto reportResourceState = [&](const char* stage, std::size_t expectedBusyFBOs) {
+		const auto busyFBOs = FramebuffersManager::GetInstance().GetBusyFBOs();
+		const auto& memoryStats = PerformanceProfiler::GetInstance().GetMemoryStats();
+		const auto& renderTargets = memoryStats.categories[
+			static_cast<std::size_t>(MemoryResourceType::RenderTarget)];
+		const auto& meshCpu = memoryStats.categories[
+			static_cast<std::size_t>(MemoryResourceType::MeshCpu)];
+		const auto& meshGpu = memoryStats.categories[
+			static_cast<std::size_t>(MemoryResourceType::MeshGpu)];
+		const double renderTargetMiB =
+			static_cast<double>(renderTargets.currentBytes) / (1024.0 * 1024.0);
+		std::cout << "[ResourceSmoke] stage=" << stage
+			<< " busyFBOs=" << busyFBOs.size()
+			<< " renderTargetMiB=" << std::fixed << std::setprecision(2)
+			<< renderTargetMiB
+			<< " meshCpuMiB="
+			<< static_cast<double>(meshCpu.currentBytes) / (1024.0 * 1024.0)
+			<< " meshGpuMiB="
+			<< static_cast<double>(meshGpu.currentBytes) / (1024.0 * 1024.0)
+			<< std::endl;
+		if (busyFBOs.size() != expectedBusyFBOs) {
+			resourceSmokeFailed = true;
+		}
+	};
+	double nextHotReloadPollTime = 0.0;
+	PerformanceBenchmarkSession benchmarkSession(benchmarkOptions, applicationStart);
+	if (benchmarkOptions.enabled) {
+		GLint windowSampleBuffers = 0;
+		GLint windowSamples = 0;
+		glGetIntegerv(GL_SAMPLE_BUFFERS, &windowSampleBuffers);
+		glGetIntegerv(GL_SAMPLES, &windowSamples);
+		auto glString = [](GLenum name) -> std::string {
+			const GLubyte* value = glGetString(name);
+			return value ? reinterpret_cast<const char*>(value) : std::string();
+		};
+
+		int shadowCastingLights = 0;
+		for (auto& light : scene.lightSource.pointLights) {
+			if (light.GetActiveStatus() && light.useShadowMap) ++shadowCastingLights;
+		}
+		for (auto& light : scene.lightSource.directionLights) {
+			if (light.GetActiveStatus() && light.useShadowMap) ++shadowCastingLights;
+		}
+
+		PerformanceBenchmarkMetadata metadata;
+		metadata.scenePath = sceneStatePath;
+		metadata.glVendor = glString(GL_VENDOR);
+		metadata.glRenderer = glString(GL_RENDERER);
+		metadata.glVersion = glString(GL_VERSION);
+#ifdef NDEBUG
+		metadata.buildConfiguration = "Release";
+#else
+		metadata.buildConfiguration = "Debug";
+#endif
+#ifdef _WIN64
+		metadata.architecture = "x64";
+#else
+		metadata.architecture = "Win32";
+#endif
+		metadata.width = properties.SCREEN_WIDTH;
+		metadata.height = properties.SCREEN_HEIGHT;
+		metadata.windowSampleBuffers = windowSampleBuffers;
+		metadata.windowSamples = windowSamples;
+		metadata.requestedSwapInterval = 0;
+		metadata.pointLights = static_cast<int>(scene.lightSource.pointLights.size());
+		metadata.directionLights = static_cast<int>(scene.lightSource.directionLights.size());
+		metadata.spotLights = static_cast<int>(scene.lightSource.spotLights.size());
+		metadata.shadowCastingLights = shadowCastingLights;
+		metadata.bloom = properties.BLOOM;
+		metadata.deferredRendering = properties.DEFER_RENDERING;
+		metadata.ssao = properties.SSAO;
+		metadata.forwardNormalBuffer = properties.FORWARD_NORMAL_BUFFER;
+		metadata.gammaCorrection = properties.GAMMA_CORRECTION;
+		metadata.autoReloadShaders = properties.AUTO_RELOAD_SHADERS;
+		metadata.autoReloadMaterials = properties.AUTO_RELOAD_MATERIALS;
+		metadata.inputFrozen = true;
+		metadata.gpuTimingSupported = PerformanceProfiler::GetInstance().IsGpuTimingSupported();
+		benchmarkSession.SetMetadata(metadata);
+	}
 
 	while (!glfwWindowShouldClose(window)) {
+		if (benchmarkOptions.enabled &&
+			!benchmarkSession.OnFrameBoundary(!SceneStateIO::HasPendingAsyncLoads())) {
+			break;
+		}
+		PERF_FRAME_SCOPE();
 		// 分帧异步恢复存档里的文件模型，减少单帧加载峰值。
-		SceneStateIO::UpdateAsyncLoads(scene, 1);
+		{
+			PERF_CPU_SCOPE("Async Model Loads");
+			SceneStateIO::UpdateAsyncLoads(scene, 1);
+		}
+		if (resourceSmokeTest && !SceneStateIO::HasPendingAsyncLoads()) {
+			++resourceSmokeFrames;
+			if (resourceSmokeFrames == 30) {
+				reportResourceState("forward-default", 2);
+				properties.BLOOM = true;
+			}
+			else if (resourceSmokeFrames == 60) {
+				reportResourceState("forward-bloom", 4);
+				properties.DEFER_RENDERING = true;
+				properties.SSAO = true;
+			}
+			else if (resourceSmokeFrames == 90) {
+				reportResourceState("deferred-ssao-bloom", 6);
+				for (auto& light : scene.lightSource.pointLights) {
+					light.useShadowMap = true;
+				}
+				for (auto& light : scene.lightSource.directionLights) {
+					light.useShadowMap = true;
+				}
+			}
+			else if (resourceSmokeFrames == 120) {
+				reportResourceState("all-effects", 8);
+				properties.BLOOM = false;
+				properties.SSAO = false;
+				properties.DEFER_RENDERING = false;
+				for (auto& light : scene.lightSource.pointLights) {
+					light.useShadowMap = false;
+				}
+				for (auto& light : scene.lightSource.directionLights) {
+					light.useShadowMap = false;
+				}
+			}
+			else if (resourceSmokeFrames == 150) {
+				reportResourceState("reclaimed-default", 2);
+				glfwSetWindowShouldClose(window, true);
+			}
+		}
 
 		//calculate FPS
 		timer.Tick();
@@ -288,18 +457,29 @@ int main() {
 		}
 		glfwSetWindowTitle(window, windowTitle.str().c_str());
 
-		if (properties.AUTO_RELOAD_SHADERS) {
-			shaderManager.ReloadChangedShaders();
-		}
-		if (properties.AUTO_RELOAD_MATERIALS) {
-			xmlMaterialManager.ReloadChangedFiles();
+		const double currentTime = glfwGetTime();
+		if (currentTime >= nextHotReloadPollTime) {
+			PERF_CPU_SCOPE("Hot Reload Polling");
+			if (properties.AUTO_RELOAD_SHADERS) {
+				shaderManager.ReloadChangedShaders();
+			}
+			if (properties.AUTO_RELOAD_MATERIALS) {
+				xmlMaterialManager.ReloadChangedFiles();
+			}
+			const double pollInterval = (std::max)(
+				0.05,
+				static_cast<double>(properties.HOT_RELOAD_POLL_INTERVAL));
+			nextHotReloadPollTime = currentTime + pollInterval;
 		}
 		// NewFrame
-		SetGui();
+		{
+			PERF_CPU_SCOPE("Editor UI Build");
+			SetGui();
 
 		// ?? DockSpace??? Unity ?????
 		mygui.MainDockSpace();
 		mygui.Overview_UI();
+		mygui.Profiler_UI();
 
 		// Settings / Scene / Materials / XML / Assets ??? Dock ? DockSpace ?
 		mygui.Begin();              // Settings ??
@@ -315,15 +495,33 @@ int main() {
 		mygui.MaterialsInspector_UI();  // 全局材质 Inspector
 		mygui.MaterialsEditor_UI();     // XML 编辑器
 
+		}
 		//process input
-		ProcessInput(window);
+		{
+			PERF_CPU_SCOPE("Input and Frame Uniforms");
+			if (!benchmarkOptions.enabled) {
+				ProcessInput(window);
+			}
 		//reset used texture num
 		properties.ResetUsedTextureNum();
 		//before pass: set uniform buffer
-		SetUniformBuffer();
+			SetUniformBuffer();
+		}
+		{
+			PERF_GPU_SCOPE("GPU Frame");
 #ifdef USE_SCENE_SHADER
 		//first pass: render scene to framebuffer (HDR)
 		FBO* sceneFBO = nullptr;
+		if (properties.DEFER_RENDERING != deferredPassActive) {
+			if (properties.DEFER_RENDERING) {
+				forwardRenderPass->Destroy();
+			}
+			else {
+				deferRenderPass->Destroy();
+			}
+			FramebuffersManager::GetInstance().TrimUnusedFBOs();
+			deferredPassActive = properties.DEFER_RENDERING;
+		}
 		if (properties.DEFER_RENDERING) {
 			deferRenderPass->Render(&scene);
 			sceneFBO = deferRenderPass->GetOutputFBO();
@@ -334,7 +532,7 @@ int main() {
 		}
 		//second pass: postprocess (HDR + gamma + bloom) -> LDR texture (inside postprocessRenderPass)
 		
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		GLState::BindFramebuffer(GL_FRAMEBUFFER, 0);
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 		if (!properties.DEBUG_MODE) {
@@ -345,7 +543,7 @@ int main() {
 			postprocessRenderPass->Render(&scene, sceneFBO);
 		}
 		else {
-			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			GLState::BindFramebuffer(GL_FRAMEBUFFER, 0);
 			FBO* debugFBO = scene.GetDebugFramebuffer();
 			int size = static_cast<int>(debugFBO->textureIDs.size());
 			int len = 1;
@@ -354,19 +552,20 @@ int main() {
 			}
 			debugShader.use();
 			for(int i = 0;i<size;i++){
-				glActiveTexture(GL_TEXTURE0 + i);
-				glBindTexture(GL_TEXTURE_2D, debugFBO->textureIDs[i]);
+				GLState::ActiveTexture(GL_TEXTURE0 + i);
+				GLState::BindTexture(GL_TEXTURE_2D, debugFBO->textureIDs[i]);
 				std::string uniformName = "screenTexture[" + std::to_string(i) + "]";
 				debugShader.setInt(uniformName, i);
 			}
 			debugShader.setFloat("div", (float)len);
-			glBindVertexArray(globalVAOs.quadVAO);
-			glDisable(GL_DEPTH_TEST);
+			GLState::BindVertexArray(globalVAOs.quadVAO);
+			GLState::Disable(GL_DEPTH_TEST);
+			PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, 6);
 			glDrawArrays(GL_TRIANGLES, 0, 6);
 		}
 
 		// ??????? FBO??????????????? ImGui ?????
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		GLState::BindFramebuffer(GL_FRAMEBUFFER, 0);
 
 		// Viewport：默认(INDEX==0)显示最终渲染结果；否则显示所选 FBO 的指定 color/depth 附件
 		unsigned int viewportTextureID = 0;
@@ -403,36 +602,56 @@ int main() {
 				}
 			}
 		}
-		mygui.SetViewportReadSource(
-			viewportReadFBO,
-			viewportReadAttachment,
-			viewportReadIsDepth,
-			viewportReadWidth,
-			viewportReadHeight
-		);
-		mygui.Viewport_UI(viewportTextureID);
+		{
+			PERF_CPU_SCOPE("Viewport and Assets UI");
+			{
+				PERF_CPU_SCOPE("Viewport UI");
+				mygui.SetViewportReadSource(
+					viewportReadFBO,
+					viewportReadAttachment,
+					viewportReadIsDepth,
+					viewportReadWidth,
+					viewportReadHeight
+				);
+				mygui.Viewport_UI(viewportTextureID);
+			}
 
-		// Assets ?????? models / materials / shaders ??
-		mygui.AssetsBrowser_UI();
+			// Assets ?????? models / materials / shaders ??
+			{
+				PERF_CPU_SCOPE("Assets Browser UI");
+				mygui.AssetsBrowser_UI();
+			}
+		}
 
 		//Draw GUI
-		mygui.Render();
+		{
+			PERF_CPU_SCOPE("ImGui Render");
+			mygui.Render();
+		}
 #elif defined(USE_GEOMETRY_SHADER)
 		geometryShader.use();
-		glBindVertexArray(VAO);
+		GLState::BindVertexArray(VAO);
+		PerformanceProfiler::GetInstance().RecordDraw(GL_POINTS, 4);
 		glDrawArrays(GL_POINTS, 0, 4);
 #elif defined(USE_PLANET_SHADER)
-		glEnable(GL_DEPTH_TEST);
+		GLState::Enable(GL_DEPTH_TEST);
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 		glClearStencil(0);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		planet.Draw();
 #endif
+		}
 		//scene.ClearFBO();
 		// glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
-		glfwSwapBuffers(window);
-		glfwPollEvents();
+		{
+			PERF_CPU_SCOPE("Present and Events");
+			glfwSwapBuffers(window);
+			glfwPollEvents();
+		}
 		
+	}
+	if (benchmarkOptions.enabled && !benchmarkSession.IsComplete()) {
+		benchmarkSession.Abort();
 	}
 
 	forwardRenderPass->Destroy();
@@ -441,8 +660,26 @@ int main() {
 	delete deferRenderPass;
 	postprocessRenderPass->Destroy();
 	delete postprocessRenderPass;
-	SceneStateIO::Save(scene, camera, sceneStatePath);
+	if (!resourceSmokeTest && !benchmarkOptions.enabled) {
+		SceneStateIO::Save(scene, camera, sceneStatePath);
+	}
+	scene.SetSelectedModelForMaterials(nullptr);
+	scene.modelSource.models.clear();
+	scene.lightSource.pointLights.clear();
+	scene.lightSource.directionLights.clear();
+	scene.lightSource.spotLights.clear();
+	Model::DestroyMeshCache();
+	skybox.Release();
+	DestroyTextureCache();
+	FramebuffersManager::GetInstance().Shutdown();
+	PerformanceProfiler::GetInstance().Shutdown();
 
 	glfwTerminate();
+	if (resourceSmokeFailed) {
+		return 2;
+	}
+	if (benchmarkOptions.enabled && !benchmarkSession.WasSuccessful()) {
+		return 3;
+	}
 	return 0;
 }

@@ -15,6 +15,8 @@
 #include <filesystem>
 #include <cstring>
 #include <array>
+#include <algorithm>
+#include <cstdint>
 #include <windows.h>
 #include <commdlg.h>
 
@@ -24,6 +26,7 @@
 #include "XmlMaterialManager.h"
 #include "Material.h"
 #include "Model.h"
+#include "Profiler.h"
 #include "SceneStateIO.h"
 
 class MyGui {
@@ -105,7 +108,24 @@ public:
 
 	void Render() {
 		ImGui::Render();
-		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+		ImDrawData* drawData = ImGui::GetDrawData();
+		std::uint64_t uiDrawCalls = 0;
+		if (drawData) {
+			for (int listIndex = 0; listIndex < drawData->CmdListsCount; ++listIndex) {
+				const ImDrawList* drawList = drawData->CmdLists[listIndex];
+				for (int commandIndex = 0; commandIndex < drawList->CmdBuffer.Size; ++commandIndex) {
+					const ImDrawCmd& command = drawList->CmdBuffer[commandIndex];
+					if (command.UserCallback == nullptr && command.ElemCount > 0) {
+						++uiDrawCalls;
+					}
+				}
+			}
+			PerformanceProfiler::GetInstance().RecordUiDrawData(
+				uiDrawCalls,
+				static_cast<std::uint64_t>(drawData->TotalVtxCount),
+				static_cast<std::uint64_t>(drawData->TotalIdxCount));
+		}
+		ImGui_ImplOpenGL3_RenderDrawData(drawData);
 	}
 
 	void Overview_UI() {
@@ -147,13 +167,222 @@ public:
 		ImGui::End();
 	}
 
+	void Profiler_UI() {
+		if (!ImGui::Begin("Profiler")) {
+			ImGui::End();
+			return;
+		}
+
+		auto& profiler = PerformanceProfiler::GetInstance();
+		bool enabled = profiler.IsEnabled();
+		if (ImGui::Checkbox("Capture enabled", &enabled)) {
+			profiler.SetEnabled(enabled);
+		}
+
+		ImGui::SameLine();
+		bool gpuTiming = profiler.IsGpuTimingEnabled();
+		if (!profiler.IsGpuTimingSupported()) {
+			gpuTiming = false;
+		}
+		if (ImGui::Checkbox("GPU timing", &gpuTiming)) {
+			profiler.SetGpuTimingEnabled(gpuTiming);
+		}
+		if (!profiler.IsGpuTimingSupported()) {
+			ImGui::SameLine();
+			ImGui::TextDisabled("(not supported)");
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Reset stats")) {
+			profiler.ResetStatistics();
+		}
+
+		const auto& summary = profiler.GetFrameSummary();
+		const double averageFps = summary.averageCpuFrameMs > 0.0
+			? 1000.0 / summary.averageCpuFrameMs
+			: 0.0;
+
+		ImGui::Separator();
+		ImGui::Text("CPU Frame: %.3f ms   Average: %.3f ms (%.1f FPS)",
+			summary.cpuFrameMs,
+			summary.averageCpuFrameMs,
+			averageFps);
+		ImGui::Text("CPU P95: %.3f ms   P99: %.3f ms",
+			summary.cpuP95Ms,
+			summary.cpuP99Ms);
+		if (profiler.IsGpuTimingSupported()) {
+			ImGui::Text("GPU Frame: %.3f ms   Average: %.3f ms",
+				summary.gpuFrameMs,
+				summary.averageGpuFrameMs);
+		}
+
+		const auto& cpuHistory = profiler.GetCpuFrameHistory();
+		if (!cpuHistory.empty()) {
+			float maxValue = 16.67f;
+			for (float value : cpuHistory) {
+				maxValue = (std::max)(maxValue, value);
+			}
+			ImGui::PlotLines(
+				"CPU frame history",
+				cpuHistory.data(),
+				static_cast<int>(cpuHistory.size()),
+				0,
+				nullptr,
+				0.0f,
+				maxValue * 1.15f,
+				ImVec2(-1.0f, 70.0f));
+		}
+
+		const auto& gpuHistory = profiler.GetGpuFrameHistory();
+		if (!gpuHistory.empty()) {
+			float maxValue = 16.67f;
+			for (float value : gpuHistory) {
+				maxValue = (std::max)(maxValue, value);
+			}
+			ImGui::PlotLines(
+				"GPU frame history",
+				gpuHistory.data(),
+				static_cast<int>(gpuHistory.size()),
+				0,
+				nullptr,
+				0.0f,
+				maxValue * 1.15f,
+				ImVec2(-1.0f, 70.0f));
+		}
+
+		auto drawZoneTable = [](const char* id, const std::vector<ProfilerZoneStats>& zones) {
+			if (zones.empty()) {
+				ImGui::TextDisabled("No samples yet.");
+				return;
+			}
+
+			ImGui::Columns(4, id, true);
+			ImGui::TextUnformatted("Zone");
+			ImGui::NextColumn();
+			ImGui::TextUnformatted("Latest");
+			ImGui::NextColumn();
+			ImGui::TextUnformatted("Average");
+			ImGui::NextColumn();
+			ImGui::TextUnformatted("Peak");
+			ImGui::NextColumn();
+			ImGui::Separator();
+
+			for (const auto& zone : zones) {
+				ImGui::TextUnformatted(zone.name.c_str());
+				ImGui::NextColumn();
+				ImGui::Text("%.3f ms", zone.latestMs);
+				ImGui::NextColumn();
+				ImGui::Text("%.3f ms", zone.averageMs);
+				ImGui::NextColumn();
+				ImGui::Text("%.3f ms", zone.peakMs);
+				ImGui::NextColumn();
+			}
+			ImGui::Columns(1);
+		};
+
+		if (ImGui::CollapsingHeader("CPU Zones", ImGuiTreeNodeFlags_DefaultOpen)) {
+			drawZoneTable("cpu_profile_zones", profiler.GetCpuZoneStats());
+		}
+		if (ImGui::CollapsingHeader("GPU Zones", ImGuiTreeNodeFlags_DefaultOpen)) {
+			drawZoneTable("gpu_profile_zones", profiler.GetGpuZoneStats());
+		}
+
+		const auto& renderStats = profiler.GetRenderStats();
+		if (ImGui::CollapsingHeader("Render Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
+			ImGui::Text("Scene draw calls: %llu", static_cast<unsigned long long>(renderStats.drawCalls));
+			ImGui::Text("Submitted triangles: %llu", static_cast<unsigned long long>(renderStats.submittedTriangles));
+			ImGui::Text("Submitted vertices: %llu", static_cast<unsigned long long>(renderStats.submittedVertices));
+			ImGui::Text("Shader binds: %llu", static_cast<unsigned long long>(renderStats.shaderBinds));
+			ImGui::Text("Uniform updates: %llu", static_cast<unsigned long long>(renderStats.uniformUpdates));
+			ImGui::Text("Uniform location queries / cache hits: %llu / %llu",
+				static_cast<unsigned long long>(renderStats.uniformLocationQueries),
+				static_cast<unsigned long long>(renderStats.uniformLocationCacheHits));
+			ImGui::Text("Material binds / cache hits: %llu / %llu",
+				static_cast<unsigned long long>(renderStats.materialBinds),
+				static_cast<unsigned long long>(renderStats.materialBindCacheHits));
+			ImGui::Text("Render state changes / cache hits: %llu / %llu",
+				static_cast<unsigned long long>(renderStats.renderStateChanges),
+				static_cast<unsigned long long>(renderStats.renderStateCacheHits));
+			ImGui::Text("Render state driver queries: %llu",
+				static_cast<unsigned long long>(renderStats.renderStateQueries));
+			ImGui::Text("Texture state changes / cache hits: %llu / %llu",
+				static_cast<unsigned long long>(renderStats.textureStateChanges),
+				static_cast<unsigned long long>(renderStats.textureStateCacheHits));
+			ImGui::Text("VAO binds / cache hits: %llu / %llu",
+				static_cast<unsigned long long>(renderStats.vertexArrayBinds),
+				static_cast<unsigned long long>(renderStats.vertexArrayBindCacheHits));
+			ImGui::Text("Framebuffer binds / cache hits: %llu / %llu",
+				static_cast<unsigned long long>(renderStats.framebufferBinds),
+				static_cast<unsigned long long>(renderStats.framebufferBindCacheHits));
+			ImGui::Text("Filesystem checks: %llu", static_cast<unsigned long long>(renderStats.fileSystemChecks));
+			ImGui::Text("Asset browser cache hits / misses: %llu / %llu",
+				static_cast<unsigned long long>(renderStats.assetBrowserCacheHits),
+				static_cast<unsigned long long>(renderStats.assetBrowserCacheMisses));
+			ImGui::Text("Models: %llu active / %llu visible / %llu culled",
+				static_cast<unsigned long long>(renderStats.activeModels),
+				static_cast<unsigned long long>(renderStats.visibleModels),
+				static_cast<unsigned long long>(renderStats.culledModels));
+			ImGui::Text("Meshes: %llu opaque / %llu transparent",
+				static_cast<unsigned long long>(renderStats.opaqueMeshes),
+				static_cast<unsigned long long>(renderStats.transparentMeshes));
+			ImGui::Text("Frustum-culled meshes: %llu",
+				static_cast<unsigned long long>(renderStats.culledMeshes));
+			ImGui::Text("ImGui draw calls: %llu", static_cast<unsigned long long>(renderStats.uiDrawCalls));
+			ImGui::Text("ImGui vertices / indices: %llu / %llu",
+				static_cast<unsigned long long>(renderStats.uiVertices),
+				static_cast<unsigned long long>(renderStats.uiIndices));
+		}
+
+		if (ImGui::CollapsingHeader("Memory Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
+			const auto& memoryStats = profiler.GetMemoryStats();
+			constexpr double kBytesPerMiB = 1024.0 * 1024.0;
+			ImGui::Text("Process working set: %.2f MiB",
+				static_cast<double>(memoryStats.processWorkingSetBytes) / kBytesPerMiB);
+			ImGui::Text("Process private bytes: %.2f MiB",
+				static_cast<double>(memoryStats.processPrivateBytes) / kBytesPerMiB);
+
+			static const char* categoryNames[] = {
+				"Textures",
+				"Mesh CPU",
+				"Mesh GPU",
+				"Render targets"
+			};
+			ImGui::Columns(4, "memory_categories", true);
+			ImGui::TextUnformatted("Category"); ImGui::NextColumn();
+			ImGui::TextUnformatted("Current"); ImGui::NextColumn();
+			ImGui::TextUnformatted("Peak"); ImGui::NextColumn();
+			ImGui::TextUnformatted("Resources"); ImGui::NextColumn();
+			ImGui::Separator();
+			for (std::size_t i = 0; i < memoryStats.categories.size(); ++i) {
+				const auto& category = memoryStats.categories[i];
+				ImGui::TextUnformatted(categoryNames[i]); ImGui::NextColumn();
+				ImGui::Text("%.2f MiB", static_cast<double>(category.currentBytes) / kBytesPerMiB); ImGui::NextColumn();
+				ImGui::Text("%.2f MiB", static_cast<double>(category.peakBytes) / kBytesPerMiB); ImGui::NextColumn();
+				ImGui::Text("%llu", static_cast<unsigned long long>(category.resourceCount)); ImGui::NextColumn();
+			}
+			ImGui::Columns(1);
+			ImGui::Text("Texture cache hits / misses: %llu / %llu",
+				static_cast<unsigned long long>(memoryStats.textureCacheHits),
+				static_cast<unsigned long long>(memoryStats.textureCacheMisses));
+		}
+
+		ImGui::End();
+	}
+
 	// Assets 面板：浏览项目中的 models / materials 等资源（类似 Unity Project 窗口）
 	void AssetsBrowser_UI() {
-		namespace fs = std::filesystem;
 		if (!ImGui::Begin("Assets")) {
 			ImGui::End();
 			return;
 		}
+
+		if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+			ImGui::IsKeyPressed(ImGuiKey_F5, false)) {
+			ResetAssetBrowserCache();
+		}
+		const bool cacheHit = m_assetBrowserCacheInitialized;
+		InitializeAssetBrowserCache();
+		PerformanceProfiler::GetInstance().RecordAssetBrowserCacheLookup(cacheHit);
 
 		// 左：资源树  右：选中资源详情
 		static std::string selectedPath;
@@ -164,69 +393,9 @@ public:
 		ImGui::TextUnformatted("Project Assets");
 		ImGui::Separator();
 
-		auto drawDirTree = [&](const char* label,
-			const char* rootPath,
-			const char* extsCsv,
-			const char* category) {
-				if (!fs::exists(rootPath))
-					return;
-				if (!ImGui::TreeNode(label))
-					return;
-
-				// 解析扩展名列表
-				std::vector<std::string> exts;
-				if (extsCsv && *extsCsv) {
-					std::string csv = extsCsv;
-					size_t start = 0;
-					while (start < csv.size()) {
-						size_t comma = csv.find(',', start);
-						if (comma == std::string::npos) comma = csv.size();
-						std::string e = csv.substr(start, comma - start);
-						if (!e.empty()) exts.push_back(e);
-						start = comma + 1;
-					}
-				}
-
-				std::function<void(const fs::path&)> drawNode = [&](const fs::path& dir) {
-					for (auto& entry : fs::directory_iterator(dir)) {
-						const auto& p = entry.path();
-						std::string name = p.filename().string();
-						if (entry.is_directory()) {
-							if (ImGui::TreeNode(name.c_str())) {
-								drawNode(p);
-								ImGui::TreePop();
-							}
-						}
-						else {
-							if (!exts.empty()) {
-								std::string ext = p.extension().string();
-								bool match = false;
-								for (auto& e : exts) {
-									if (_stricmp(ext.c_str(), e.c_str()) == 0) {
-										match = true;
-										break;
-									}
-								}
-								if (!match) continue;
-							}
-							bool isSelected = (p.string() == selectedPath);
-							if (ImGui::Selectable(name.c_str(), isSelected)) {
-								selectedPath = p.string();
-								selectedCategory = category;
-							}
-						}
-					}
-				};
-
-				drawNode(fs::path(rootPath));
-
-				ImGui::TreePop();
-		};
-
-		// 常见资源类别（根节点）
-		drawDirTree("Models", "models", ".obj,.fbx,.gltf,.glb", "Model");
-		drawDirTree("Materials", "materials", ".xml,.jpg,.png,.hdr", "Material");
-		drawDirTree("Shaders", "shaders", ".vs,.fs,.gs,.vert,.frag", "Shader");
+		for (auto& category : m_assetBrowserCategories) {
+			DrawAssetBrowserCategory(category, selectedPath, selectedCategory);
+		}
 
 		ImGui::NextColumn();
 
@@ -248,7 +417,7 @@ public:
 						mgr.LoadFromFile(selectedPath);
 					}
 					else {
-						mgr.GetOrLoadMaterialByFile(selectedPath);
+						mgr.ReloadMaterialFile(selectedPath);
 					}
 				}
 			}
@@ -286,7 +455,12 @@ public:
 		}
 		ImGui::Checkbox("Auto Reload Shaders", &properties.AUTO_RELOAD_SHADERS);
 		ImGui::Checkbox("Auto Reload Materials", &properties.AUTO_RELOAD_MATERIALS);
+		ImGui::DragFloat("Hot Reload Poll Interval", &properties.HOT_RELOAD_POLL_INTERVAL, 0.05f, 0.05f, 2.0f, "%.2f s");
 		ImGui::Checkbox("Defer Rendering", &properties.DEFER_RENDERING);
+		ImGui::Checkbox("Frustum Culling", &properties.FRUSTUM_CULLING);
+		if (!properties.DEFER_RENDERING) {
+			ImGui::Checkbox("Forward Normal Buffer", &properties.FORWARD_NORMAL_BUFFER);
+		}
 		if (properties.DEFER_RENDERING) {
 			ImGui::Checkbox("SSAO", &properties.SSAO);
 			if (properties.SSAO) {
@@ -653,8 +827,9 @@ public:
 							Texture newTex{};
 							newTex.type = tex.type;
 							newTex.path = file.c_str();
-							newTex.textureID = TextureFromFile(file.c_str(), dir, false, false);
-							newTex.textureGammaID = TextureFromFile(file.c_str(), dir, false, true);
+							const bool srgb = tex.type == "texture_diffuse" || tex.type == "albedo" || tex.type == "baseColor";
+							newTex.textureID = TextureFromFile(file.c_str(), dir, false, srgb);
+							newTex.textureGammaID = newTex.textureID;
 							tex = newTex;
 						}
 						}
@@ -931,7 +1106,7 @@ public:
 						mgr.LoadFromFile(currentPath);
 					}
 					else {
-						mgr.GetOrLoadMaterialByFile(currentPath);
+						mgr.ReloadMaterialFile(currentPath);
 					}
 				}
 				else {
@@ -963,6 +1138,145 @@ public:
 		ImGui::End();
 	}
 private:
+	struct AssetBrowserNode {
+		std::string path;
+		std::string name;
+		bool isDirectory = false;
+		bool childrenLoaded = false;
+		std::vector<AssetBrowserNode> children;
+	};
+
+	struct AssetBrowserCategory {
+		std::string label;
+		std::string rootPath;
+		std::string category;
+		std::vector<std::string> extensions;
+		bool rootChecked = false;
+		bool rootExists = false;
+		AssetBrowserNode root;
+	};
+
+	void InitializeAssetBrowserCache() {
+		if (m_assetBrowserCacheInitialized) {
+			return;
+		}
+
+		m_assetBrowserCategories = {{
+			{ "Models", "models", "Model", { ".obj", ".fbx", ".gltf", ".glb" } },
+			{ "Materials", "materials", "Material", { ".xml", ".jpg", ".png", ".hdr" } },
+			{ "Shaders", "shaders", "Shader", { ".vs", ".fs", ".gs", ".vert", ".frag" } }
+		}};
+		for (auto& category : m_assetBrowserCategories) {
+			category.root.path = category.rootPath;
+			category.root.name = category.label;
+			category.root.isDirectory = true;
+		}
+		m_assetBrowserCacheInitialized = true;
+	}
+
+	void ResetAssetBrowserCache() {
+		m_assetBrowserCategories = {};
+		m_assetBrowserCacheInitialized = false;
+	}
+
+	bool EnsureAssetBrowserRoot(AssetBrowserCategory& category) {
+		if (category.rootChecked) {
+			return category.rootExists;
+		}
+
+		PerformanceProfiler::GetInstance().RecordFileSystemCheck();
+		std::error_code error;
+		category.rootExists = std::filesystem::is_directory(category.rootPath, error);
+		category.rootChecked = true;
+		return category.rootExists;
+	}
+
+	bool MatchesAssetExtension(
+		const std::filesystem::path& path,
+		const std::vector<std::string>& extensions) const {
+		if (extensions.empty()) {
+			return true;
+		}
+
+		const std::string extension = path.extension().string();
+		for (const auto& candidate : extensions) {
+			if (_stricmp(extension.c_str(), candidate.c_str()) == 0) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	void LoadAssetBrowserChildren(
+		AssetBrowserNode& node,
+		const std::vector<std::string>& extensions) {
+		if (node.childrenLoaded) {
+			return;
+		}
+
+		node.childrenLoaded = true;
+		PerformanceProfiler::GetInstance().RecordFileSystemCheck();
+		std::error_code error;
+		std::filesystem::directory_iterator iterator(node.path, error);
+		const std::filesystem::directory_iterator end;
+		while (!error && iterator != end) {
+			const auto& entry = *iterator;
+			PerformanceProfiler::GetInstance().RecordFileSystemCheck();
+			std::error_code entryError;
+			const bool isDirectory = entry.is_directory(entryError);
+			const auto path = entry.path();
+			if (!entryError && (isDirectory || MatchesAssetExtension(path, extensions))) {
+				AssetBrowserNode child;
+				child.path = path.string();
+				child.name = path.filename().string();
+				child.isDirectory = isDirectory;
+				node.children.push_back(std::move(child));
+			}
+			iterator.increment(error);
+		}
+	}
+
+	void DrawAssetBrowserChildren(
+		AssetBrowserNode& node,
+		const AssetBrowserCategory& category,
+		std::string& selectedPath,
+		std::string& selectedCategory) {
+		LoadAssetBrowserChildren(node, category.extensions);
+		for (auto& child : node.children) {
+			ImGui::PushID(child.path.c_str());
+			if (child.isDirectory) {
+				if (ImGui::TreeNode(child.name.c_str())) {
+					DrawAssetBrowserChildren(child, category, selectedPath, selectedCategory);
+					ImGui::TreePop();
+				}
+			}
+			else {
+				const bool isSelected = child.path == selectedPath;
+				if (ImGui::Selectable(child.name.c_str(), isSelected)) {
+					selectedPath = child.path;
+					selectedCategory = category.category;
+				}
+			}
+			ImGui::PopID();
+		}
+	}
+
+	void DrawAssetBrowserCategory(
+		AssetBrowserCategory& category,
+		std::string& selectedPath,
+		std::string& selectedCategory) {
+		if (!EnsureAssetBrowserRoot(category)) {
+			return;
+		}
+
+		ImGui::PushID(category.rootPath.c_str());
+		if (ImGui::TreeNode(category.label.c_str())) {
+			DrawAssetBrowserChildren(category.root, category, selectedPath, selectedCategory);
+			ImGui::TreePop();
+		}
+		ImGui::PopID();
+	}
+
 	void ApplyEditorStyle() {
 		ImGui::StyleColorsDark();
 		ImGuiStyle& style = ImGui::GetStyle();
@@ -1023,6 +1337,7 @@ private:
 		ImGui::DockBuilderDockWindow("Renderer", left);
 		ImGui::DockBuilderDockWindow("Scene", lowerLeft);
 		ImGui::DockBuilderDockWindow("Assets", bottom);
+		ImGui::DockBuilderDockWindow("Profiler", bottom);
 		ImGui::DockBuilderDockWindow("Viewport", center);
 		ImGui::DockBuilderDockWindow("Materials Inspector", right);
 		ImGui::DockBuilderDockWindow("Model Materials", right);
@@ -1036,7 +1351,7 @@ private:
 		glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prevReadFBO);
 		glGetIntegerv(GL_READ_BUFFER, &prevReadBuffer);
 
-		glBindFramebuffer(GL_READ_FRAMEBUFFER, m_viewportReadFBO);
+		GLState::BindFramebuffer(GL_READ_FRAMEBUFFER, m_viewportReadFBO);
 		if (m_viewportReadIsDepth) {
 			float d = 0.0f;
 			glReadPixels(x, y, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &d);
@@ -1053,7 +1368,7 @@ private:
 		m_pickedY = y;
 		m_hasPickedPixel = true;
 
-		glBindFramebuffer(GL_READ_FRAMEBUFFER, (unsigned int)prevReadFBO);
+		GLState::BindFramebuffer(GL_READ_FRAMEBUFFER, (unsigned int)prevReadFBO);
 		glReadBuffer((unsigned int)prevReadBuffer);
 	}
 
@@ -1065,6 +1380,8 @@ private:
 	int m_viewportReadWidth = 0;
 	int m_viewportReadHeight = 0;
 	bool m_layoutInitialized = false;
+	bool m_assetBrowserCacheInitialized = false;
+	std::array<AssetBrowserCategory, 3> m_assetBrowserCategories{};
 	bool m_hasPickedPixel = false;
 	int m_pickedX = 0;
 	int m_pickedY = 0;

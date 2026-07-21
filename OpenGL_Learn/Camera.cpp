@@ -51,7 +51,11 @@ void Camera::CameraSrollCallback(double xoffset, double yoffset) {
 }
 
 glm::mat4 Camera::GetViewMatrix() {
-	return glm::lookAt(cameraPos, cameraPos - cameraDirection, up);
+	return glm::lookAt(cameraPos, cameraPos + cameraFront, up);
+}
+
+glm::mat4 Camera::GetProjectionMatrix(float aspectRatio, float nearPlane, float farPlane) const {
+	return glm::perspective(glm::radians(fov), aspectRatio, nearPlane, farPlane);
 }
 
 bool Camera::CheckCameraMoved() {

@@ -41,11 +41,12 @@ public:
 
     const std::string& GetXmlPath() const { return m_xmlPath; }
 
-    // 按“单文件单材质”的方式获取 / 重载材质。
+    // 按“单文件单材质”的方式获取材质。
     // 约定：xmlPath 是类似 "materials/Wood.xml" 这样的路径。
-    // 每次调用都会读取该文件内容，如果内容与上次不同，则重新解析并更新对应的 Material。
+    // 首次调用时加载，之后直接返回缓存；热重载由 ReloadChangedFiles 集中处理。
     // 返回的 Material* 在下一次同路径重载前保持有效。
     Material* GetOrLoadMaterialByFile(const std::string& xmlPath);
+    bool ReloadMaterialFile(const std::string& xmlPath);
 
     // 收集当前已加载的所有材质（包括 materials.xml 中的命名材质，
     // 以及按文件路径缓存的单文件材质）。
@@ -70,6 +71,7 @@ private:
         std::filesystem::file_time_type lastWriteTime = {};
     };
     bool ParseSingleMaterial(const std::string& xmlContent, MaterialFileEntry& entry);
+    Material* LoadMaterialFile(const std::string& xmlPath);
     static bool TryGetWriteTime(const std::string& path, std::filesystem::file_time_type& outTime);
 
 private:

@@ -1,9 +1,11 @@
 #pragma once
+#include "GLStateCache.h"
 #include "stb_image.h"
 #include <iostream>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <string>
+#include <cstdint>
 #include <unordered_map>
 #include <vector>
 #include <functional>
@@ -43,6 +45,7 @@ public:
     bool DEBUG_MODE = false;
     bool AUTO_RELOAD_SHADERS = true;
     bool AUTO_RELOAD_MATERIALS = true;
+    float HOT_RELOAD_POLL_INTERVAL = 0.25f;
 
     // Viewport ?????????? FBO ?? GetBusyFBOs() ??????????????????? FBO textureIDs ????????
     int VIEWPORT_DEBUG_FBO_INDEX = 0;
@@ -71,6 +74,8 @@ public:
     int BLOOM_BLUR_ITERATIONS = 5;
 
     bool DEFER_RENDERING = false;
+    bool FRUSTUM_CULLING = true;
+    bool FORWARD_NORMAL_BUFFER = false;
     /// 屏幕空间环境光遮蔽（仅延迟管线）：当前为采样 Pass 输出 R8/R16 可视度纹理，后续再接入模糊与光照。
     bool SSAO = false;
     float SSAO_RADIUS = 0.35f;
@@ -573,9 +578,9 @@ public:
 		"BrightColor",
 	};
 	bool isBusy = false;
-	unsigned int framebufferID;
+	unsigned int framebufferID = 0;
 	std::vector<unsigned int> textureIDs;
-	unsigned int rboID;
+	unsigned int rboID = 0;
 	// When attr.hasDepthTexture == true, depth is stored in this texture.
 	unsigned int depthTextureID = 0;
 	bool init = false;
@@ -599,22 +604,15 @@ public:
         Init(attr);
 	}
 
-    FBO(int w, int h, FBOAttributes attr, std::string pass) {
+	FBO(int w, int h, FBOAttributes attr, std::string pass) {
         width = w;
         height = h;
         passName = pass;
-        Init(attr);
-    }
-
-	void Delete() {
-		glDeleteFramebuffers(1, &framebufferID);
-		glDeleteTextures(static_cast<GLsizei>(textureIDs.size()), textureIDs.data());
-		glDeleteRenderbuffers(1, &rboID);
-		if (depthTextureID != 0) {
-			glDeleteTextures(1, &depthTextureID);
-			depthTextureID = 0;
-		}
+		Init(attr);
 	}
+
+	~FBO() { Delete(); }
+	void Delete();
 	void Init(FBOAttributes attr);
 
 	void Resize() {
@@ -623,6 +621,7 @@ public:
 	}
 private:
 	SystemProperties& properties = SystemProperties::GetInstance();
+	std::uint64_t m_trackedBytes = 0;
 };
 
 class FramebuffersManager {
@@ -665,7 +664,7 @@ public:
 	}
 
 	void ClearFBOBuffers(FBO* fbo) {
-		glBindFramebuffer(GL_FRAMEBUFFER, fbo->framebufferID);
+		GLState::BindFramebuffer(GL_FRAMEBUFFER, fbo->framebufferID);
 		if (fbo->attr.isShadowMap) {
 			glClear(GL_DEPTH_BUFFER_BIT);
 		}
@@ -674,12 +673,14 @@ public:
 				glClearBufferfv(GL_COLOR, 0, glm::value_ptr(glm::vec4(0.0f)));
 			}
 		}
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		GLState::BindFramebuffer(GL_FRAMEBUFFER, 0);
 	}
 
 	FBO* GetFBO(FBOAttributes);
 
 	void Resize();
+	void TrimUnusedFBOs();
+	void Shutdown();
 
 	// ?????????? isBusy ?? FBO ?????????? Viewport ??????? FBO ????????????
 	std::vector<FBO*> GetBusyFBOs() const;
@@ -719,6 +720,7 @@ public:
 };
 
 unsigned int TextureFromFile(const char* path, const std::string& directory, bool alpha = false, bool gamma = false);
+void DestroyTextureCache();
 
 class BaseObject {
 public:
@@ -739,19 +741,27 @@ public:
 
     void SetScale(glm::vec3 s) {
         scale = s;
+		m_transformCacheValid = false;
 	}
     
     void SetScale(float s) {
         scale = glm::vec3(s);
+		m_transformCacheValid = false;
     }
 
     void SetPosition(glm::vec3 p) {
         position = p;
-	}
+		m_transformCacheValid = false;
+    }
 
     void SetRotation(glm::vec3 r) {
         rotation = r;
-	}
+		m_transformCacheValid = false;
+    }
 protected:
 	glm::mat4 modelMatrix;
+	glm::vec3 m_cachedPosition = glm::vec3(0);
+	glm::vec3 m_cachedRotation = glm::vec3(0);
+	glm::vec3 m_cachedScale = glm::vec3(1);
+	bool m_transformCacheValid = false;
 };

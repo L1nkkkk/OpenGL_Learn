@@ -13,9 +13,13 @@ public:
 
 	void ProcessBloom(FBO* input);
 
-	void Destroy() override;    
+	void Destroy() override;
 protected:
 	FBO* m_bloomBlurFBO = nullptr;
+	FBO* m_bloomPingFBO = nullptr;
     FBOAttributes BuildAttributesFromSystemProperties() override;
-    void Blur(int times, unsigned int& textureID);
-}; 
+	FBOAttributes BuildBloomAttributes() const;
+	bool EnsureBloomTargets();
+	void ReleaseBloomTargets();
+	bool Blur(int times, unsigned int textureID);
+};

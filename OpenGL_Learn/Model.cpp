@@ -1,6 +1,15 @@
 #include "Model.h"
+#include "GLStateCache.h"
+#include "Profiler.h"
 #include "XmlMaterialManager.h"
+#include <assimp/Exporter.hpp>
+#include <assimp/version.h>
+#include <algorithm>
+#include <cmath>
 #include <filesystem>
+#include <fstream>
+#include <iomanip>
+#include <sstream>
 #include <unordered_map>
 
 namespace {
@@ -9,115 +18,272 @@ namespace {
 
 	bool FileExists(const std::string& path)
 	{
+		PerformanceProfiler::GetInstance().RecordFileSystemCheck();
 		std::error_code error;
 		return std::filesystem::exists(path, error);
 	}
-}
 
-void Mesh::ReleaseGL()
-{
-	if (VAO) {
-		glDeleteVertexArrays(1, &VAO);
-		VAO = 0;
+	constexpr unsigned int kModelImportFlags =
+		aiProcess_Triangulate |
+		aiProcess_FlipUVs |
+		aiProcess_CalcTangentSpace |
+		aiProcess_JoinIdenticalVertices;
+	constexpr std::uint64_t kModelImportCacheVersion = 1;
+
+	bool IsValidScene(const aiScene* scene)
+	{
+		return scene &&
+			!(scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE) &&
+			scene->mRootNode;
 	}
-	if (VBO) {
-		glDeleteBuffers(1, &VBO);
-		VBO = 0;
+
+	std::uint64_t HashCacheFingerprint(const std::string& fingerprint)
+	{
+		std::uint64_t hash = 14695981039346656037ull;
+		for (unsigned char value : fingerprint) {
+			hash ^= value;
+			hash *= 1099511628211ull;
+		}
+		return hash;
 	}
-	if (EBO) {
-		glDeleteBuffers(1, &EBO);
-		EBO = 0;
+
+	std::filesystem::path BuildModelImportCachePath(const std::string& sourcePath)
+	{
+		namespace fs = std::filesystem;
+		std::error_code error;
+		fs::path absolutePath = fs::absolute(sourcePath, error);
+		if (error) {
+			return {};
+		}
+		absolutePath = absolutePath.lexically_normal();
+
+		PerformanceProfiler::GetInstance().RecordFileSystemCheck();
+		const std::uintmax_t sourceSize = fs::file_size(absolutePath, error);
+		if (error) {
+			return {};
+		}
+		PerformanceProfiler::GetInstance().RecordFileSystemCheck();
+		const auto sourceWriteTime = fs::last_write_time(absolutePath, error);
+		if (error) {
+			return {};
+		}
+
+		std::ostringstream fingerprint;
+		fingerprint << absolutePath.generic_string()
+			<< "|size=" << sourceSize
+			<< "|write=" << sourceWriteTime.time_since_epoch().count()
+			<< "|cache=" << kModelImportCacheVersion
+			<< "|flags=" << kModelImportFlags
+			<< "|vertex=" << sizeof(Vertex)
+			<< "|assimp=" << aiGetVersionMajor() << '.' << aiGetVersionMinor() << '.' << aiGetVersionPatch();
+
+		if (absolutePath.extension() == ".obj") {
+			std::ifstream source(absolutePath);
+			std::string line;
+			for (int lineCount = 0; lineCount < 256 && std::getline(source, line); ++lineCount) {
+				if (line.rfind("mtllib ", 0) != 0) {
+					continue;
+				}
+				std::istringstream materialLibraries(line.substr(7));
+				std::string materialLibrary;
+				while (materialLibraries >> materialLibrary) {
+					const fs::path dependencyPath =
+						(absolutePath.parent_path() / materialLibrary).lexically_normal();
+					PerformanceProfiler::GetInstance().RecordFileSystemCheck();
+					const std::uintmax_t dependencySize = fs::file_size(dependencyPath, error);
+					if (error) {
+						fingerprint << "|dependency-missing=" << dependencyPath.generic_string();
+						error.clear();
+						continue;
+					}
+					PerformanceProfiler::GetInstance().RecordFileSystemCheck();
+					const auto dependencyWriteTime = fs::last_write_time(dependencyPath, error);
+					if (error) {
+						fingerprint << "|dependency-time-error=" << dependencyPath.generic_string();
+						error.clear();
+						continue;
+					}
+					fingerprint << "|dependency=" << dependencyPath.generic_string()
+						<< ':' << dependencySize
+						<< ':' << dependencyWriteTime.time_since_epoch().count();
+				}
+				break;
+			}
+		}
+
+		std::ostringstream fileName;
+		fileName << std::hex << std::setfill('0') << std::setw(16)
+			<< HashCacheFingerprint(fingerprint.str()) << ".assbin";
+		return fs::path("model-cache") / fileName.str();
+	}
+
+	void WriteModelImportCache(const aiScene* scene, const std::filesystem::path& cachePath)
+	{
+		if (!scene || cachePath.empty()) {
+			return;
+		}
+
+		namespace fs = std::filesystem;
+		std::error_code error;
+		fs::create_directories(cachePath.parent_path(), error);
+		if (error) {
+			std::cout << "[Model Import Cache] cannot create directory: "
+				<< error.message() << std::endl;
+			return;
+		}
+
+		fs::path temporaryPath = cachePath;
+		temporaryPath += ".tmp";
+		Assimp::Exporter exporter;
+		if (exporter.Export(scene, "assbin", temporaryPath.string()) != AI_SUCCESS) {
+			std::cout << "[Model Import Cache] export failed: "
+				<< exporter.GetErrorString() << std::endl;
+			return;
+		}
+
+		fs::remove(cachePath, error);
+		error.clear();
+		fs::rename(temporaryPath, cachePath, error);
+		if (error) {
+			std::cout << "[Model Import Cache] publish failed: "
+				<< error.message() << std::endl;
+		}
 	}
 }
 
-Mesh::~Mesh()
+void Model::DestroyMeshCache()
 {
-	ReleaseGL();
+	g_modelMeshCache.clear();
 }
 
-Mesh::Mesh(const Mesh& other)
-	: vertices(other.vertices)
-	, material_ptr(other.material_ptr)
-	, material_owner(other.material_owner)
-	, start_tex_index(other.start_tex_index)
-	, materialXmlPath(other.materialXmlPath)
-	, m_active(other.m_active)
-	, VAO(0)
-	, VBO(0)
-	, EBO(0)
+MeshGeometry::MeshGeometry(std::vector<Vertex> vertices, std::vector<unsigned int> indices)
 {
-	setupMesh();
-}
+	m_vertexCount = vertices.size();
+	m_indexCount = indices.size();
+	if (!vertices.empty()) {
+		m_boundsMin = vertices.front().Position;
+		m_boundsMax = vertices.front().Position;
+		m_boundsCenter = vertices.front().Position;
+		for (const auto& vertex : vertices) {
+			m_boundsMin.x = (std::min)(m_boundsMin.x, vertex.Position.x);
+			m_boundsMin.y = (std::min)(m_boundsMin.y, vertex.Position.y);
+			m_boundsMin.z = (std::min)(m_boundsMin.z, vertex.Position.z);
+			m_boundsMax.x = (std::max)(m_boundsMax.x, vertex.Position.x);
+			m_boundsMax.y = (std::max)(m_boundsMax.y, vertex.Position.y);
+			m_boundsMax.z = (std::max)(m_boundsMax.z, vertex.Position.z);
 
-Mesh& Mesh::operator=(const Mesh& other)
-{
-	if (this == &other) {
-		return *this;
+			const glm::vec3 delta = vertex.Position - m_boundsCenter;
+			const float distanceSquared = glm::dot(delta, delta);
+			const float radiusSquared = m_boundingRadius * m_boundingRadius;
+			if (distanceSquared > radiusSquared) {
+				const float distance = std::sqrt(distanceSquared);
+				const float expandedRadius = (m_boundingRadius + distance) * 0.5f;
+				m_boundsCenter += delta * ((expandedRadius - m_boundingRadius) / distance);
+				m_boundingRadius = expandedRadius;
+			}
+		}
 	}
-	ReleaseGL();
-	vertices = other.vertices;
-	material_ptr = other.material_ptr;
-	material_owner = other.material_owner;
-	start_tex_index = other.start_tex_index;
-	materialXmlPath = other.materialXmlPath;
-	m_active = other.m_active;
-	setupMesh();
-	return *this;
-}
 
-Mesh::Mesh(Mesh&& other) noexcept
-	: vertices(std::move(other.vertices))
-	, material_ptr(other.material_ptr)
-	, material_owner(std::move(other.material_owner))
-	, start_tex_index(other.start_tex_index)
-	, materialXmlPath(std::move(other.materialXmlPath))
-	, m_active(other.m_active)
-	, VAO(other.VAO)
-	, VBO(other.VBO)
-	, EBO(other.EBO)
-{
-	other.material_ptr = nullptr;
-	other.material_owner.reset();
-	other.start_tex_index = 0;
-	other.VAO = 0;
-	other.VBO = 0;
-	other.EBO = 0;
-	other.m_active = true;
-}
-
-Mesh& Mesh::operator=(Mesh&& other) noexcept
-{
-	if (this == &other) {
-		return *this;
+	glGenVertexArrays(1, &m_vao);
+	glGenBuffers(1, &m_vbo);
+	if (m_indexCount != 0) {
+		glGenBuffers(1, &m_ebo);
 	}
-	ReleaseGL();
-	vertices = std::move(other.vertices);
-	material_ptr = other.material_ptr;
-	material_owner = std::move(other.material_owner);
-	start_tex_index = other.start_tex_index;
-	materialXmlPath = std::move(other.materialXmlPath);
-	m_active = other.m_active;
-	VAO = other.VAO;
-	VBO = other.VBO;
-	EBO = other.EBO;
 
-	other.material_ptr = nullptr;
-	other.material_owner.reset();
-	other.start_tex_index = 0;
-	other.VAO = 0;
-	other.VBO = 0;
-	other.EBO = 0;
-	other.m_active = true;
-	return *this;
+	GLState::BindVertexArray(m_vao);
+	glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+	glBufferData(
+		GL_ARRAY_BUFFER,
+		vertices.size() * sizeof(Vertex),
+		vertices.empty() ? nullptr : vertices.data(),
+		GL_STATIC_DRAW
+	);
+	if (m_ebo != 0) {
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ebo);
+		glBufferData(
+			GL_ELEMENT_ARRAY_BUFFER,
+			indices.size() * sizeof(unsigned int),
+			indices.data(),
+			GL_STATIC_DRAW
+		);
+	}
+
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Normal));
+	glEnableVertexAttribArray(2);
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, TexCoords));
+	glEnableVertexAttribArray(3);
+	glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Tangent));
+	glEnableVertexAttribArray(4);
+	glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Bitangent));
+	GLState::BindVertexArray(0);
+
+	const std::uint64_t stagingBytes =
+		static_cast<std::uint64_t>(vertices.capacity() * sizeof(Vertex)) +
+		static_cast<std::uint64_t>(indices.capacity() * sizeof(unsigned int));
+	m_trackedGpuBytes =
+		static_cast<std::uint64_t>(m_vertexCount * sizeof(Vertex)) +
+		static_cast<std::uint64_t>(m_indexCount * sizeof(unsigned int));
+	auto& profiler = PerformanceProfiler::GetInstance();
+	if (stagingBytes != 0) {
+		profiler.RecordMemoryAllocation(MemoryResourceType::MeshCpu, stagingBytes);
+	}
+	if (m_trackedGpuBytes != 0) {
+		profiler.RecordMemoryAllocation(MemoryResourceType::MeshGpu, m_trackedGpuBytes);
+	}
+
+	// The VBO and compact bounds are the long-lived representation. Release the
+	// upload vector immediately so cached geometry does not pin a CPU-side copy.
+	std::vector<Vertex>().swap(vertices);
+	std::vector<unsigned int>().swap(indices);
+	if (stagingBytes != 0) {
+		profiler.RecordMemoryRelease(MemoryResourceType::MeshCpu, stagingBytes);
+	}
+}
+
+MeshGeometry::~MeshGeometry()
+{
+	auto& profiler = PerformanceProfiler::GetInstance();
+	if (m_trackedGpuBytes != 0) {
+		profiler.RecordMemoryRelease(MemoryResourceType::MeshGpu, m_trackedGpuBytes);
+	}
+	if (m_vao != 0) {
+		GLState::ForgetVertexArray(m_vao);
+		glDeleteVertexArrays(1, &m_vao);
+	}
+	if (m_vbo != 0) {
+		glDeleteBuffers(1, &m_vbo);
+	}
+	if (m_ebo != 0) {
+		glDeleteBuffers(1, &m_ebo);
+	}
 }
 
 Mesh::Mesh(std::vector<Vertex> vertices,
 		std::vector<unsigned int> indices,
 		   Material* material,
 		   std::shared_ptr<Material> ownedMaterial,
-           const std::string& materialXmlPathIn)
+           const std::string& materialXmlPathIn,
+		   bool tangentBasisReady)
 {
-	this->vertices = ComputeTBNVertices(vertices,indices);
+	if (!indices.empty()) {
+		const bool malformed = indices.size() % 3 != 0 ||
+			std::any_of(indices.begin(), indices.end(),
+				[vertexCount = vertices.size()](unsigned int index) {
+					return index >= vertexCount;
+				});
+		if (malformed) {
+			std::cout << "warning: invalid mesh indices, falling back to non-indexed draw" << std::endl;
+			indices.clear();
+			tangentBasisReady = false;
+		}
+	}
+	if (!tangentBasisReady) {
+		vertices = ComputeTBNVertices(vertices, indices);
+	}
+	m_geometry = std::make_shared<MeshGeometry>(std::move(vertices), std::move(indices));
 	this->material_owner = std::move(ownedMaterial);
 	if(material) {
 		this->material_ptr = material;
@@ -132,7 +298,6 @@ Mesh::Mesh(std::vector<Vertex> vertices,
 	this->start_tex_index = 0;
 	// 默认：Mesh 可见 / 可绘制
 	SetActiveStatus(true);
-	setupMesh();
 }
 
 Mesh::Mesh(std::vector<Vertex> vertices,
@@ -143,56 +308,71 @@ Mesh::Mesh(std::vector<Vertex> vertices,
 {
 }
 
-void Mesh::setupMesh()
+unsigned int Mesh::GetVAO() const
 {
-	glGenVertexArrays(1, &VAO);
-	glGenBuffers(1, &VBO);
-	glGenBuffers(1, &EBO);
+	return m_geometry ? m_geometry->GetVAO() : 0;
+}
 
-	glBindVertexArray(VAO);
-	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-	glBufferData(
-		GL_ARRAY_BUFFER,
-		vertices.size() * sizeof(Vertex),
-		vertices.empty() ? nullptr : vertices.data(),
-		GL_STATIC_DRAW
-	);
+std::size_t Mesh::GetVertexCount() const
+{
+	return m_geometry ? m_geometry->GetVertexCount() : 0;
+}
 
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
-	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Normal));
-	glEnableVertexAttribArray(2);
-	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, TexCoords));
-	glEnableVertexAttribArray(3);
-	glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Tangent));
-	glEnableVertexAttribArray(4);
-	glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Bitangent));
-	glBindVertexArray(0);
+std::size_t Mesh::GetIndexCount() const
+{
+	return m_geometry ? m_geometry->GetIndexCount() : 0;
+}
+
+std::size_t Mesh::GetDrawCount() const
+{
+	return m_geometry ? m_geometry->GetDrawCount() : 0;
+}
+
+bool Mesh::UsesIndices() const
+{
+	return m_geometry && m_geometry->UsesIndices();
+}
+
+const glm::vec3& Mesh::GetBoundsMin() const
+{
+	static const glm::vec3 empty(0.0f);
+	return m_geometry ? m_geometry->GetBoundsMin() : empty;
+}
+
+const glm::vec3& Mesh::GetBoundsMax() const
+{
+	static const glm::vec3 empty(0.0f);
+	return m_geometry ? m_geometry->GetBoundsMax() : empty;
+}
+
+const glm::vec3& Mesh::GetBoundsCenter() const
+{
+	static const glm::vec3 empty(0.0f);
+	return m_geometry ? m_geometry->GetBoundsCenter() : empty;
+}
+
+float Mesh::GetBoundingRadius() const
+{
+	return m_geometry ? m_geometry->GetBoundingRadius() : 0.0f;
 }
 
 void Mesh::Draw(Shader* shader)
 {
-	auto& properties = SystemProperties::GetInstance();
-    Material* runtimeMat = material_ptr;
-
-    // 如果为该 Mesh 指定了 XML 材质文件，则优先从 XmlMaterialManager 获取 / 热重载
-    if (!materialXmlPath.empty()) {
-        if (Material* xmlMat = XmlMaterialManager::GetInstance().GetOrLoadMaterialByFile(materialXmlPath)) {
-            runtimeMat = xmlMat;
-        }
-    }
-
-    if (!runtimeMat) {
+    if (!material_ptr) {
         return;
     }
-	// 材质参数绑定统一放在 MaterialGaurd 内处理，外部 shader（含 deferProcess）作为 override 传入。
-	auto materialGaurd = MaterialGaurd(*runtimeMat, shader);
-	if (shader) shader->use();
-	glActiveTexture(GL_TEXTURE0);
-	glBindVertexArray(VAO);
-	glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size()));
-	glBindVertexArray(0);
+
+	// XML materials are refreshed once while preparing the scene render data.
+	auto materialGaurd = MaterialGaurd(*material_ptr, shader);
+	GLState::ActiveTexture(GL_TEXTURE0);
+	GLState::BindVertexArray(GetVAO());
+	PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, GetDrawCount());
+	if (UsesIndices()) {
+		glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(GetIndexCount()), GL_UNSIGNED_INT, nullptr);
+	}
+	else {
+		glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(GetVertexCount()));
+	}
 }
 
 void Model::Draw(Shader* shader, unsigned int start_tex_index )
@@ -210,6 +390,7 @@ void Model::Draw(Shader* shader, unsigned int start_tex_index )
 	}
 	auto& properties = SystemProperties::GetInstance();
 	int usedTextures = properties.USED_TEXTURE_NUM;
+	MaterialBatchScope materialBatch;
 	for (unsigned int i = 0; i < meshes.size(); ++i) {
 		if (!meshes[i].GetActiveStatus()) {
 			continue;
@@ -237,9 +418,29 @@ void Model::loadModel(std::string path,Material* mat)
 	}
 
 	Assimp::Importer importer;
-	const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate  | aiProcess_CalcTangentSpace | aiProcess_FlipUVs);
+	const std::filesystem::path importCachePath = BuildModelImportCachePath(path);
+	const aiScene* scene = nullptr;
+	bool importCacheHit = false;
+	if (!importCachePath.empty() && FileExists(importCachePath.string())) {
+		scene = importer.ReadFile(importCachePath.string(), 0);
+		importCacheHit = IsValidScene(scene);
+		if (!importCacheHit) {
+			std::cout << "[Model Import Cache] invalid entry, rebuilding "
+				<< importCachePath.string() << std::endl;
+		}
+	}
 
-	if(!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
+	if (!importCacheHit) {
+		scene = importer.ReadFile(path, kModelImportFlags);
+		if (IsValidScene(scene)) {
+			WriteModelImportCache(scene, importCachePath);
+		}
+	}
+	PerformanceProfiler::GetInstance().RecordModelImportCacheLookup(importCacheHit);
+	std::cout << "[Model Import Cache] " << (importCacheHit ? "hit " : "miss ")
+		<< path << std::endl;
+
+	if(!IsValidScene(scene)) {
 		std::cout << "ERROR::ASSIMP:: " << importer.GetErrorString() << std::endl;
 		return;
 	}
@@ -339,6 +540,7 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 	std::vector<unsigned int>indices;
 	Material* material = mat;
 	const std::string materialShaderName = m_shader ? m_shader->shaderName : std::string("phong");
+	const bool tangentBasisReady = mesh->HasTangentsAndBitangents();
 	vertices.reserve(mesh->mNumVertices);
 	indices.reserve(static_cast<size_t>(mesh->mNumFaces) * 3);
 	for (unsigned int i = 0; i < mesh->mNumVertices; ++i) {
@@ -361,20 +563,31 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 		else {
 			vertex.TexCoords = glm::vec2(0.0f, 0.0f);
 		}
+		if (tangentBasisReady) {
+			vertex.Tangent = glm::vec3(
+				mesh->mTangents[i].x,
+				mesh->mTangents[i].y,
+				mesh->mTangents[i].z);
+			vertex.Bitangent = glm::vec3(
+				mesh->mBitangents[i].x,
+				mesh->mBitangents[i].y,
+				mesh->mBitangents[i].z);
+		}
 		vertices.push_back(vertex);
 	}
 	for (unsigned int i = 0; i < mesh->mNumFaces; ++i) {
-		aiFace face = mesh->mFaces[i];
+		const aiFace& face = mesh->mFaces[i];
 		for (unsigned int j = 0; j < face.mNumIndices; ++j) {
 			indices.push_back(face.mIndices[j]);
 		}
 	}
 	std::cout << "[Mesh Debug] Name: " << mesh->mName.C_Str()
 		<< " | Vertices: " << mesh->mNumVertices
+		<< " | Indices: " << indices.size()
 		<< " | MatID: " << mesh->mMaterialIndex << std::endl;
 	std::string xmlPath;
 	if(mat) {
-		return Mesh(vertices, indices, mat, std::shared_ptr<Material>(), std::string());
+		return Mesh(std::move(vertices), std::move(indices), mat, std::shared_ptr<Material>(), std::string(), tangentBasisReady);
 	}
 	else if (mesh->mMaterialIndex >= 0) {
 		aiMaterial* aiMat = scene->mMaterials[mesh->mMaterialIndex];
@@ -394,7 +607,7 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 			std::shared_ptr<Material> ownedMaterial = std::make_shared<Material>(materialShaderName);
 			material = ownedMaterial.get();
 			prosessMaterial(aiMat, material);
-			return Mesh(vertices, indices, material, ownedMaterial, std::string());
+			return Mesh(std::move(vertices), std::move(indices), material, ownedMaterial, std::string(), tangentBasisReady);
 		}
 	}
 	else {
@@ -406,10 +619,10 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 		if (!material) {
 			std::shared_ptr<Material> ownedMaterial = std::make_shared<Material>(materialShaderName);
 			material = ownedMaterial.get();
-			return Mesh(vertices,indices, material, ownedMaterial, std::string());
+			return Mesh(std::move(vertices), std::move(indices), material, ownedMaterial, std::string(), tangentBasisReady);
         }
 	}
-	return Mesh(vertices,indices, material, nullptr, xmlPath);
+	return Mesh(std::move(vertices), std::move(indices), material, nullptr, xmlPath, tangentBasisReady);
 }
 
 void Model::prosessMaterial(aiMaterial* mat,Material* material)
@@ -460,8 +673,9 @@ std::vector<Texture> Model::loadMaterialTextures(aiMaterial* mat, aiTextureType 
 		if (!skip)
 		{   // ???????????��?????????????
 			Texture texture;
-			texture.textureID = TextureFromFile(str.C_Str(), directory,false,false);
-			texture.textureGammaID = TextureFromFile(str.C_Str(), directory, false, true);
+			const bool srgb = typeName == "texture_diffuse";
+			texture.textureID = TextureFromFile(str.C_Str(), directory, false, srgb);
+			texture.textureGammaID = texture.textureID;
 			texture.type = typeName;
 			texture.path = str.C_Str();
 			textures.push_back(texture);
@@ -474,61 +688,129 @@ std::vector<Texture> Model::loadMaterialTextures(aiMaterial* mat, aiTextureType 
 glm::vec3 Model::CalculateLocalCenter()
 {
 	bool first = true;
-	float minX, maxX, minY, maxY, minZ, maxZ;
-	for (auto& mesh : meshes) {
-		for (auto& vertice : mesh.vertices) {
-			glm::vec3& pos = vertice.Position;
-			if (first) {
-				first = false;
-				minX = pos.x; maxX = pos.x;
-				minY = pos.y; maxY = pos.y;
-				minZ = pos.z; maxZ = pos.z;
-			}
-			else {
-				minX = std::min(minX, pos.x);
-				maxX = std::max(maxX, pos.x);
-
-				minY = std::min(minY, pos.y);
-				maxY = std::max(maxY, pos.y);
-
-				minZ = std::min(minZ, pos.z);
-				maxZ = std::max(maxZ, pos.z);
-			}
+	glm::vec3 boundsMin(0.0f);
+	glm::vec3 boundsMax(0.0f);
+	for (const auto& mesh : meshes) {
+		if (mesh.GetVertexCount() == 0) {
+			continue;
+		}
+		if (first) {
+			first = false;
+			boundsMin = mesh.GetBoundsMin();
+			boundsMax = mesh.GetBoundsMax();
+		}
+		else {
+			const glm::vec3& meshMin = mesh.GetBoundsMin();
+			const glm::vec3& meshMax = mesh.GetBoundsMax();
+			boundsMin.x = (std::min)(boundsMin.x, meshMin.x);
+			boundsMin.y = (std::min)(boundsMin.y, meshMin.y);
+			boundsMin.z = (std::min)(boundsMin.z, meshMin.z);
+			boundsMax.x = (std::max)(boundsMax.x, meshMax.x);
+			boundsMax.y = (std::max)(boundsMax.y, meshMax.y);
+			boundsMax.z = (std::max)(boundsMax.z, meshMax.z);
 		}
 	}
-	return glm::vec3((minX+maxX)/2.f, (minY+maxY)/2.f, (minZ+maxZ) / 2.f);
+
+	if (first) {
+		localBoundingRadius = 0.0f;
+		return glm::vec3(0.0f);
+	}
+
+	const glm::vec3 center = (boundsMin + boundsMax) * 0.5f;
+	float radius = 0.0f;
+	for (const auto& mesh : meshes) {
+		if (mesh.GetVertexCount() != 0) {
+			// Combining the per-mesh spheres remains conservative, so releasing
+			// source vertices cannot introduce false-positive frustum culls.
+			const float meshRadius = glm::length(mesh.GetBoundsCenter() - center) +
+				mesh.GetBoundingRadius();
+			radius = (std::max)(radius, meshRadius);
+		}
+	}
+	localBoundingRadius = radius;
+	return center;
 }
 
-std::vector<Vertex> ComputeTBNVertices(std::vector<Vertex>& vertices, std::vector<unsigned int> indices) {
-	// Assimp Triangulate 理论上应满足 size%3==0，但仍做防御：
-	// - 若 indices 不合法/为空，则保持原 vertices，避免生成空数组触发后续 UB。
-	if (vertices.empty() || indices.empty()) {
-		return vertices;
-	}
-	if (indices.size() % 3 != 0) {
-		std::cout << "warning: indices size is not multiple of 3, skip TBN recompute" << std::endl;
-		return vertices;
+std::vector<Vertex> ComputeTBNVertices(
+	std::vector<Vertex>& vertices,
+	const std::vector<unsigned int>& indices) {
+	if (vertices.empty()) {
+		return std::move(vertices);
 	}
 
-	for (unsigned int idx : indices) {
-		if (idx >= vertices.size()) {
-			std::cout << "warning: index out of range, skip TBN recompute" << std::endl;
-			return vertices;
+	if (indices.empty()) {
+		if (vertices.size() % 3 == 0) {
+			for (size_t i = 0; i < vertices.size(); i += 3) {
+				ComputeTBN(vertices[i], vertices[i + 1], vertices[i + 2]);
+			}
+		}
+		return std::move(vertices);
+	}
+
+	std::vector<glm::vec3> tangentSums(vertices.size(), glm::vec3(0.0f));
+	std::vector<glm::vec3> bitangentSums(vertices.size(), glm::vec3(0.0f));
+	constexpr float determinantEpsilon = 1.0e-8f;
+	for (size_t i = 0; i < indices.size(); i += 3) {
+		const unsigned int i0 = indices[i];
+		const unsigned int i1 = indices[i + 1];
+		const unsigned int i2 = indices[i + 2];
+		const Vertex& v0 = vertices[i0];
+		const Vertex& v1 = vertices[i1];
+		const Vertex& v2 = vertices[i2];
+		const glm::vec3 edge1 = v1.Position - v0.Position;
+		const glm::vec3 edge2 = v2.Position - v0.Position;
+		const glm::vec2 deltaUv1 = v1.TexCoords - v0.TexCoords;
+		const glm::vec2 deltaUv2 = v2.TexCoords - v0.TexCoords;
+		const float determinant = deltaUv1.x * deltaUv2.y - deltaUv2.x * deltaUv1.y;
+		if (std::abs(determinant) <= determinantEpsilon) {
+			continue;
+		}
+
+		const float inverseDeterminant = 1.0f / determinant;
+		const glm::vec3 tangent = inverseDeterminant *
+			(deltaUv2.y * edge1 - deltaUv1.y * edge2);
+		const glm::vec3 bitangent = inverseDeterminant *
+			(-deltaUv2.x * edge1 + deltaUv1.x * edge2);
+		for (unsigned int index : { i0, i1, i2 }) {
+			tangentSums[index] += tangent;
+			bitangentSums[index] += bitangent;
 		}
 	}
 
-	std::vector<Vertex> ret;
-	ret.reserve(indices.size());
-	for (size_t i = 0; i < indices.size(); i += 3) {
-		auto aPoint = vertices[indices[i]];
-		auto bPoint = vertices[indices[i + 1]];
-		auto cPoint = vertices[indices[i + 2]];
-		ComputeTBN(aPoint, bPoint, cPoint);
-		ret.push_back(aPoint);
-		ret.push_back(bPoint);
-		ret.push_back(cPoint);
+	constexpr float vectorLengthEpsilon = 1.0e-12f;
+	for (size_t i = 0; i < vertices.size(); ++i) {
+		glm::vec3 normal = vertices[i].Normal;
+		if (glm::dot(normal, normal) <= vectorLengthEpsilon) {
+			normal = glm::vec3(0.0f, 1.0f, 0.0f);
+		}
+		normal = glm::normalize(normal);
+
+		glm::vec3 tangent = tangentSums[i] - normal * glm::dot(normal, tangentSums[i]);
+		glm::vec3 bitangent = bitangentSums[i] - normal * glm::dot(normal, bitangentSums[i]);
+		if (glm::dot(tangent, tangent) <= vectorLengthEpsilon &&
+			glm::dot(bitangent, bitangent) > vectorLengthEpsilon) {
+			tangent = glm::cross(normal, bitangent);
+		}
+		if (glm::dot(tangent, tangent) <= vectorLengthEpsilon) {
+			const glm::vec3 axis = std::abs(normal.y) < 0.999f
+				? glm::vec3(0.0f, 1.0f, 0.0f)
+				: glm::vec3(1.0f, 0.0f, 0.0f);
+			tangent = glm::cross(normal, axis);
+		}
+		tangent = glm::normalize(tangent);
+
+		bitangent -= tangent * glm::dot(tangent, bitangent);
+		if (glm::dot(bitangent, bitangent) <= vectorLengthEpsilon) {
+			bitangent = glm::cross(tangent, normal);
+		}
+		else {
+			bitangent = glm::normalize(bitangent);
+		}
+
+		vertices[i].Tangent = tangent;
+		vertices[i].Bitangent = bitangent;
 	}
-	return ret;
+	return std::move(vertices);
 }
 
 void ComputeTBN(Vertex& aPoint, Vertex& bPoint, Vertex& cPoint) {
