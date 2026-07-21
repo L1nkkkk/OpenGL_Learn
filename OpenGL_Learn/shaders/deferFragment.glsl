@@ -1,49 +1,40 @@
 #version 330 core
+
 layout (location = 0) out vec4 FragColor;
 layout (location = 1) out vec4 BrightColor;
 in vec2 TexCoords;
 
-uniform sampler2D gPosition;
-uniform sampler2D gNormal;
-uniform sampler2D gAlbedoSpec;
-uniform sampler2D gMaterial;
-uniform sampler2D ssaoMap;
-uniform bool useSSAO;
+const float PI = 3.14159265359;
+const int MAX_POINT_LIGHTS = 16;
+const int MAX_DIR_LIGHTS = 16;
+const int MAX_SPOT_LIGHTS = 16;
 
-vec3 albedoSpec;
-vec4 material;//r : ambinent g:diffuse b:spec a : shinings
-float gAO = 1.0;
-
-struct DirLight{
+struct DirLight {
 	vec3 direction;
 	vec3 ambient;
 	vec3 diffuse;
 	vec3 specular;
 	mat4 lightSpaceMatrix;
-
 	sampler2D shadowMap;
 	bool useShadowMap;
 	bool isActive;
 };
 
-struct PointLight{
+struct PointLight {
 	vec3 position;
-
 	float constant;
 	float linear;
 	float quadratic;
-
 	vec3 ambient;
 	vec3 diffuse;
 	vec3 specular;
-
 	float far_plane;
 	samplerCube shadowCubeMap;
 	bool useShadowMap;
 	bool isActive;
 };
 
-struct SpotLight{
+struct SpotLight {
 	vec3 position;
 	vec3 direction;
 	float cutOff;
@@ -57,339 +48,311 @@ struct SpotLight{
 	bool isActive;
 };
 
-layout(std140) uniform SystemProperties {
-    bool useBloom;
-    bool useShadowMap;
-    bool useGamma;
-    bool useHDR;
-    float bloomThreshold;
-    float gamma;
-    float exposure;
-    int bloomBlurIterations;
-    int shadowSampleNum;
-    int shadowSampleRings;
-    int shadowType;
-    int screenWidth;
-    int screenHeight;
-};
-
+uniform sampler2D gPosition;
+uniform sampler2D gNormal;
+uniform sampler2D gAlbedoSpec;
+uniform sampler2D gMaterial;
+uniform sampler2D gEmissive;
+uniform sampler2D ssaoMap;
+uniform bool useSSAO;
 uniform vec3 viewPos;
-
-#define EPS 1e-5
-#define PI 3.141592653589793
-#define PI2 6.283185307179586
-#define MAX_POINT_LIGHTS 16
-#define MAX_DIR_LIGHTS 16
-#define MAX_SPOT_LIGHTS 16
-#define MAX_SAMPLE_NUM 256
-#define MAX_RINGS_NUM MAX_SAMPLE_NUM
-#define DEFAULT_SHADOW 0
-#define PCF_SHADOW 1
-#define PCSS_SHADOW 2
-
 uniform int NR_POINT_LIGHTS;
 uniform int NR_DIR_LIGHTS;
 uniform int NR_SPOT_LIGHTS;
 uniform PointLight pointLights[MAX_POINT_LIGHTS];
 uniform DirLight dirLights[MAX_DIR_LIGHTS];
 uniform SpotLight spotLights[MAX_SPOT_LIGHTS];
+uniform bool useIBL;
+uniform samplerCube irradianceMap;
+uniform samplerCube prefilterMap;
+uniform sampler2D brdfLUT;
 
+layout(std140) uniform SystemProperties {
+	bool useBloom;
+	bool useShadowMap;
+	bool useGamma;
+	bool useHDR;
+	float bloomThreshold;
+	float gamma;
+	float exposure;
+	int bloomBlurIterations;
+	int shadowSampleNum;
+	int shadowSampleRings;
+	int shadowType;
+	int screenWidth;
+	int screenHeight;
+};
 
-vec2 poissonDisk[MAX_SAMPLE_NUM];
-
-float rand_1to1(float x){
-	return fract(sin(x)*10000.0);
-}
-
-float rand_2to1(vec2 uv){
-	const float a = 12.9898, b = 78.233, c = 43758.5453;
-	float dt = dot( uv.xy, vec2( a,b ) ), sn = mod( dt, PI );
-	return fract(sin(sn) * c);
-}
-
-void VecToSpherial(vec3 dir,out float phi,out float theta){
-	phi = acos(clamp(dir.z,-1.0,1.0));
-	theta = atan(dir.y,dir.x);
-}
-
-vec3 SphericalToVec(float phi, float theta) {
-    float sinPhi = sin(phi);
-    return vec3(
-        sinPhi * cos(theta),
-        sinPhi * sin(theta),
-        cos(phi)
-    );
-}
-
-void poissonDiskSamples( const in vec2 randomSeed ) {
-	int samplesNum = min(shadowSampleNum,MAX_SAMPLE_NUM);
-	float ANGLE_STEP = PI2 * float(min(shadowSampleRings,MAX_RINGS_NUM)) / float(samplesNum);
-	float INV_NUM_SAMPLES = 1.0 / float(samplesNum);
-
-	float angle = rand_2to1( randomSeed ) * PI2;
-	float radius = INV_NUM_SAMPLES;
-	float radiusStep = radius;
-
-	for(int i = 0; i < samplesNum; i ++ ) {
-		poissonDisk[i] = vec2(cos(angle),sin(angle)) * pow(radius,0.75);
-		radius += radiusStep;
-		angle += ANGLE_STEP;
-	}
-}
-
-float PCF(vec4 coords,float w_penumbraSize,vec3 normal,DirLight light){
-	if(!light.useShadowMap) return 0.0;
-	float bias = max(0.05 * (1.0 - dot(normal, normalize(-light.direction))), 0.005);
-	float shadow = 0.0;
-	vec3 projCoords = coords.xyz/coords.w;
-	projCoords = (projCoords+1.0)* 0.5;
-
-	if(projCoords.z >= 1.0) {
-		return 0.0; // ??????????????????
-	}
-
-	float currentDepth = projCoords.z;
-	poissonDiskSamples(projCoords.xy);
-
-	int shadowSamples = min(shadowSampleNum,MAX_SAMPLE_NUM);
-	float stepth = 64.0/1024.0;
-	for(int i = 0; i < shadowSamples;++i){
-		float pcfDepth = texture(light.shadowMap, projCoords.xy + poissonDisk[i]*w_penumbraSize*stepth).r;
-		if(currentDepth-bias>pcfDepth) shadow += 1.0;
-	}
-	shadow = shadow/float(shadowSamples);
-	return shadow;
-}
-
-float PCF(vec3 fragPos,float w_penumbraSize,vec3 normal,PointLight light){
-	if(!light.useShadowMap) return 0.0;
-	vec3 direction = normalize(fragPos - light.position);
-	float bias = max(0.05 * (1.0 - dot(normal, -direction)), 0.005);
-	float shadow = 0.0;
-	float currentDepth = length(fragPos - light.position);
-	if(currentDepth>light.far_plane) {
-		return 0.0; // ??????????????????
-	}
-	poissonDiskSamples(direction.xy);
-	vec2 sphericalCoords;
-	VecToSpherial(direction,sphericalCoords.x,sphericalCoords.y);
-	int shadowSamples = min(shadowSampleNum,MAX_SAMPLE_NUM);
-	float stepth = 64.0/1024.0;
-	for(int i = 0; i < shadowSamples;++i){
-		vec2 sampleCoords = sphericalCoords + poissonDisk[i]*w_penumbraSize*stepth;
-		float pcfDepth = texture(light.shadowCubeMap, SphericalToVec(sampleCoords.x,sampleCoords.y)).r;
-		pcfDepth *= light.far_plane;
-		if(currentDepth-bias>pcfDepth) shadow += 1.0;
-	}
-	shadow = shadow/float(shadowSamples);
-	return shadow;
-}
-
-float findBlocker( sampler2D shadowMap,  vec2 uv, float zReceiver ) {
-	float avgBlockerDepth = 0.0;
-	int numBlockers = 0;
-
-	poissonDiskSamples(uv);
-
-	int shadowSamples = min(shadowSampleNum,MAX_SAMPLE_NUM);
-	for(int i = 0; i < shadowSamples; ++i) {
-		float pcfDepth =texture(shadowMap, uv + poissonDisk[i] * 0.1).r;
-		if(pcfDepth < zReceiver-EPS) {
-			avgBlockerDepth += pcfDepth;
-			++numBlockers;
-		}
-	}
-	if(numBlockers == 0)
-		return zReceiver;
-
-	avgBlockerDepth /= float(numBlockers);
-	return avgBlockerDepth;
-}
-
-float findBlocker( samplerCube shadowMap, vec3 dir, float zReceiver ) {
-	float avgBlockerDepth = 0.0;
-	int numBlockers = 0;
-	vec2 sph;
-	VecToSpherial(dir,sph.x,sph.y);
-	poissonDiskSamples(sph);
-
-	int shadowSamples = min(shadowSampleNum,MAX_SAMPLE_NUM);
-	for(int i = 0; i < shadowSamples; ++i) {
-		vec2 sampleCoords = sph + poissonDisk[i]*0.1;
-		float pcfDepth =texture(shadowMap, SphericalToVec(sampleCoords.x,sampleCoords.y)).r;
-		if(pcfDepth < zReceiver-EPS) {
-			avgBlockerDepth += pcfDepth;
-			++numBlockers;
-		}
-	}
-	if(numBlockers == 0)
-		return zReceiver;
-
-	avgBlockerDepth /= float(numBlockers);
-	return avgBlockerDepth;
-}
-
-float PCSS(vec4 coords,vec3 normal,DirLight light){
-	if(!light.useShadowMap) return 0.0;
-	vec3 projCoords = coords.xyz/coords.w;
-	projCoords = (projCoords+1.0)*0.5;
-	float receiverDistance = projCoords.z;
-	float avgBlockerDepth = findBlocker(light.shadowMap,projCoords.xy,receiverDistance);
-	if(avgBlockerDepth>=1.0) return 0.0;
-	float penumbraSize = (receiverDistance - avgBlockerDepth)  / avgBlockerDepth ;
-	return PCF(coords,penumbraSize,normal,light);
-}
-
-float PCSS(vec3 fragPos,vec3 normal,PointLight light){
-	if(!light.useShadowMap) return 0.0;
-	float receiverDistance = length(fragPos - light.position)/light.far_plane;
-	float avgBlockerDepth = findBlocker(light.shadowCubeMap,normalize(fragPos-light.position),receiverDistance);
-	if(avgBlockerDepth>=1.0) return 0.0;
-	float penumbraSize = (receiverDistance - avgBlockerDepth)  / avgBlockerDepth ;
-	return PCF(fragPos,penumbraSize,normal,light);
-}
-float ShadowCalculation(vec4 fragPosLightSpace,vec3 normal,DirLight light){
-	if(!light.useShadowMap) return 0.0;
-	float bias = max(0.05 * (1.0 - dot(normal, normalize(-light.direction))), 0.005);
-	vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
-	projCoords = projCoords * 0.5 + 0.5;
-	float closestDepth = texture(light.shadowMap, projCoords.xy).r;
-	if(projCoords.z > 1.0) {
-        return 0.0;
-    }
-	float currentDepth = projCoords.z;
-	return currentDepth - bias > closestDepth ? 1.0 : 0.0;
-}
-
-float ShadowCalculation(vec3 fragPos,PointLight light){
-	if(!light.useShadowMap) return 0.0;
-    vec3 fragToLight = fragPos - light.position;
-    float closestDepth = texture(light.shadowCubeMap, fragToLight).r;
-    closestDepth *= light.far_plane;
-    float currentDepth = length(fragToLight);
-    float bias = 0.05; 
-    float shadow = currentDepth -  bias > closestDepth ? 1.0 : 0.0;
-
-    return shadow;
-}
-
-vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir,float shadow)
+float DistributionGGX(vec3 normal, vec3 halfDir, float roughness)
 {
-	vec3 color = albedoSpec;
-	//After this below, BUG
-	
+	float alpha = roughness * roughness;
+	float alpha2 = alpha * alpha;
+	float nDotH = max(dot(normal, halfDir), 0.0);
+	float denominator = nDotH * nDotH * (alpha2 - 1.0) + 1.0;
+	return alpha2 / max(PI * denominator * denominator, 0.000001);
+}
+
+float GeometrySchlickGGX(float nDotV, float roughness)
+{
+	float r = roughness + 1.0;
+	float k = (r * r) / 8.0;
+	return nDotV / max(nDotV * (1.0 - k) + k, 0.000001);
+}
+
+float GeometrySmith(vec3 normal, vec3 viewDir, vec3 lightDir, float roughness)
+{
+	return GeometrySchlickGGX(max(dot(normal, viewDir), 0.0), roughness) *
+		GeometrySchlickGGX(max(dot(normal, lightDir), 0.0), roughness);
+}
+
+vec3 FresnelSchlick(float cosTheta, vec3 f0)
+{
+	return f0 + (1.0 - f0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+vec3 FresnelSchlickRoughness(float cosTheta, vec3 f0, float roughness)
+{
+	return f0 + (max(vec3(1.0 - roughness), f0) - f0) *
+		pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+vec3 EvaluatePbrDirect(
+	vec3 normal,
+	vec3 viewDir,
+	vec3 lightDir,
+	vec3 radiance,
+	vec3 albedo,
+	float metallic,
+	float roughness)
+{
+	vec3 halfDir = normalize(viewDir + lightDir);
+	vec3 f0 = mix(vec3(0.04), albedo, metallic);
+	vec3 fresnel = FresnelSchlick(max(dot(halfDir, viewDir), 0.0), f0);
+	float distribution = DistributionGGX(normal, halfDir, roughness);
+	float geometry = GeometrySmith(normal, viewDir, lightDir, roughness);
+	vec3 specular = distribution * geometry * fresnel /
+		max(4.0 * max(dot(normal, viewDir), 0.0) * max(dot(normal, lightDir), 0.0), 0.001);
+	vec3 diffuseWeight = (vec3(1.0) - fresnel) * (1.0 - metallic);
+	return (diffuseWeight * albedo / PI + specular) * radiance *
+		max(dot(normal, lightDir), 0.0);
+}
+
+vec3 EvaluatePbrIBL(
+	vec3 normal,
+	vec3 viewDir,
+	vec3 albedo,
+	float metallic,
+	float roughness,
+	float ao)
+{
+	if (!useIBL) return vec3(0.03) * albedo * ao;
+	vec3 f0 = mix(vec3(0.04), albedo, metallic);
+	float nDotV = max(dot(normal, viewDir), 0.0);
+	vec3 fresnel = FresnelSchlickRoughness(nDotV, f0, roughness);
+	vec3 diffuseWeight = (vec3(1.0) - fresnel) * (1.0 - metallic);
+	vec3 diffuse = texture(irradianceMap, normal).rgb * albedo;
+	vec3 prefiltered = textureLod(
+		prefilterMap,
+		reflect(-viewDir, normal),
+		roughness * 4.0).rgb;
+	vec2 brdf = texture(brdfLUT, vec2(nDotV, roughness)).rg;
+	return (diffuseWeight * diffuse + prefiltered * (fresnel * brdf.x + brdf.y)) * ao;
+}
+
+float DirectionalShadow(DirLight light, vec3 normal, vec3 fragPos)
+{
+	if (!light.useShadowMap) return 0.0;
+	vec4 lightSpace = light.lightSpaceMatrix * vec4(fragPos, 1.0);
+	vec3 projected = lightSpace.xyz / lightSpace.w;
+	projected = projected * 0.5 + 0.5;
+	if (projected.z >= 1.0 || projected.z <= 0.0) return 0.0;
+	float bias = max(0.005 * (1.0 - dot(normal, normalize(-light.direction))), 0.0005);
+	if (shadowType == 0) {
+		return projected.z - bias > texture(light.shadowMap, projected.xy).r ? 1.0 : 0.0;
+	}
+	vec2 texel = 1.0 / vec2(textureSize(light.shadowMap, 0));
+	int radius = shadowType == 2 ? 2 : 1;
+	float shadow = 0.0;
+	float samples = 0.0;
+	for (int x = -2; x <= 2; ++x) {
+		for (int y = -2; y <= 2; ++y) {
+			if (abs(x) > radius || abs(y) > radius) continue;
+			shadow += projected.z - bias >
+				texture(light.shadowMap, projected.xy + vec2(x, y) * texel).r ? 1.0 : 0.0;
+			samples += 1.0;
+		}
+	}
+	return shadow / max(samples, 1.0);
+}
+
+float PointShadow(PointLight light, vec3 normal, vec3 fragPos)
+{
+	if (!light.useShadowMap) return 0.0;
+	vec3 fragToLight = fragPos - light.position;
+	float currentDepth = length(fragToLight);
+	float bias = max(0.02 * (1.0 - dot(normal, normalize(-fragToLight))), 0.005);
+	float closest = texture(light.shadowCubeMap, fragToLight).r * light.far_plane;
+	return currentDepth - bias > closest ? 1.0 : 0.0;
+}
+
+vec3 LegacyDirectional(
+	DirLight light,
+	vec3 normal,
+	vec3 viewDir,
+	vec3 albedo,
+	vec4 material,
+	float ao,
+	float shadow)
+{
 	vec3 lightDir = normalize(-light.direction);
-	// diffuse shading
-	float diff = max(dot(normal, lightDir), 0.0);
-	// specular shading
-	vec3 halfwayDir = normalize(lightDir + viewDir);
-	float spec = pow(max(dot(normal, halfwayDir), 0.0), material.a);
-	// combine results
-	vec3 ambient = light.ambient * material.r * gAO;
-	vec3 diffuse = light.diffuse * material.g *diff;
-	vec3 specular = light.specular * material.b* spec;
-	return (ambient + (1.0-shadow)*(diffuse + specular))* color;
+	float diffuseTerm = max(dot(normal, lightDir), 0.0);
+	vec3 halfDir = normalize(lightDir + viewDir);
+	float specularTerm = pow(max(dot(normal, halfDir), 0.0), material.a);
+	vec3 ambient = light.ambient * material.r * ao;
+	vec3 diffuse = light.diffuse * material.g * diffuseTerm;
+	vec3 specular = light.specular * material.b * specularTerm;
+	return (ambient + (1.0 - shadow) * (diffuse + specular)) * albedo;
 }
 
-vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir,float shadow)
+vec3 LegacyPoint(
+	PointLight light,
+	vec3 normal,
+	vec3 fragPos,
+	vec3 viewDir,
+	vec3 albedo,
+	vec4 material,
+	float ao,
+	float shadow)
 {
-	vec3 color = albedoSpec;
-	vec3 lightDir = normalize(light.position - fragPos);
-	// diffuse shading
-	float diff = max(dot(normal, lightDir), 0.0);
-	// specular shading
-	vec3 halfwayDir = normalize(lightDir + viewDir);
-	float spec = pow(max(dot(normal, halfwayDir), 0.0), material.a);
-	// attenuation
-	float distance = length(light.position - fragPos);
-	float attenuation = 1.0 / (light.constant + light.linear * distance + light.quadratic * (distance * distance));
-	// combine results
-	vec3 ambient = light.ambient * material.r * gAO;
-	vec3 diffuse = light.diffuse * material.g *diff;
-	vec3 specular = light.specular * material.b* spec;
-	ambient *= attenuation;
-	diffuse *= attenuation;
-	specular *= attenuation;
-	return (ambient + (1.0-shadow)*(diffuse + specular)) * color;
+	vec3 lightVector = light.position - fragPos;
+	float distanceToLight = length(lightVector);
+	vec3 lightDir = lightVector / max(distanceToLight, 0.0001);
+	float diffuseTerm = max(dot(normal, lightDir), 0.0);
+	vec3 halfDir = normalize(lightDir + viewDir);
+	float specularTerm = pow(max(dot(normal, halfDir), 0.0), material.a);
+	float attenuation = 1.0 / max(
+		light.constant + light.linear * distanceToLight +
+		light.quadratic * distanceToLight * distanceToLight,
+		0.0001);
+	vec3 ambient = light.ambient * material.r * ao;
+	vec3 diffuse = light.diffuse * material.g * diffuseTerm;
+	vec3 specular = light.specular * material.b * specularTerm;
+	return attenuation * (ambient + (1.0 - shadow) * (diffuse + specular)) * albedo;
 }
 
-vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir,float shadow)
+vec3 LegacySpot(
+	SpotLight light,
+	vec3 normal,
+	vec3 fragPos,
+	vec3 viewDir,
+	vec3 albedo,
+	vec4 material,
+	float ao)
 {
-	vec3 color = albedoSpec;
-	vec3 lightDir = normalize(light.position - fragPos);
-	// diffuse shading
-	float diff = max(dot(normal, lightDir), 0.0);
-	// specular shading
-	vec3 reflectDir = reflect(-lightDir, normal);
-	float spec = pow(max(dot(viewDir, reflectDir), 0.0),material.a);
-	// attenuation
-	float distance = length(light.position - fragPos);
-	float attenuation = 1.0 / (light.constant + light.linear * distance + light.quadratic * (distance * distance));
-	// spotlight intensity
+	vec3 lightVector = light.position - fragPos;
+	float distanceToLight = length(lightVector);
+	vec3 lightDir = lightVector / max(distanceToLight, 0.0001);
 	float theta = dot(lightDir, normalize(-light.direction));
-	float epsilon = light.cutOff - light.outerCutOff;
-	float intensity = clamp((theta - light.outerCutOff) / epsilon, 0.0, 1.0);
-	// combine results
-	vec3 ambient = light.ambient * material.r * gAO;
-	vec3 diffuse = light.diffuse * material.g *diff;
-	vec3 specular = light.specular * material.b* spec;
-	ambient *= attenuation * intensity;
-	diffuse *= attenuation * intensity;
-	specular *= attenuation * intensity;
-	return (ambient + (1.0-shadow)*(diffuse + specular))*color;
+	float cone = clamp(
+		(theta - light.outerCutOff) / max(light.cutOff - light.outerCutOff, 0.0001),
+		0.0,
+		1.0);
+	float attenuation = cone / max(
+		light.constant + light.linear * distanceToLight +
+		light.quadratic * distanceToLight * distanceToLight,
+		0.0001);
+	float diffuseTerm = max(dot(normal, lightDir), 0.0);
+	vec3 reflected = reflect(-lightDir, normal);
+	float specularTerm = pow(max(dot(viewDir, reflected), 0.0), material.a);
+	return attenuation * (
+		light.ambient * material.r * ao +
+		light.diffuse * material.g * diffuseTerm +
+		light.specular * material.b * specularTerm) * albedo;
 }
 
-void main(){
-	albedoSpec = texture(gAlbedoSpec, TexCoords).rgb;
-	material = texture(gMaterial, TexCoords);
-	gAO = useSSAO ? texture(ssaoMap, TexCoords).r : 1.0;
-	vec3 norm = normalize(texture(gNormal,TexCoords).rgb);
-	vec3 FragPos = texture(gPosition,TexCoords).rgb;
-	vec3 viewDir = normalize(viewPos - FragPos);
-	vec3 results = vec3(0);
-
-	int dirLightsNum =  min(MAX_DIR_LIGHTS,NR_DIR_LIGHTS);
-	int pointLightsNum = min(MAX_POINT_LIGHTS,NR_POINT_LIGHTS);
-	int spotLightsNum = min(MAX_SPOT_LIGHTS,NR_SPOT_LIGHTS);
-	float shadow;
-	for(int i = 0;i<dirLightsNum;i++){
-		vec4 FragPosLightSpace =  dirLights[i].lightSpaceMatrix * vec4(FragPos,1.0);
-			switch(shadowType){
-				case DEFAULT_SHADOW:
-					shadow = ShadowCalculation(FragPosLightSpace,norm,dirLights[i]);
-					break;
-				case PCF_SHADOW:
-					shadow = PCF(FragPosLightSpace,0.1,norm,dirLights[i]);
-					break;
-				case PCSS_SHADOW:
-					shadow = PCSS(FragPosLightSpace,norm,dirLights[i]);
-					break;
-			}
-		results += CalcDirLight(dirLights[i], norm, viewDir,shadow);
+void main()
+{
+	vec4 positionDepth = texture(gPosition, TexCoords);
+	if (positionDepth.a <= 0.0) {
+		FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+		BrightColor = vec4(0.0, 0.0, 0.0, 1.0);
+		return;
 	}
+	vec3 fragPos = positionDepth.rgb;
+	vec3 normal = normalize(texture(gNormal, TexCoords).rgb);
+	vec3 albedo = texture(gAlbedoSpec, TexCoords).rgb;
+	vec4 material = texture(gMaterial, TexCoords);
+	vec3 emissive = texture(gEmissive, TexCoords).rgb;
+	vec3 viewDir = normalize(viewPos - fragPos);
+	float ssao = useSSAO ? texture(ssaoMap, TexCoords).r : 1.0;
+	bool isPbr = material.a < 0.0;
+	float metallic = clamp(material.r, 0.0, 1.0);
+	float roughness = clamp(material.g, 0.04, 1.0);
+	float ao = isPbr ? clamp(material.b * ssao, 0.0, 1.0) : ssao;
+	vec3 color = isPbr
+		? EvaluatePbrIBL(normal, viewDir, albedo, metallic, roughness, ao) + emissive
+		: vec3(0.0);
 
-	for(int i = 0;i<pointLightsNum;i++){
-		switch(shadowType){
-			case DEFAULT_SHADOW:
-				shadow = ShadowCalculation(FragPos,pointLights[i]);
-				break;
-			case PCF_SHADOW:
-				shadow = PCF(FragPos,0.1,norm,pointLights[i]);
-				break;
-			case PCSS_SHADOW:
-				shadow = PCSS(FragPos,norm,pointLights[i]);
-				break;
+	int dirCount = min(NR_DIR_LIGHTS, MAX_DIR_LIGHTS);
+	for (int i = 0; i < dirCount; ++i) {
+		if (!dirLights[i].isActive) continue;
+		float shadow = DirectionalShadow(dirLights[i], normal, fragPos);
+		if (isPbr) {
+			color += (1.0 - shadow) * EvaluatePbrDirect(
+				normal, viewDir, normalize(-dirLights[i].direction), dirLights[i].diffuse,
+				albedo, metallic, roughness);
+		} else {
+			color += LegacyDirectional(dirLights[i], normal, viewDir, albedo, material, ao, shadow);
 		}
-		results += CalcPointLight(pointLights[i], norm, FragPos, viewDir,shadow);
 	}
 
-	for(int i = 0;i<spotLightsNum;i++){
-		results += CalcSpotLight(spotLights[i], norm, FragPos, viewDir,0);
+	int pointCount = min(NR_POINT_LIGHTS, MAX_POINT_LIGHTS);
+	for (int i = 0; i < pointCount; ++i) {
+		if (!pointLights[i].isActive) continue;
+		float shadow = PointShadow(pointLights[i], normal, fragPos);
+		if (isPbr) {
+			vec3 lightVector = pointLights[i].position - fragPos;
+			float distanceToLight = length(lightVector);
+			float attenuation = 1.0 / max(
+				pointLights[i].constant + pointLights[i].linear * distanceToLight +
+				pointLights[i].quadratic * distanceToLight * distanceToLight,
+				0.0001);
+			color += (1.0 - shadow) * EvaluatePbrDirect(
+				normal, viewDir, lightVector / max(distanceToLight, 0.0001),
+				pointLights[i].diffuse * attenuation, albedo, metallic, roughness);
+		} else {
+			color += LegacyPoint(pointLights[i], normal, fragPos, viewDir, albedo, material, ao, shadow);
+		}
 	}
-	FragColor = vec4(results, 1.0);
-	float brightness = dot(FragColor.rgb, vec3(0.2126, 0.7152, 0.0722));
-    if(brightness > bloomThreshold)
-        BrightColor = vec4(FragColor.rgb, 1.0);
-	else BrightColor = vec4(0,0,0,1);
-	return;
+
+	int spotCount = min(NR_SPOT_LIGHTS, MAX_SPOT_LIGHTS);
+	for (int i = 0; i < spotCount; ++i) {
+		if (!spotLights[i].isActive) continue;
+		if (isPbr) {
+			vec3 lightVector = spotLights[i].position - fragPos;
+			float distanceToLight = length(lightVector);
+			vec3 lightDir = lightVector / max(distanceToLight, 0.0001);
+			float theta = dot(lightDir, normalize(-spotLights[i].direction));
+			float cone = clamp(
+				(theta - spotLights[i].outerCutOff) /
+				max(spotLights[i].cutOff - spotLights[i].outerCutOff, 0.0001),
+				0.0,
+				1.0);
+			float attenuation = cone / max(
+				spotLights[i].constant + spotLights[i].linear * distanceToLight +
+				spotLights[i].quadratic * distanceToLight * distanceToLight,
+				0.0001);
+			color += EvaluatePbrDirect(
+				normal, viewDir, lightDir, spotLights[i].diffuse * attenuation,
+				albedo, metallic, roughness);
+		} else {
+			color += LegacySpot(spotLights[i], normal, fragPos, viewDir, albedo, material, ao);
+		}
+	}
+
+	FragColor = vec4(color, 1.0);
+	float brightness = dot(color, vec3(0.2126, 0.7152, 0.0722));
+	BrightColor = brightness > bloomThreshold
+		? vec4(color, 1.0)
+		: vec4(0.0, 0.0, 0.0, 1.0);
 }

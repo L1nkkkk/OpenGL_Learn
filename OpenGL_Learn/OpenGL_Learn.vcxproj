@@ -161,6 +161,7 @@
     <ClCompile Include="FramebufferManager.cpp" />
     <ClCompile Include="GLStateCache.cpp" />
     <ClCompile Include="Global.cpp" />
+    <ClCompile Include="ImageBasedLighting.cpp" />
     <ClCompile Include="Learn.cpp" />
     <ClCompile Include="Model.cpp" />
     <ClCompile Include="Object.cpp" />
@@ -183,6 +184,7 @@
     <ClInclude Include="DeferRenderPass.h" />
     <ClInclude Include="ForwardRenderPass.h" />
     <ClInclude Include="GLStateCache.h" />
+    <ClInclude Include="ImageBasedLighting.h" />
     <ClInclude Include="Learn.h" />
     <ClInclude Include="Light.h" />
     <ClInclude Include="Material.h" />
@@ -237,12 +239,19 @@
     <None Include="shaders\geometryVertex.glsl" />
     <None Include="shaders\grassFragment.glsl" />
     <None Include="shaders\grassVertex.glsl" />
+    <None Include="shaders\iblBrdfFragment.glsl" />
+    <None Include="shaders\iblBrdfVertex.glsl" />
+    <None Include="shaders\iblCubemapVertex.glsl" />
+    <None Include="shaders\iblIrradianceFragment.glsl" />
+    <None Include="shaders\iblPrefilterFragment.glsl" />
     <None Include="shaders\mirrorFragment.glsl" />
     <None Include="shaders\mirrorVertex.glsl" />
     <None Include="shaders\normalFragment.glsl" />
     <None Include="shaders\normalGeometry.glsl" />
     <None Include="shaders\normalVertex.glsl" />
     <None Include="shaders\outlineVertex.glsl" />
+    <None Include="shaders\pbrFragment.glsl" />
+    <None Include="shaders\pbrVertex.glsl" />
     <None Include="shaders\phongFragment.glsl" />
     <None Include="shaders\phongVertex.glsl" />
     <None Include="shaders\sceneFragment.glsl" />

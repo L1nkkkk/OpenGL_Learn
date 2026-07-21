@@ -23,7 +23,7 @@ FBOAttributes DeferRenderPass::BuildAttributesFromSystemProperties()
 
 FBOAttributes DeferRenderPass::BuildGBufferAttributesFromSystemProperties() const
 {
-	// GBuffer: position / normal / albedoSpec / material
+	// GBuffer: position / normal / albedo / material parameters / emissive.
 	FBOAttributes attr = FramebuffersManager::GenCurrentAttr();
 	attr.aaType = AntiAliasManager::AntiAliasType::Default;
 	attr.isDefer = true;
@@ -34,12 +34,13 @@ FBOAttributes DeferRenderPass::BuildGBufferAttributesFromSystemProperties() cons
 	attr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_RGB16F, GL_RGB, GL_FLOAT });          // gNormal
 	attr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_RGB, GL_RGB, GL_UNSIGNED_BYTE });     // gAlbedoSpec
 	attr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_RGBA16F, GL_RGBA, GL_FLOAT });        // gMaterial
+	attr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_RGB16F, GL_RGB, GL_FLOAT });          // gEmissive
 	return attr;
 }
 
 void DeferRenderPass::BindGBufferTextures(Shader& shader, unsigned int& textureSlot) const
 {
-	if (!m_gbufferFBO || m_gbufferFBO->textureIDs.size() < 4) return;
+	if (!m_gbufferFBO || m_gbufferFBO->textureIDs.size() < 5) return;
 
 	GLState::ActiveTexture(GL_TEXTURE0 + textureSlot);
 	GLState::BindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[0]);
@@ -56,11 +57,15 @@ void DeferRenderPass::BindGBufferTextures(Shader& shader, unsigned int& textureS
 	GLState::ActiveTexture(GL_TEXTURE0 + textureSlot);
 	GLState::BindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[3]);
 	shader.setInt("gMaterial", textureSlot++);
+
+	GLState::ActiveTexture(GL_TEXTURE0 + textureSlot);
+	GLState::BindTexture(GL_TEXTURE_2D, m_gbufferFBO->textureIDs[4]);
+	shader.setInt("gEmissive", textureSlot++);
 }
 
 void DeferRenderPass::DrawPointLightVolumesDeferred(Scene* scene)
 {
-	if (!scene || !m_gbufferFBO || m_gbufferFBO->textureIDs.size() < 4) return;
+	if (!scene || !m_gbufferFBO || m_gbufferFBO->textureIDs.size() < 5) return;
 
 	auto defaultShader = ShaderManager::GetInstance().GetShader(ShaderManager::Default);
 	auto lightVolumeShader = ShaderManager::GetInstance().GetShader(ShaderManager::LightVolume);
@@ -204,7 +209,7 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 		}
 		fbMgr.TrimUnusedFBOs();
 	}
-	if (!m_gbufferFBO || m_gbufferFBO->textureIDs.size() < 4) return;
+	if (!m_gbufferFBO || m_gbufferFBO->textureIDs.size() < 5) return;
 
 	auto& properties = SystemProperties::GetInstance();
 	scene->PrepareRenderData();
@@ -224,10 +229,12 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 	const float clearGNormal[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	const float clearGAlbedo[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	const float clearGMaterial[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	const float clearGEmissive[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	glClearBufferfv(GL_COLOR, 0, clearGPos);
 	glClearBufferfv(GL_COLOR, 1, clearGNormal);
 	glClearBufferfv(GL_COLOR, 2, clearGAlbedo);
 	glClearBufferfv(GL_COLOR, 3, clearGMaterial);
+	glClearBufferfv(GL_COLOR, 4, clearGEmissive);
 
 	auto deferProcessShader = ShaderManager::GetInstance().GetShader(ShaderManager::DeferProcess);
 	if (!deferProcessShader) return;
@@ -238,7 +245,9 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 		for (const auto& item : opaqueList) {
 			if (!item.model || !item.mesh) continue;
 			deferProcessShader->setMat4("model", item.modelMatrix);
-			item.mesh->Draw(deferProcessShader.get());
+			item.mesh->Draw(
+				deferProcessShader.get(),
+				item.shader && item.shader->shaderName == "pbr");
 		}
 	}
 
@@ -270,7 +279,11 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 	glClear(GL_STENCIL_BUFFER_BIT);
 	GLState::Disable(GL_DEPTH_TEST);
 
-	if (!properties.LIGHT_VOLUME) {
+	// The PBR path includes one non-additive IBL/emissive contribution. Until the
+	// light-volume shaders gain a dedicated ambient pass, use the correct
+	// fullscreen path whenever a PBR material is present.
+	const bool useLightVolumes = properties.LIGHT_VOLUME && !scene->UsesPbrMaterials();
+	if (!useLightVolumes) {
 		auto deferLightShader = ShaderManager::GetInstance().GetShader(ShaderManager::Defer);
 		if (!deferLightShader) return;
 		deferLightShader->use();
@@ -287,6 +300,7 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 			deferLightShader->setInt("ssaoMap", texSlot);
 			++texSlot;
 		}
+		texSlot = scene->BindImageBasedLighting(*deferLightShader, texSlot);
 
 		GLState::BindVertexArray(globalVAOs.quadVAO);
 		PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, 6);

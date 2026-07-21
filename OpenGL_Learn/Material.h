@@ -408,12 +408,41 @@ protected:
 
 	virtual void SetMaterialParamsToShader(Shader& shader, bool deferProcessMode = false) {
 		auto& properties = SystemProperties::GetInstance();
+		const bool pbrMaterial = m_shaderName == "pbr" || shader.shaderName == "pbr";
+
+		// Stable defaults keep partially-authored XML and legacy imported materials
+		// deterministic. Individual properties below override these values.
+		if (pbrMaterial || deferProcessMode) {
+			shader.setVec3("material.albedo", glm::vec3(1.0f));
+			shader.setFloat("material.metallic", 0.0f);
+			shader.setFloat("material.roughness", 0.5f);
+			shader.setFloat("material.ao", 1.0f);
+			shader.setVec3("material.emissive", glm::vec3(0.0f));
+			shader.setFloat("material.opacity", 1.0f);
+			shader.setFloat("material.alphaCutoff", 0.0f);
+			shader.setBool("material.useAlphaCutoff", false);
+			shader.setBool("material.metallicRoughnessPacked", false);
+			shader.setBool("material.usePBR", pbrMaterial);
+		}
+
+		if (pbrMaterial && !deferProcessMode) {
+			shader.setBool("material.use_texture_diffuse", false);
+			shader.setBool("material.use_texture_normal", false);
+			shader.setBool("material.use_texture_metallic", false);
+			shader.setBool("material.use_texture_roughness", false);
+			shader.setBool("material.use_texture_ao", false);
+			shader.setBool("material.use_texture_emissive", false);
+		}
 
 		// deferred geometry pass uses simplified sampler names.
 		if (deferProcessMode) {
 			shader.setBool("hasDiffuseMap", false);
 			shader.setBool("hasSpecularMap", false);
 			shader.setBool("hasNormalMap", false);
+			shader.setBool("hasMetallicMap", false);
+			shader.setBool("hasRoughnessMap", false);
+			shader.setBool("hasAoMap", false);
+			shader.setBool("hasEmissiveMap", false);
 		}
 
 		for (auto& [propertyName, property] : m_propertiesMap) {
@@ -457,17 +486,37 @@ protected:
 					static const std::string kDiffuseSampler = "texture_diffuse1";
 					static const std::string kSpecSampler = "texture_specular1";
 					static const std::string kNormalSampler = "texture_normal1";
+					static const std::string kMetallicSampler = "texture_metallic1";
+					static const std::string kRoughnessSampler = "texture_roughness1";
+					static const std::string kAoSampler = "texture_ao1";
+					static const std::string kEmissiveSampler = "texture_emissive1";
 					static const std::string kHasDiffuse = "hasDiffuseMap";
 					static const std::string kHasSpec = "hasSpecularMap";
 					static const std::string kHasNormal = "hasNormalMap";
-					if (propertyName == "texture_diffuse") {
+					static const std::string kHasMetallic = "hasMetallicMap";
+					static const std::string kHasRoughness = "hasRoughnessMap";
+					static const std::string kHasAo = "hasAoMap";
+					static const std::string kHasEmissive = "hasEmissiveMap";
+					if (propertyName == "texture_diffuse" || propertyName == "albedo" || propertyName == "baseColor") {
 						slot = 0; samplerName = &kDiffuseSampler; hasMapName = &kHasDiffuse;
 					}
 					else if (propertyName == "texture_specular") {
-						slot = 1; samplerName = &kSpecSampler; hasMapName = &kHasSpec;
+						slot = 2; samplerName = &kSpecSampler; hasMapName = &kHasSpec;
 					}
 					else if (propertyName == "texture_normal") {
-						slot = 2; samplerName = &kNormalSampler; hasMapName = &kHasNormal;
+						slot = 1; samplerName = &kNormalSampler; hasMapName = &kHasNormal;
+					}
+					else if (propertyName == "texture_metallic") {
+						slot = 3; samplerName = &kMetallicSampler; hasMapName = &kHasMetallic;
+					}
+					else if (propertyName == "texture_roughness") {
+						slot = 4; samplerName = &kRoughnessSampler; hasMapName = &kHasRoughness;
+					}
+					else if (propertyName == "texture_ao") {
+						slot = 5; samplerName = &kAoSampler; hasMapName = &kHasAo;
+					}
+					else if (propertyName == "texture_emissive") {
+						slot = 6; samplerName = &kEmissiveSampler; hasMapName = &kHasEmissive;
 					}
 
 					if (samplerName && hasMapName) {

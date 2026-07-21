@@ -26,9 +26,13 @@
 #include "Profiler.h"
 #include "PerformanceBenchmark.h"
 #include "GLStateCache.h"
+#include "ImageBasedLighting.h"
 #include "SceneStateIO.h"
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
 #include <iomanip>
+#include <vector>
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
@@ -51,6 +55,81 @@ glm::vec3 toyColor(1.0f, 0.5f, 0.31f);
 glm::vec3 result = lightColor * toyColor;
 
 Timer& timer = Timer::GetInstance();
+
+struct FrameCaptureStats {
+	bool valid = false;
+	double meanLuminance = 0.0;
+	double nonBlackRatio = 0.0;
+	std::vector<unsigned char> pixels;
+};
+
+FrameCaptureStats CaptureFramebufferPpm(const FBO* fbo, const std::string& outputPath)
+{
+	FrameCaptureStats stats;
+	if (!fbo || fbo->framebufferID == 0 || fbo->width <= 0 || fbo->height <= 0) {
+		return stats;
+	}
+
+	const int width = fbo->width;
+	const int height = fbo->height;
+	std::vector<unsigned char> pixels(
+		static_cast<size_t>(width) * static_cast<size_t>(height) * 3u);
+	GLState::BindFramebuffer(GL_READ_FRAMEBUFFER, fbo->framebufferID);
+	glReadBuffer(GL_COLOR_ATTACHMENT0);
+	glPixelStorei(GL_PACK_ALIGNMENT, 1);
+	glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+	const GLenum readError = glGetError();
+	GLState::BindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+	if (readError != GL_NO_ERROR) {
+		std::cerr << "PBR capture glReadPixels failed with error 0x"
+			<< std::hex << readError << std::dec << std::endl;
+		return stats;
+	}
+
+	std::error_code directoryError;
+	const std::filesystem::path path(outputPath);
+	if (path.has_parent_path()) {
+		std::filesystem::create_directories(path.parent_path(), directoryError);
+	}
+	if (directoryError) {
+		return stats;
+	}
+	std::ofstream output(path, std::ios::binary | std::ios::trunc);
+	if (!output.is_open()) {
+		return stats;
+	}
+	output << "P6\n" << width << ' ' << height << "\n255\n";
+	const size_t rowBytes = static_cast<size_t>(width) * 3u;
+	for (int row = height - 1; row >= 0; --row) {
+		output.write(
+			reinterpret_cast<const char*>(pixels.data() + static_cast<size_t>(row) * rowBytes),
+			static_cast<std::streamsize>(rowBytes));
+	}
+	if (!output.good()) {
+		return stats;
+	}
+
+	double luminanceSum = 0.0;
+	std::uint64_t nonBlackPixels = 0;
+	const std::uint64_t pixelCount = static_cast<std::uint64_t>(width) * height;
+	for (size_t i = 0; i < pixels.size(); i += 3) {
+		const double red = pixels[i] / 255.0;
+		const double green = pixels[i + 1] / 255.0;
+		const double blue = pixels[i + 2] / 255.0;
+		const double luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+		luminanceSum += luminance;
+		if (luminance > 0.01) {
+			++nonBlackPixels;
+		}
+	}
+	stats.meanLuminance = pixelCount != 0 ? luminanceSum / pixelCount : 0.0;
+	stats.nonBlackRatio = pixelCount != 0
+		? static_cast<double>(nonBlackPixels) / pixelCount
+		: 0.0;
+	stats.valid = stats.meanLuminance > 0.005 && stats.nonBlackRatio > 0.01;
+	stats.pixels = std::move(pixels);
+	return stats;
+}
 
 
 void ProcessInput(GLFWwindow* window) {
@@ -125,6 +204,10 @@ void SetUniformBuffer() {
 int main(int argc, char** argv) {
 	const auto applicationStart = PerformanceBenchmarkSession::Clock::now();
 	bool resourceSmokeTest = false;
+	bool pbrSmokeTest = false;
+	bool pbrSmokeFailed = false;
+	bool benchmarkPhongMaterialScene = false;
+	bool benchmarkPbrMaterialScene = false;
 	PerformanceBenchmarkOptions benchmarkOptions;
 	std::string benchmarkOptionError;
 	if (!ParsePerformanceBenchmarkOptions(argc, argv, benchmarkOptions, benchmarkOptionError)) {
@@ -135,9 +218,21 @@ int main(int argc, char** argv) {
 		if (std::string(argv[i]) == "--resource-smoke-test") {
 			resourceSmokeTest = true;
 		}
+		else if (std::string(argv[i]) == "--pbr-smoke-test") {
+			pbrSmokeTest = true;
+		}
+		else if (std::string(argv[i]) == "--benchmark-phong-material-scene") {
+			benchmarkPhongMaterialScene = true;
+		}
+		else if (std::string(argv[i]) == "--benchmark-pbr-material-scene") {
+			benchmarkPbrMaterialScene = true;
+		}
 	}
-	if (resourceSmokeTest && benchmarkOptions.enabled) {
-		std::cerr << "--resource-smoke-test and --performance-benchmark cannot run together" << std::endl;
+	if ((resourceSmokeTest && benchmarkOptions.enabled) ||
+		(pbrSmokeTest && (resourceSmokeTest || benchmarkOptions.enabled)) ||
+		(benchmarkPhongMaterialScene && benchmarkPbrMaterialScene) ||
+		((benchmarkPhongMaterialScene || benchmarkPbrMaterialScene) && !benchmarkOptions.enabled)) {
+		std::cerr << "automated smoke modes and --performance-benchmark are mutually exclusive" << std::endl;
 		return 4;
 	}
 	glfwInit();
@@ -181,7 +276,7 @@ int main(int argc, char** argv) {
 
 	MyGui& mygui = MyGui::GetInstance();
 	mygui.Init(window);
-	if (benchmarkOptions.enabled || resourceSmokeTest) {
+	if (benchmarkOptions.enabled || resourceSmokeTest || pbrSmokeTest) {
 		// Automated runs must not modify the user's editor layout or depend on
 		// ImGui's periodic ini writes while checks are being collected.
 		ImGuiIO& io = ImGui::GetIO();
@@ -191,6 +286,20 @@ int main(int argc, char** argv) {
 
 	ShaderManager& shaderManager = ShaderManager::GetInstance();
 	shaderManager.Init();
+	if (benchmarkOptions.enabled || resourceSmokeTest || pbrSmokeTest) {
+		bool invalidShaderFound = false;
+		for (const std::string& shaderName : shaderManager.GetNames()) {
+			auto shader = shaderManager.GetShaderByName(shaderName);
+			if (!shader || shader->ID == 0) {
+				std::cerr << "Automated validation: invalid shader '"
+					<< shaderName << "'" << std::endl;
+				invalidShaderFound = true;
+			}
+		}
+		if (invalidShaderFound) {
+			return 5;
+		}
+	}
 	Shader& debugShader = *(shaderManager.GetShader(ShaderManager::DebugScene));
 
 #ifdef USE_GEOMETRY_SHADER
@@ -218,7 +327,81 @@ int main(int argc, char** argv) {
 	xmlMaterialManager.LoadFromFile("materials.xml");
 	Scene scene(&camera, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
 	const std::string sceneStatePath = "saved/last_scene.json";
-	if (SceneStateIO::Exists(sceneStatePath)) {
+	const bool useBuiltInMaterialScene =
+		pbrSmokeTest || benchmarkPhongMaterialScene || benchmarkPbrMaterialScene;
+	if (useBuiltInMaterialScene) {
+		LoadDefaultLights(scene);
+		const bool usePbrMaterial = pbrSmokeTest || benchmarkPbrMaterialScene;
+		auto validationModel = std::make_shared<Model>(
+			"models/backpack/backpack.obj",
+			shaderManager.GetShader(
+				usePbrMaterial ? ShaderManager::Pbr : ShaderManager::Phong));
+		validationModel->SetName("pbr-backpack-validation");
+		validationModel->SetPosition(glm::vec3(0.0f));
+		validationModel->SetScale(1.0f);
+		scene.modelSource.AddModel(validationModel);
+		camera.cameraPos = glm::vec3(0.0f, 0.0f, 5.0f);
+		camera.cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+		camera.up = glm::vec3(0.0f, 1.0f, 0.0f);
+		properties.DEFER_RENDERING = false;
+		properties.SSAO = false;
+		properties.LIGHT_VOLUME = false;
+		properties.BLOOM = false;
+		properties.GAMMA_CORRECTION = true;
+
+		if (pbrSmokeTest) {
+			bool hasPbrMaterial = false;
+			bool hasAlbedo = false;
+			bool hasNormal = false;
+			bool hasRoughness = false;
+			bool hasAo = false;
+			bool hasMetallicFactor = false;
+			bool hasEmissiveFactor = false;
+			for (const Mesh& mesh : validationModel->GetMeshes()) {
+				if (!mesh.material_ptr || mesh.material_ptr->GetShaderName() != "pbr") {
+					continue;
+				}
+				hasPbrMaterial = true;
+				const auto& materialProperties = mesh.material_ptr->GetProperties();
+				auto hasTexture = [&](const char* name) {
+					const auto it = materialProperties.find(name);
+					return it != materialProperties.end() &&
+						it->second.type == MaterialPropertyType::Texture &&
+						!it->second.textures.empty() &&
+						it->second.textures.front().textureID != 0;
+				};
+				hasAlbedo = hasAlbedo || hasTexture("texture_diffuse");
+				hasNormal = hasNormal || hasTexture("texture_normal");
+				hasRoughness = hasRoughness || hasTexture("texture_roughness");
+				hasAo = hasAo || hasTexture("texture_ao");
+				const auto metallic = materialProperties.find("metallic");
+				hasMetallicFactor = hasMetallicFactor ||
+					(metallic != materialProperties.end() &&
+						metallic->second.type == MaterialPropertyType::Float);
+				const auto emissive = materialProperties.find("emissive");
+				hasEmissiveFactor = hasEmissiveFactor ||
+					(emissive != materialProperties.end() &&
+						(emissive->second.type == MaterialPropertyType::Color ||
+							emissive->second.type == MaterialPropertyType::Vec3));
+			}
+			pbrSmokeFailed = !(
+				hasPbrMaterial &&
+				hasAlbedo &&
+				hasNormal &&
+				hasRoughness &&
+				hasAo &&
+				hasMetallicFactor &&
+				hasEmissiveFactor);
+			std::cout << "[PBRSmoke] material=" << hasPbrMaterial
+				<< " albedo=" << hasAlbedo
+				<< " normal=" << hasNormal
+				<< " roughness=" << hasRoughness
+				<< " ao=" << hasAo
+				<< " metallicFactor=" << hasMetallicFactor
+				<< " emissiveFactor=" << hasEmissiveFactor << std::endl;
+		}
+	}
+	else if (SceneStateIO::Exists(sceneStatePath)) {
 		// 有存档：只初始化默认灯光占位，其它由 SceneStateIO 恢复，避免默认模型+存档模型双加载。
 		LoadDefaultLights(scene);
 		const bool loaded = SceneStateIO::LoadAsync(scene, camera, sceneStatePath);
@@ -295,6 +478,21 @@ int main(int argc, char** argv) {
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 	GLState::BindVertexArray(0);
 	scene.skyboxSource = SkyboxSource(skybox, skyboxVAO, shaderManager.GetShader(ShaderManager::Skybox));
+	ImageBasedLighting imageBasedLighting;
+	scene.SetImageBasedLighting(&imageBasedLighting);
+	bool iblInitializationAttempted = false;
+	if (useBuiltInMaterialScene && scene.UsesPbrMaterials()) {
+		iblInitializationAttempted = true;
+		if (!imageBasedLighting.Initialize(
+			skybox.textureID,
+			skyboxVAO,
+			globalVAOs.quadVAO,
+			properties.SCREEN_WIDTH,
+			properties.SCREEN_HEIGHT)) {
+			std::cerr << "PBR IBL initialization failed; using direct-light fallback" << std::endl;
+			if (pbrSmokeTest) pbrSmokeFailed = true;
+		}
+	}
 	
 	FramebuffersManager& framebuffersMgr = FramebuffersManager::GetInstance();
 	AntiAliasManager& antiAliasMgr = AntiAliasManager::GetInstance();
@@ -314,6 +512,8 @@ int main(int argc, char** argv) {
 	postprocessRenderPass->Init(properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
 	bool deferredPassActive = properties.DEFER_RENDERING;
 	int resourceSmokeFrames = 0;
+	int pbrSmokeFrames = 0;
+	std::vector<unsigned char> pbrForwardPixels;
 	bool resourceSmokeFailed = false;
 	auto reportResourceState = [&](const char* stage, std::size_t expectedBusyFBOs) {
 		const auto busyFBOs = FramebuffersManager::GetInstance().GetBusyFBOs();
@@ -360,7 +560,9 @@ int main(int argc, char** argv) {
 		}
 
 		PerformanceBenchmarkMetadata metadata;
-		metadata.scenePath = sceneStatePath;
+		metadata.scenePath = benchmarkPbrMaterialScene
+			? "builtin/backpack-pbr"
+			: (benchmarkPhongMaterialScene ? "builtin/backpack-phong" : sceneStatePath);
 		metadata.glVendor = glString(GL_VENDOR);
 		metadata.glRenderer = glString(GL_RENDERER);
 		metadata.glVersion = glString(GL_VERSION);
@@ -405,6 +607,21 @@ int main(int argc, char** argv) {
 		{
 			PERF_CPU_SCOPE("Async Model Loads");
 			SceneStateIO::UpdateAsyncLoads(scene, 1);
+		}
+		if (!iblInitializationAttempted && scene.UsesPbrMaterials()) {
+			iblInitializationAttempted = true;
+			if (!imageBasedLighting.Initialize(
+				skybox.textureID,
+				skyboxVAO,
+				globalVAOs.quadVAO,
+				properties.SCREEN_WIDTH,
+				properties.SCREEN_HEIGHT)) {
+				std::cerr << "PBR IBL initialization failed; using direct-light fallback" << std::endl;
+				if (pbrSmokeTest) pbrSmokeFailed = true;
+			}
+		}
+		if (pbrSmokeTest) {
+			++pbrSmokeFrames;
 		}
 		if (resourceSmokeTest && !SceneStateIO::HasPendingAsyncLoads()) {
 			++resourceSmokeFrames;
@@ -628,6 +845,50 @@ int main(int argc, char** argv) {
 			PERF_CPU_SCOPE("ImGui Render");
 			mygui.Render();
 		}
+		if (pbrSmokeTest && (pbrSmokeFrames == 30 || pbrSmokeFrames == 60)) {
+			const bool deferredCapture = pbrSmokeFrames == 60;
+			const std::string capturePath = deferredCapture
+				? "benchmark-results/pbr-ibl/pbr-deferred.ppm"
+				: "benchmark-results/pbr-ibl/pbr-forward.ppm";
+			const FrameCaptureStats capture = CaptureFramebufferPpm(
+				postprocessRenderPass->GetOutputFBO(),
+				capturePath);
+			std::cout << "[PBRSmoke] mode="
+				<< (deferredCapture ? "deferred" : "forward")
+				<< " iblReady=" << imageBasedLighting.IsReady()
+				<< " meanLuminance=" << std::fixed << std::setprecision(4)
+				<< capture.meanLuminance
+				<< " nonBlackRatio=" << capture.nonBlackRatio
+				<< " capture=" << capturePath << std::endl;
+			if (!capture.valid || !imageBasedLighting.IsReady()) {
+				pbrSmokeFailed = true;
+			}
+			if (!deferredCapture) {
+				pbrForwardPixels = capture.pixels;
+				properties.DEFER_RENDERING = true;
+			}
+			else {
+				double meanAbsoluteDifference = 1.0;
+				if (!pbrForwardPixels.empty() &&
+					pbrForwardPixels.size() == capture.pixels.size()) {
+					double differenceSum = 0.0;
+					for (size_t i = 0; i < capture.pixels.size(); ++i) {
+						differenceSum += std::abs(
+							static_cast<int>(pbrForwardPixels[i]) -
+							static_cast<int>(capture.pixels[i]));
+					}
+					meanAbsoluteDifference = differenceSum /
+						(static_cast<double>(capture.pixels.size()) * 255.0);
+				}
+				std::cout << "[PBRSmoke] forwardDeferredMae="
+					<< std::fixed << std::setprecision(6)
+					<< meanAbsoluteDifference << std::endl;
+				if (meanAbsoluteDifference > 0.01) {
+					pbrSmokeFailed = true;
+				}
+				glfwSetWindowShouldClose(window, true);
+			}
+		}
 #elif defined(USE_GEOMETRY_SHADER)
 		geometryShader.use();
 		GLState::BindVertexArray(VAO);
@@ -660,7 +921,7 @@ int main(int argc, char** argv) {
 	delete deferRenderPass;
 	postprocessRenderPass->Destroy();
 	delete postprocessRenderPass;
-	if (!resourceSmokeTest && !benchmarkOptions.enabled) {
+	if (!resourceSmokeTest && !pbrSmokeTest && !benchmarkOptions.enabled) {
 		SceneStateIO::Save(scene, camera, sceneStatePath);
 	}
 	scene.SetSelectedModelForMaterials(nullptr);
@@ -669,14 +930,36 @@ int main(int argc, char** argv) {
 	scene.lightSource.directionLights.clear();
 	scene.lightSource.spotLights.clear();
 	Model::DestroyMeshCache();
+	scene.SetImageBasedLighting(nullptr);
+	imageBasedLighting.Destroy();
 	skybox.Release();
 	DestroyTextureCache();
 	FramebuffersManager::GetInstance().Shutdown();
+	if (pbrSmokeTest) {
+		const auto& memory = PerformanceProfiler::GetInstance().GetMemoryStats();
+		auto currentBytes = [&](MemoryResourceType type) {
+			return memory.categories[static_cast<size_t>(type)].currentBytes;
+		};
+		const std::uint64_t textureBytes = currentBytes(MemoryResourceType::Texture);
+		const std::uint64_t meshCpuBytes = currentBytes(MemoryResourceType::MeshCpu);
+		const std::uint64_t meshGpuBytes = currentBytes(MemoryResourceType::MeshGpu);
+		const std::uint64_t renderTargetBytes = currentBytes(MemoryResourceType::RenderTarget);
+		std::cout << "[PBRSmoke] released textureBytes=" << textureBytes
+			<< " meshCpuBytes=" << meshCpuBytes
+			<< " meshGpuBytes=" << meshGpuBytes
+			<< " renderTargetBytes=" << renderTargetBytes << std::endl;
+		if (textureBytes != 0 || meshCpuBytes != 0 || meshGpuBytes != 0 || renderTargetBytes != 0) {
+			pbrSmokeFailed = true;
+		}
+	}
 	PerformanceProfiler::GetInstance().Shutdown();
 
 	glfwTerminate();
 	if (resourceSmokeFailed) {
 		return 2;
+	}
+	if (pbrSmokeFailed) {
+		return 6;
 	}
 	if (benchmarkOptions.enabled && !benchmarkSession.WasSuccessful()) {
 		return 3;

@@ -1,5 +1,6 @@
 #include "Scene.h"
 #include "GLStateCache.h"
+#include "ImageBasedLighting.h"
 #include "Profiler.h"
 
 #include <array>
@@ -171,6 +172,34 @@ const std::vector<Scene::MeshDrawItem>& Scene::GetOpaqueMeshes() const
 const std::vector<Scene::MeshDrawItem>& Scene::GetTransparentMeshes() const
 {
 	return m_transparentMeshList;
+}
+
+unsigned int Scene::BindImageBasedLighting(Shader& shader, unsigned int firstTextureUnit) const
+{
+	if (!m_imageBasedLighting) {
+		shader.setBool("useIBL", false);
+		return firstTextureUnit;
+	}
+	return m_imageBasedLighting->Bind(shader, firstTextureUnit);
+}
+
+bool Scene::UsesPbrMaterials() const
+{
+	for (const auto& model : modelSource.models) {
+		if (!model) {
+			continue;
+		}
+		const auto modelShader = model->GetShader();
+		if (modelShader && modelShader->shaderName == "pbr") {
+			return true;
+		}
+		for (const Mesh& mesh : model->GetMeshes()) {
+			if (mesh.material_ptr && mesh.material_ptr->GetShaderName() == "pbr") {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 void Scene::Draw()
 {
@@ -447,6 +476,10 @@ void Scene::DrawOpaqueModels()
 			lastShader->setVec3("viewPos", camera_ptr->cameraPos);
 			lastShader->setVec3("color", glm::vec3(0.2f));
 			SetLightUniforms(*lastShader);
+			properties.USED_TEXTURE_NUM = BindImageBasedLighting(
+				*lastShader,
+				properties.USED_TEXTURE_NUM);
+			usedTexes = properties.USED_TEXTURE_NUM;
 		}
 
 		properties.USED_TEXTURE_NUM = usedTexes;
@@ -499,6 +532,10 @@ void Scene::DrawTransparentModels()
 					lastShader->setVec3("viewPos", camera_ptr->cameraPos);
 				}
 				SetLightUniforms(*lastShader);
+				properties.USED_TEXTURE_NUM = BindImageBasedLighting(
+					*lastShader,
+					properties.USED_TEXTURE_NUM);
+				usedTexes = properties.USED_TEXTURE_NUM;
 			}
 			properties.USED_TEXTURE_NUM = usedTexes;
 
@@ -890,8 +927,7 @@ void Scene::SetSceneGui()
         }
     }
 
-    static int selectedOption = 0;
-    const char* options[] = { "Phong","Mirror","Explode" };
+	const char* options[] = { "Phong", "PBR", "Mirror", "Explode" };
     int optionCount = sizeof(options) / sizeof(options[0]);
 
     if (ImGui::CollapsingHeader("Model Settings")) {
@@ -918,17 +954,24 @@ void Scene::SetSceneGui()
                     ImGui::ColorEdit3("Outline Color", &model->outlineColor[0]);
                     ImGui::DragFloat("NormalLine Width", &OtherShader::normalLineMagnitude, 0.01f, 0.0f, 0.4f);
 
-                    auto shaderPtr = model->GetShader();
-                    int curShaderIdx = shaderPtr ? ShaderManager::GetInstance().GetShaderIndexByShader(shaderPtr) : -1;
-                    if (ImGui::Combo("Shader Type", &selectedOption, options, optionCount)) {
+					auto shaderPtr = model->GetShader();
+					int curShaderIdx = shaderPtr ? ShaderManager::GetInstance().GetShaderIndexByShader(shaderPtr) : -1;
+					int selectedOption = 0;
+					if (curShaderIdx == ShaderManager::Pbr) selectedOption = 1;
+					else if (curShaderIdx == ShaderManager::Mirror) selectedOption = 2;
+					else if (curShaderIdx == ShaderManager::Explode) selectedOption = 3;
+					if (ImGui::Combo("Shader Type", &selectedOption, options, optionCount)) {
                         switch (selectedOption) {
                         case 0:
                             if (curShaderIdx != ShaderManager::Phong) model->SetShader(ShaderManager::GetInstance().GetShader(ShaderManager::Phong));
                             break;
-                        case 1:
-                            if (curShaderIdx != ShaderManager::Mirror) model->SetShader(ShaderManager::GetInstance().GetShader(ShaderManager::Mirror));
-                            break;
-                        case 2:
+						case 1:
+							if (curShaderIdx != ShaderManager::Pbr) model->SetShader(ShaderManager::GetInstance().GetShader(ShaderManager::Pbr));
+							break;
+						case 2:
+							if (curShaderIdx != ShaderManager::Mirror) model->SetShader(ShaderManager::GetInstance().GetShader(ShaderManager::Mirror));
+							break;
+						case 3:
                             if (curShaderIdx != ShaderManager::Explode) model->SetShader(ShaderManager::GetInstance().GetShader(ShaderManager::Explode));
                             break;
                         }

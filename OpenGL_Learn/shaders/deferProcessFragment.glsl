@@ -1,9 +1,10 @@
 #version 330 core
 
-layout (location = 0) out vec4 gPos;
+layout (location = 0) out vec4 gPosition;
 layout (location = 1) out vec3 gNormal;
 layout (location = 2) out vec3 gAlbedoSpec;
 layout (location = 3) out vec4 gMaterial;
+layout (location = 4) out vec3 gEmissive;
 
 in VS_OUT {
 	vec3 FragPos;
@@ -13,40 +14,54 @@ in VS_OUT {
 	mat3 TBN;
 } fs_in;
 
-struct Material{
-	vec3 ambient;           // Ka�������ⷴ��ϵ��
-    vec3 diffuse;           // Kd�����������ɫ
-    vec3 specular;          // Ks�����淴��ϵ��
-    float shininess;        // Ns���߹�ָ��
-    float opacity;          // d��͸���ȣ�1=��͸����
+struct Material {
+	vec3 ambient;
+	vec3 diffuse;
+	vec3 specular;
+	float shininess;
+	vec3 albedo;
+	float metallic;
+	float roughness;
+	float ao;
+	vec3 emissive;
+	float opacity;
 	float alphaCutoff;
 	bool useAlphaCutoff;
+	bool usePBR;
+	bool metallicRoughnessPacked;
 };
 
 uniform sampler2D texture_diffuse1;
 uniform sampler2D texture_specular1;
 uniform sampler2D texture_normal1;
+uniform sampler2D texture_metallic1;
+uniform sampler2D texture_roughness1;
+uniform sampler2D texture_ao1;
+uniform sampler2D texture_emissive1;
 
-uniform bool hasNormalMap;
-uniform bool hasSpecularMap;
 uniform bool hasDiffuseMap;
-
+uniform bool hasSpecularMap;
+uniform bool hasNormalMap;
+uniform bool hasMetallicMap;
+uniform bool hasRoughnessMap;
+uniform bool hasAoMap;
+uniform bool hasEmissiveMap;
 uniform Material material;
 
 layout(std140) uniform SystemProperties {
-    bool useBloom;
-    bool useShadowMap;
-    bool useGamma;
-    bool useHDR;
-    float bloomThreshold;
-    float gamma;
-    float exposure;
-    int bloomBlurIterations;
-    int shadowSampleNum;
-    int shadowSampleRings;
-    int shadowType;
-    int screenWidth;
-    int screenHeight;
+	bool useBloom;
+	bool useShadowMap;
+	bool useGamma;
+	bool useHDR;
+	float bloomThreshold;
+	float gamma;
+	float exposure;
+	int bloomBlurIterations;
+	int shadowSampleNum;
+	int shadowSampleRings;
+	int shadowType;
+	int screenWidth;
+	int screenHeight;
 };
 
 vec3 LinearToSrgb(vec3 value)
@@ -56,43 +71,65 @@ vec3 LinearToSrgb(vec3 value)
 	return mix(low, high, step(vec3(0.0031308), value));
 }
 
-vec4 SampleColorTexture(sampler2D source, vec2 uv)
+vec4 SampleLegacyColor(sampler2D source, vec2 uv)
 {
-	vec4 sampleValue = texture(source, uv);
-	if (!useGamma) sampleValue.rgb = LinearToSrgb(sampleValue.rgb);
-	return sampleValue;
+	vec4 value = texture(source, uv);
+	if (!useGamma) value.rgb = LinearToSrgb(value.rgb);
+	return value;
 }
 
 void main()
 {
-	// Store linear view-space depth in alpha; >0 means valid geometry pixel.
-	gPos = vec4(fs_in.FragPos, max(fs_in.ViewDepth, 1e-6));
-	if(hasNormalMap){
-		gNormal = texture(texture_normal1,fs_in.TexCoords).rgb;
-		gNormal = normalize(gNormal * 2.0 - 1.0);  
-		gNormal = normalize(fs_in.TBN * gNormal);
-	}
-	else{
+	gPosition = vec4(fs_in.FragPos, max(fs_in.ViewDepth, 0.000001));
+	if (hasNormalMap) {
+		gNormal = normalize(fs_in.TBN *
+			(texture(texture_normal1, fs_in.TexCoords).rgb * 2.0 - 1.0));
+	} else {
 		gNormal = normalize(fs_in.Normal);
 	}
-	// and the diffuse per-fragment color
-	if(!hasDiffuseMap){
-		// Fallback to material diffuse color when no texture is bound.
-		gAlbedoSpec = material.diffuse;
+
+	vec4 baseSample = vec4(1.0);
+	if (hasDiffuseMap) {
+		baseSample = material.usePBR
+			? texture(texture_diffuse1, fs_in.TexCoords)
+			: SampleLegacyColor(texture_diffuse1, fs_in.TexCoords);
 	}
-	else{
-		vec4 diffuseSample = SampleColorTexture(texture_diffuse1, vec2(fs_in.TexCoords));
-		// Material-driven cutout for cloth/card-like geometry.
-		float cutoff = material.useAlphaCutoff ? material.alphaCutoff : 0.1;
-		if (diffuseSample.a < cutoff) {
-			discard;
-		}
-		gAlbedoSpec = diffuseSample.rgb;
+	float alpha = baseSample.a * material.opacity;
+	float cutoff = material.useAlphaCutoff ? material.alphaCutoff : 0.0;
+	if (alpha < cutoff) discard;
+
+	if (!material.usePBR) {
+		gAlbedoSpec = hasDiffuseMap ? baseSample.rgb : material.diffuse;
+		gMaterial = vec4(
+			(material.ambient.r + material.ambient.g + material.ambient.b) / 3.0,
+			(material.diffuse.r + material.diffuse.g + material.diffuse.b) / 3.0,
+			(material.specular.r + material.specular.g + material.specular.b) / 3.0,
+			max(material.shininess, 1.0));
+		gEmissive = vec3(0.0);
+		return;
 	}
 
-	// Store scalar factors for deferred lighting (use channel average instead of only .r).
-	gMaterial.r = (material.ambient.r + material.ambient.g + material.ambient.b) / 3.0;
-	gMaterial.g = (material.diffuse.r + material.diffuse.g + material.diffuse.b) / 3.0;
-	gMaterial.b = (material.specular.r + material.specular.g + material.specular.b) / 3.0;
-	gMaterial.a = material.shininess;
+	vec3 albedo = material.albedo * baseSample.rgb;
+	float metallic = clamp(material.metallic, 0.0, 1.0);
+	float roughness = clamp(material.roughness, 0.04, 1.0);
+	if (material.metallicRoughnessPacked && hasMetallicMap) {
+		vec3 packedSample = texture(texture_metallic1, fs_in.TexCoords).rgb;
+		metallic *= packedSample.b;
+		roughness *= packedSample.g;
+	} else {
+		if (hasMetallicMap) metallic *= texture(texture_metallic1, fs_in.TexCoords).r;
+		if (hasRoughnessMap) roughness *= texture(texture_roughness1, fs_in.TexCoords).r;
+	}
+	float ao = material.ao;
+	if (hasAoMap) ao *= texture(texture_ao1, fs_in.TexCoords).r;
+	vec3 emissive = material.emissive;
+	if (hasEmissiveMap) emissive *= texture(texture_emissive1, fs_in.TexCoords).rgb;
+
+	gAlbedoSpec = max(albedo, vec3(0.0));
+	gMaterial = vec4(
+		clamp(metallic, 0.0, 1.0),
+		clamp(roughness, 0.04, 1.0),
+		clamp(ao, 0.0, 1.0),
+		-1.0);
+	gEmissive = max(emissive, vec3(0.0));
 }

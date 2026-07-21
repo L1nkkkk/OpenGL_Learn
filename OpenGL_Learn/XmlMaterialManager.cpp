@@ -392,7 +392,8 @@ void XmlMaterialManager::ParseMaterialBlock(const std::string& materialBlock) {
                 Texture tex{};
                 tex.type = propName;
                 tex.path = split.second.c_str();
-                const bool srgb = propName == "texture_diffuse" || propName == "albedo" || propName == "baseColor";
+                const bool srgb = propName == "texture_diffuse" || propName == "albedo" ||
+                    propName == "baseColor" || propName == "texture_emissive";
                 tex.textureID = TextureFromFile(split.second.c_str(), split.first, false, srgb);
                 tex.textureGammaID = tex.textureID;
                 material->AddProperty(propName, MaterialProperty::CreateTexture({ tex }));
@@ -533,7 +534,8 @@ bool XmlMaterialManager::ParseSingleMaterial(const std::string& xmlContent, Mate
                 Texture tex{};
                 tex.type = propName;
                 tex.path = split.second.c_str();
-                const bool srgb = propName == "texture_diffuse" || propName == "albedo" || propName == "baseColor";
+                const bool srgb = propName == "texture_diffuse" || propName == "albedo" ||
+                    propName == "baseColor" || propName == "texture_emissive";
                 tex.textureID = TextureFromFile(split.second.c_str(), split.first, false, srgb);
                 tex.textureGammaID = tex.textureID;
                 material->AddProperty(propName, MaterialProperty::CreateTexture({ tex }));

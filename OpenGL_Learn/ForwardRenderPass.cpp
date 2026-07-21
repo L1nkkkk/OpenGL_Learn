@@ -105,10 +105,18 @@ void ForwardRenderPass::Render(Scene* scene, const FBO* inputFBO)
 			if (item.shader != lastShader) {
 				lastShader = item.shader;
 				lastShader->use();
+				SystemProperties::GetInstance().USED_TEXTURE_NUM = 0;
 				scene->SetLightUniforms(*lastShader);
+				if (scene->camera_ptr) {
+					lastShader->setVec3("viewPos", scene->camera_ptr->cameraPos);
+				}
+				SystemProperties::GetInstance().USED_TEXTURE_NUM =
+					scene->BindImageBasedLighting(
+						*lastShader,
+						SystemProperties::GetInstance().USED_TEXTURE_NUM);
 			}
 			lastShader->setMat4("model", item.modelMatrix);
-			item.mesh->Draw();
+			item.mesh->Draw(lastShader);
 		}
 	}
 
@@ -148,10 +156,18 @@ void ForwardRenderPass::Render(Scene* scene, const FBO* inputFBO)
 			if (item.shader != lastShader) {
 				lastShader = item.shader;
 				lastShader->use();
+				SystemProperties::GetInstance().USED_TEXTURE_NUM = 0;
 				scene->SetLightUniforms(*lastShader);
+				if (scene->camera_ptr) {
+					lastShader->setVec3("viewPos", scene->camera_ptr->cameraPos);
+				}
+				SystemProperties::GetInstance().USED_TEXTURE_NUM =
+					scene->BindImageBasedLighting(
+						*lastShader,
+						SystemProperties::GetInstance().USED_TEXTURE_NUM);
 			}
 			lastShader->setMat4("model", item.modelMatrix);
-			item.mesh->Draw();
+			item.mesh->Draw(lastShader);
 		}
 	}
 	GLState::DepthMask(true);

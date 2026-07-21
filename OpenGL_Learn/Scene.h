@@ -16,6 +16,8 @@
 #include <backends/imgui_impl_opengl3.h>
 #include <backends/imgui_impl_glfw.h>
 
+class ImageBasedLighting;
+
 struct LightSource {
 	unsigned int pointLightVAO;
 	unsigned int vertexCount;
@@ -156,6 +158,11 @@ public:
 		return skyboxSource;
 	}
 	unsigned int SetShadowMap(Shader&);
+	void SetImageBasedLighting(ImageBasedLighting* imageBasedLighting) {
+		m_imageBasedLighting = imageBasedLighting;
+	}
+	unsigned int BindImageBasedLighting(Shader& shader, unsigned int firstTextureUnit) const;
+	bool UsesPbrMaterials() const;
 
 	//old api
 	void DrawPointLights();
@@ -194,6 +201,7 @@ private:
 	std::vector<ModelFrameItem> m_visibleModels;
 	std::vector<MeshDrawItem> m_opaqueMeshList;
 	std::vector<MeshDrawItem> m_transparentMeshList;
+	ImageBasedLighting* m_imageBasedLighting = nullptr;
 	glm::mat4 view;
 	glm::mat4 projection;
 	SystemProperties& properties = SystemProperties::GetInstance();

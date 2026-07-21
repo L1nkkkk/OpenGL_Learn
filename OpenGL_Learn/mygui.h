@@ -827,7 +827,8 @@ public:
 							Texture newTex{};
 							newTex.type = tex.type;
 							newTex.path = file.c_str();
-							const bool srgb = tex.type == "texture_diffuse" || tex.type == "albedo" || tex.type == "baseColor";
+							const bool srgb = tex.type == "texture_diffuse" || tex.type == "albedo" ||
+								tex.type == "baseColor" || tex.type == "texture_emissive";
 							newTex.textureID = TextureFromFile(file.c_str(), dir, false, srgb);
 							newTex.textureGammaID = newTex.textureID;
 							tex = newTex;

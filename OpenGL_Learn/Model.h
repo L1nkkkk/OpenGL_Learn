@@ -88,7 +88,7 @@ public:
 	Mesh& operator=(Mesh&& other) noexcept = default;
 	~Mesh() = default;
 
-	void Draw(Shader* shader = nullptr);
+	void Draw(Shader* shader = nullptr, bool forcePbrMaterial = false);
 
 	unsigned int GetVAO() const;
 	std::size_t GetVertexCount() const;

@@ -356,7 +356,7 @@ float Mesh::GetBoundingRadius() const
 	return m_geometry ? m_geometry->GetBoundingRadius() : 0.0f;
 }
 
-void Mesh::Draw(Shader* shader)
+void Mesh::Draw(Shader* shader, bool forcePbrMaterial)
 {
     if (!material_ptr) {
         return;
@@ -364,6 +364,9 @@ void Mesh::Draw(Shader* shader)
 
 	// XML materials are refreshed once while preparing the scene render data.
 	auto materialGaurd = MaterialGaurd(*material_ptr, shader);
+	if (forcePbrMaterial && shader && shader->shaderName == "deferProcess") {
+		shader->setBool("material.usePBR", true);
+	}
 	GLState::ActiveTexture(GL_TEXTURE0);
 	GLState::BindVertexArray(GetVAO());
 	PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, GetDrawCount());
@@ -404,9 +407,9 @@ void Model::Draw(Shader* shader, unsigned int start_tex_index )
 void Model::loadModel(std::string path,Material* mat)
 {
 	if (!m_shader && !mat) {
-		m_shader = ShaderManager::GetInstance().GetShaderByName("phong");
+		m_shader = ShaderManager::GetInstance().GetShaderByName("pbr");
 	}
-	std::string shaderName = (m_shader ? m_shader->shaderName : std::string("phong"));
+	std::string shaderName = (m_shader ? m_shader->shaderName : std::string("pbr"));
 	std::string cacheKey = path + "|shader=" + shaderName + (mat ? "|mat=custom" : "|mat=default");
 	if (!mat) {
 		auto it = g_modelMeshCache.find(cacheKey);
@@ -628,22 +631,155 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 void Model::prosessMaterial(aiMaterial* mat,Material* material)
 {
 	aiColor3D color(0.0f, 0.0f, 0.0f);
+	aiColor3D diffuseColor(1.0f, 1.0f, 1.0f);
+	aiColor3D emissiveColor(0.0f, 0.0f, 0.0f);
 	float shininess = 0.0f;
 	float opacity = 1.0f;
 	if (mat->Get(AI_MATKEY_COLOR_AMBIENT, color) == AI_SUCCESS)
 		material->AddProperty("ambient", MaterialProperty::CreateVec3(glm::vec3(color.r, color.g, color.b)));
-	if (mat->Get(AI_MATKEY_COLOR_DIFFUSE, color) == AI_SUCCESS)
-		material->AddProperty("diffuse", MaterialProperty::CreateVec3(glm::vec3(color.r, color.g, color.b)));
+	if (mat->Get(AI_MATKEY_COLOR_DIFFUSE, diffuseColor) == AI_SUCCESS)
+		material->AddProperty("diffuse", MaterialProperty::CreateVec3(glm::vec3(diffuseColor.r, diffuseColor.g, diffuseColor.b)));
 	if (mat->Get(AI_MATKEY_COLOR_SPECULAR, color) == AI_SUCCESS)
 		material->AddProperty("specular", MaterialProperty::CreateVec3(glm::vec3(color.r, color.g, color.b)));
 	if (mat->Get(AI_MATKEY_SHININESS, shininess) == AI_SUCCESS)
 		material->AddProperty("shininess", MaterialProperty::CreateFloat(shininess));
 	if (mat->Get(AI_MATKEY_OPACITY, opacity) == AI_SUCCESS)
 		material->AddProperty("opacity", MaterialProperty::CreateFloat(opacity));
-	
-	material->AddProperty("texture_diffuse", MaterialProperty::CreateTexture(loadMaterialTextures(mat, aiTextureType_DIFFUSE, "texture_diffuse")));
+
+	std::vector<Texture> diffuseTextures = loadMaterialTextures(
+		mat,
+		aiTextureType_BASE_COLOR,
+		"texture_diffuse");
+	if (diffuseTextures.empty()) {
+		diffuseTextures = loadMaterialTextures(mat, aiTextureType_DIFFUSE, "texture_diffuse");
+	}
+	material->AddProperty("texture_diffuse", MaterialProperty::CreateTexture(diffuseTextures));
 	material->AddProperty("texture_specular", MaterialProperty::CreateTexture(loadMaterialTextures(mat, aiTextureType_SPECULAR, "texture_specular")));
-	material->AddProperty("texture_normal", MaterialProperty::CreateTexture(loadMaterialTextures(mat, aiTextureType_NORMALS, "texture_normal")));
+	auto normalTextures = loadMaterialTextures(mat, aiTextureType_NORMALS, "texture_normal");
+	if (normalTextures.empty()) {
+		// OBJ map_Bump is commonly exposed by Assimp as HEIGHT even when the
+		// referenced image is a tangent-space normal map.
+		normalTextures = loadMaterialTextures(mat, aiTextureType_HEIGHT, "texture_normal");
+	}
+	material->AddProperty("texture_normal", MaterialProperty::CreateTexture(normalTextures));
+
+	if (material->GetShaderName() == "pbr") {
+		aiColor4D baseColor(diffuseColor.r, diffuseColor.g, diffuseColor.b, opacity);
+		if (mat->Get(AI_MATKEY_BASE_COLOR, baseColor) == AI_SUCCESS) {
+			diffuseColor = aiColor3D(baseColor.r, baseColor.g, baseColor.b);
+			opacity *= baseColor.a;
+		}
+		float metallic = 0.0f;
+		float roughness = shininess > 0.0f
+			? std::sqrt(2.0f / (shininess + 2.0f))
+			: 0.5f;
+		mat->Get(AI_MATKEY_METALLIC_FACTOR, metallic);
+		mat->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughness);
+		mat->Get(AI_MATKEY_COLOR_EMISSIVE, emissiveColor);
+
+		auto loadConventionalTexture = [this](
+			const std::vector<std::string>& candidates,
+			const std::string& typeName,
+			bool srgb) {
+			std::vector<Texture> textures;
+			for (const std::string& candidate : candidates) {
+				if (!FileExists(directory + '/' + candidate)) {
+					continue;
+				}
+				for (const Texture& loaded : textures_loaded) {
+					if (loaded.path.C_Str() == candidate) {
+						Texture reused = loaded;
+						reused.type = typeName;
+						textures.push_back(reused);
+						return textures;
+					}
+				}
+
+				Texture texture{};
+				texture.textureID = TextureFromFile(candidate.c_str(), directory, false, srgb);
+				if (texture.textureID == 0) {
+					return textures;
+				}
+				texture.textureGammaID = texture.textureID;
+				texture.type = typeName;
+				texture.path = candidate;
+				textures.push_back(texture);
+				textures_loaded.push_back(texture);
+				return textures;
+			}
+			return textures;
+		};
+
+		auto metallicTextures = loadMaterialTextures(
+			mat,
+			aiTextureType_METALNESS,
+			"texture_metallic");
+		auto roughnessTextures = loadMaterialTextures(
+			mat,
+			aiTextureType_DIFFUSE_ROUGHNESS,
+			"texture_roughness");
+		auto aoTextures = loadMaterialTextures(
+			mat,
+			aiTextureType_AMBIENT_OCCLUSION,
+			"texture_ao");
+		auto emissiveTextures = loadMaterialTextures(
+			mat,
+			aiTextureType_EMISSION_COLOR,
+			"texture_emissive");
+		if (emissiveTextures.empty()) {
+			emissiveTextures = loadMaterialTextures(mat, aiTextureType_EMISSIVE, "texture_emissive");
+		}
+		if (metallicTextures.empty()) {
+			metallicTextures = loadConventionalTexture(
+				{ "metallic.png", "metallic.jpg", "metalness.png", "metalness.jpg" },
+				"texture_metallic",
+				false);
+		}
+		if (roughnessTextures.empty()) {
+			roughnessTextures = loadConventionalTexture(
+				{ "roughness.png", "roughness.jpg" },
+				"texture_roughness",
+				false);
+		}
+		if (aoTextures.empty()) {
+			aoTextures = loadConventionalTexture(
+				{ "ao.png", "ao.jpg", "ambient_occlusion.png", "ambient_occlusion.jpg" },
+				"texture_ao",
+				false);
+		}
+		if (emissiveTextures.empty()) {
+			emissiveTextures = loadConventionalTexture(
+				{ "emissive.png", "emissive.jpg", "emission.png", "emission.jpg" },
+				"texture_emissive",
+				true);
+		}
+
+		const bool packedMetallicRoughness =
+			!metallicTextures.empty() &&
+			!roughnessTextures.empty() &&
+			std::strcmp(
+				metallicTextures.front().path.C_Str(),
+				roughnessTextures.front().path.C_Str()) == 0;
+		material->AddProperty("albedo", MaterialProperty::CreateColor(glm::vec3(
+			diffuseColor.r,
+			diffuseColor.g,
+			diffuseColor.b)));
+		material->AddProperty("metallic", MaterialProperty::CreateFloat(
+			glm::clamp(metallic, 0.0f, 1.0f), 0.0f, 1.0f, 0.01f));
+		material->AddProperty("roughness", MaterialProperty::CreateFloat(
+			glm::clamp(roughness, 0.04f, 1.0f), 0.04f, 1.0f, 0.01f));
+		material->AddProperty("ao", MaterialProperty::CreateFloat(1.0f, 0.0f, 1.0f, 0.01f));
+		material->AddProperty("emissive", MaterialProperty::CreateColor(glm::vec3(
+			emissiveColor.r,
+			emissiveColor.g,
+			emissiveColor.b)));
+		material->AddProperty("metallicRoughnessPacked", MaterialProperty::CreateBool(packedMetallicRoughness));
+		material->AddProperty("texture_metallic", MaterialProperty::CreateTexture(metallicTextures));
+		material->AddProperty("texture_roughness", MaterialProperty::CreateTexture(roughnessTextures));
+		material->AddProperty("texture_ao", MaterialProperty::CreateTexture(aoTextures));
+		material->AddProperty("texture_emissive", MaterialProperty::CreateTexture(emissiveTextures));
+		material->AddProperty("opacity", MaterialProperty::CreateFloat(opacity));
+	}
 	// For cloth/card-like alpha textures use cutout by default to avoid transparent sorting artifacts.
 	bool autoCutout = opacity < 0.999f;
 	material->AddProperty("useAlphaCutoff", MaterialProperty::CreateBool(autoCutout));
@@ -673,7 +809,7 @@ std::vector<Texture> Model::loadMaterialTextures(aiMaterial* mat, aiTextureType 
 		if (!skip)
 		{   // ???????????��?????????????
 			Texture texture;
-			const bool srgb = typeName == "texture_diffuse";
+			const bool srgb = typeName == "texture_diffuse" || typeName == "texture_emissive";
 			texture.textureID = TextureFromFile(str.C_Str(), directory, false, srgb);
 			texture.textureGammaID = texture.textureID;
 			texture.type = typeName;
