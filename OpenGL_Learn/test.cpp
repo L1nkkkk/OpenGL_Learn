@@ -47,7 +47,7 @@
 #endif
 
 
-bool firstMouse = false;
+bool firstMouse = true;
 bool lastFrameMkeyState = false;
 
 
@@ -1809,20 +1809,29 @@ FrameCaptureStats CaptureFramebufferPpm(const FBO* fbo, const std::string& outpu
 
 
 void ProcessInput(GLFWwindow* window) {
-	bool currentMkeyState = glfwGetKey(window, GLFW_KEY_M) == GLFW_PRESS;
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
 		glfwSetWindowShouldClose(window, true);
 	}
-	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+	const bool keyboardCaptured =
+		ImGui::GetCurrentContext() != nullptr &&
+		ImGui::GetIO().WantCaptureKeyboard;
+	const bool currentMkeyState =
+		!keyboardCaptured &&
+		glfwGetKey(window, GLFW_KEY_M) == GLFW_PRESS;
+	if (!keyboardCaptured &&
+		glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
 		camera.UpdatePositionByDelta(timer.GetDeltaTime() *camera.cameraSpeed * camera.cameraFront);
 	}
-	if(glfwGetKey(window,GLFW_KEY_S) == GLFW_PRESS){
+	if (!keyboardCaptured &&
+		glfwGetKey(window,GLFW_KEY_S) == GLFW_PRESS){
 		camera.UpdatePositionByDelta(-timer.GetDeltaTime() * camera.cameraSpeed * camera.cameraFront);
 	}
-	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+	if (!keyboardCaptured &&
+		glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
 		camera.UpdatePositionByDelta(timer.GetDeltaTime() * camera.cameraSpeed * glm::cross(camera.cameraFront, camera.up));
 	}
-	if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+	if (!keyboardCaptured &&
+		glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
 		camera.UpdatePositionByDelta(-timer.GetDeltaTime() * camera.cameraSpeed * glm::cross(camera.cameraFront, camera.up));
 	}
 
@@ -1963,7 +1972,7 @@ int main(int argc, char** argv) {
 		glfwSwapInterval(0);
 	}
 	else {
-		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 	}
 	//register function after initializing window and before renderering
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
@@ -2997,6 +3006,7 @@ int main(int argc, char** argv) {
 		mygui.MainDockSpace();
 		mygui.Overview_UI();
 		mygui.Profiler_UI();
+		mygui.MotionTimeline_UI(scene, camera);
 
 		// Settings / Scene / Materials / XML / Assets ??? Dock ? DockSpace ?
 		mygui.Begin();              // Settings ??
@@ -3016,8 +3026,16 @@ int main(int argc, char** argv) {
 		//process input
 		{
 			PERF_CPU_SCOPE("Input and Frame Uniforms");
-			if (!benchmarkOptions.enabled && !classicSceneOptions.enabled) {
+			if (!benchmarkOptions.enabled &&
+				!classicSceneOptions.enabled &&
+				!mygui.IsMotionTimelinePlaying()) {
 				ProcessInput(window);
+			}
+			if (!automatedValidation) {
+				mygui.UpdateMotionTimelinePreview(
+					scene,
+					camera,
+					timer.GetDeltaTime());
 			}
 		//reset used texture num
 		properties.ResetUsedTextureNum();
@@ -3046,6 +3064,9 @@ int main(int argc, char** argv) {
 		else {
 			forwardRenderPass->Render(&scene);
 			sceneFBO = forwardRenderPass->GetOutputFBO();
+		}
+		if (!automatedValidation) {
+			mygui.RecordMotionTimelineTelemetry(scene);
 		}
 		//second pass: postprocess (HDR + gamma + bloom) -> LDR texture (inside postprocessRenderPass)
 		

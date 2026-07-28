@@ -158,6 +158,7 @@
     <ClCompile Include="BenchmarkMotionTimeline.cpp" />
     <ClCompile Include="callbacks.cpp" />
     <ClCompile Include="DeferRenderPass.cpp" />
+    <ClCompile Include="EditorMotionTimeline.cpp" />
     <ClCompile Include="EditorSceneManager.cpp" />
     <ClCompile Include="ForwardRenderPass.cpp" />
     <ClCompile Include="FramebufferManager.cpp" />
@@ -185,6 +186,7 @@
     <ClInclude Include="callbacks.h" />
     <ClInclude Include="BenchmarkMotionTimeline.h" />
     <ClInclude Include="DeferRenderPass.h" />
+    <ClInclude Include="EditorMotionTimeline.h" />
     <ClInclude Include="EditorSceneManager.h" />
     <ClInclude Include="ForwardRenderPass.h" />
     <ClInclude Include="GLStateCache.h" />

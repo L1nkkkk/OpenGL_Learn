@@ -58,7 +58,36 @@
 
 测试入口会验证逐帧计数之和与原有聚合计数完全一致，并验证 Timeline 样本与 Profiler Wall Frame 样本逐帧对齐。
 
-## 5. 一键正式实验
+## 5. 编辑器 Motion Timeline UI
+
+UI 用于交互预览和诊断，不参与正式 A/B 计时。启动编辑器后，默认布局底部会直接显示 `Motion Timeline`；如果仍在使用旧布局，点击顶部工具栏右侧的 `Reset layout` 即可恢复新布局。
+
+推荐操作顺序：
+
+1. 在 `Scene` 面板加载场景，并确认至少存在一盏 Point Light；
+2. 在 `Renderer > Shadows & Cache` 中启用 `Shadow cache enabled` 和 `Per-light dirty cache`；
+3. 在 `Motion Timeline` 中选择 `Point light` Profile 和目标光源；如果面板提示该灯未开启阴影，点击提示旁的 `Enable`；
+4. 点击 `Capture base` 保存光源、Caster 与相机的初始状态；
+5. 点击 `Play` 开始固定帧轨迹，也可以暂停后拖动 `Frame` 精确查看任意一帧；
+6. 观察右侧 `Shadow Cache Account`：
+   - `LAST STEP LIGHTS`：最近一次固定时间轴步进中真正重画阴影的灯数；
+   - `LAST STEP HITS`：最近一次步进中复用已有 Shadow Map 的灯数；
+   - `POINT SUBMITS / STEP`：最近一次步进的 Point Cubemap 面提交数，完整更新通常为 6；
+   - `SHADOW CPU / STEP`：最近一次步进的阴影更新 CPU 时间；
+   - Directional / Point / Spot 表格：逐灯类型拆分账户；
+7. 点击 `Restore` 停止预览并恢复捕获前的场景状态。
+
+UI 与正式测试共用 `BenchmarkMotionTimeline` 的固定帧采样函数，因此相同 Profile、帧号、周期和场景半径会得到相同轨迹。区别是 UI 按实时 `deltaTime` 推进播放，正式测试直接按测量帧号取样；后者不会受到窗口交互、Dock 布局或 ImGui 开销干扰。
+
+编辑器渲染帧率可能高于默认 60 Hz 时间轴，所以两个时间轴步进之间会出现纯 Cache Hit 的渲染帧。四张主卡片固定保留“最近一次真实步进”的账户，下面的 `Current render` 则显示当前渲染帧，避免数字在 0 和 1 之间闪烁而造成误判。
+
+预览期间如果场景被替换、目标对象被增删或引用失效，控制器会保守停播并要求重新 `Capture base`，不会继续写入可能已经变化的对象。
+
+实际播放截图（Point 轨迹、Per-Light Cache、单灯更新与六面提交账户）：
+
+![Motion Timeline 编辑器播放界面](docs/editor-ui-motion-timeline.png)
+
+## 6. 一键正式实验
 
 在项目目录运行：
 
@@ -103,7 +132,7 @@
 - 原始实验：`benchmark-results/shadow-optimizations/`；
 - 中文报告：`docs/benchmark-images/shadow-motion-timeline/<BatchId>/report.md`。
 
-## 6. Point 主案例正式结果
+## 7. Point 主案例正式结果
 
 正式实验 ID：`per-light-cache-motion-timeline-point-1080p-final`
 
@@ -137,7 +166,7 @@
 - [Sponza 逐帧曲线](docs/benchmark-images/shadow-motion-timeline/per-light-cache-motion-timeline-point-1080p-final/timeline-point-sponza.png)
 - [San Miguel 逐帧曲线](docs/benchmark-images/shadow-motion-timeline/per-light-cache-motion-timeline-point-1080p-final/timeline-point-san-miguel.png)
 
-## 7. 四类路径烟测结论
+## 8. 四类路径烟测结论
 
 640×360、Sponza、每变体 4 帧的工程烟测已覆盖四种 Profile，所有运行、计数校验、逐帧对齐、报告生成和像素对比均通过。四组 A/B 截图的最大通道差和变化像素均为 0。
 
