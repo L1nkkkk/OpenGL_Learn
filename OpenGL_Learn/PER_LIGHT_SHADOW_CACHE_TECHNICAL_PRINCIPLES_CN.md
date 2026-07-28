@@ -30,6 +30,7 @@
 - Per-Light Revision Cache：Directional 与 Spot 命中，只有 Point 的六面 Cubemap 重绘；
 - 更新灯数稳定从 `3 → 1`；
 - Sponza / San Miguel 的 Shadow GPU Median 分别下降 `21.57% / 46.06%`；
+- 固定 60 Hz 连续 Point 轨迹复验中，两场景分别下降 `20.99% / 44.98%`，并保持 Point 每帧六面提交；
 - 点阴影六面内容、主画面与 renderer-owned 资源都通过了独立正确性门槛。
 
 正式实验的 A 就是无缓存、每帧全量更新的控制路径，B 是当前 Per-Light Cache。两者来自同一可执行文件，使用相同的 Shader、FBO、分辨率、Caster Culling 和 Six-face 点阴影，只切换缓存策略。它复现了最初的更新行为，又避免直接运行旧提交时把其他渲染差异混入结果。
@@ -1320,7 +1321,7 @@ Hash 只用于快速比较，Debug Build 可在 Hit 时进行结构化交叉检�
 
 ### 第 8–9 分钟：结果
 
-> 正式 1080p、无缓存/Per-Light 各三轮、每轮 1,000 帧，更新数稳定从 3 降到 1。Sponza / San Miguel 的 Shadow GPU Median 分别下降 21.57% / 46.06%，P95/P99 也全部改善。
+> 正式 1080p、无缓存/Per-Light 各三轮、每轮 1,000 帧；固定 60 Hz 的连续 Point 轨迹中，更新数稳定从 3 降到 1，Point 自身仍每帧提交六面。Sponza / San Miguel 的 Shadow GPU Median 分别下降 20.99% / 44.98%，P95/P99 也全部改善。
 
 ### 第 9–10 分钟：权衡与下一步
 
@@ -1334,7 +1335,7 @@ Hash 只用于快速比较，Debug Build 可在 Hit 时进行结构化交叉检�
 >
 > 解决方案是把 Cache Entry 下沉到每盏灯。每个 Key 组合 Scene Caster Revision、对应 Shadow Shader Revision、Light Transform/Projection 和渲染路径配置；同时用 FBO、Texture、尺寸和 Resource Generation 验证 GPU 目标仍是同一代资源。每帧先逐灯 Check，只把 Miss 放进 Selection；前置门槛通过且 CPU 提交路径完整结束，或空场景 Clear 已发出后才 Commit。未完成项保持 Invalid，Lighting Pass 只采样已发布内容。
 >
-> 我还覆盖了 Caster 移动/启停、Alpha Material、Shader 热重载、分辨率、同尺寸 FBO Replacement 和空场景。Point Shadow 用六面 Submission 核算、逐面有效性与基于深度位模式的 A/B Hash 联合验证，避免把漏 Face 的 Layered 路径误当优化。最终在 1920×1080、无缓存/Per-Light 各三轮、每轮 1,000 帧中，把每帧更新灯数从 3 降到 1，Sponza / San Miguel 的 Shadow GPU Median 分别下降 21.57% / 46.06%，画面和 renderer-owned 资源检查通过。
+> 我还覆盖了 Caster 移动/启停、Alpha Material、Shader 热重载、分辨率、同尺寸 FBO Replacement 和空场景。Point Shadow 用六面 Submission 核算、逐面有效性与基于深度位模式的 A/B Hash 联合验证，避免把漏 Face 的 Layered 路径误当优化。最终在 1920×1080、无缓存/Per-Light 各三轮、每轮 1,000 帧的连续轨迹中，把每帧更新灯数从 3 降到 1，Sponza / San Miguel 的 Shadow GPU Median 分别下降 20.99% / 44.98%；Point 仍保持每帧六面提交，画面通过像素容差校验。
 
 ---
 
@@ -1358,14 +1359,16 @@ Hash 只用于快速比较，Debug Build 可在 Hit 时进行结构化交叉检�
 | Forward 采样门控 | [Light.cpp](Light.cpp) `SetLightUniforms`，约 102–108、228–234、349–355 行 |
 | Deferred 采样门控 | [DeferRenderPass.cpp](DeferRenderPass.cpp)，约 150–163 行 |
 | Benchmark 与逐面证据 | [test.cpp](test.cpp) |
+| 确定性运动轨迹 | [BenchmarkMotionTimeline.cpp](BenchmarkMotionTimeline.cpp) / [BenchmarkMotionTimeline.h](BenchmarkMotionTimeline.h) |
 | A/B Harness | [tools/Test-ShadowOptimizations.ps1](tools/Test-ShadowOptimizations.ps1) |
 | 失效矩阵 Harness | [tools/Test-PerLightShadowCache.ps1](tools/Test-PerLightShadowCache.ps1) |
+| 连续运动正式入口与报告 | [tools/Test-ShadowMotionTimeline.ps1](tools/Test-ShadowMotionTimeline.ps1) / [SHADOW_MOTION_TIMELINE_CN.md](SHADOW_MOTION_TIMELINE_CN.md) |
 
 ---
 
 ## 22. 最终技术判断
 
-这项工作的价值不只在于相对无缓存基线获得了 `21.57% / 46.06%` 的 Shadow GPU Median 改善，而在于建立了一套可以继续扩展的增量渲染框架：
+这项工作的价值不只在于微扰实验获得 `21.57% / 46.06%`、连续运动复验获得 `20.99% / 44.98%` 的 Shadow GPU Median 改善，而在于建立了一套可以继续扩展的增量渲染框架：
 
 ```text
 明确依赖

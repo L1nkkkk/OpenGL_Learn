@@ -108,6 +108,13 @@ def averaged_process_statistics(
     return result
 
 
+def process_statistics(values: list[float]) -> dict[str, float]:
+    return {
+        name: percentile(values, quantile)
+        for name, quantile in STATISTICS.items()
+    }
+
+
 def delta_percent(before: float, after: float) -> float | None:
     if abs(before) < 1e-12:
         return None
@@ -383,6 +390,13 @@ def relative_link(report_path: Path, target: Path) -> str:
     return target.relative_to(report_path.parent).as_posix()
 
 
+def portable_path(path: Path, base: Path) -> str:
+    try:
+        return path.relative_to(base).as_posix()
+    except ValueError:
+        return str(path)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, required=True)
@@ -399,6 +413,8 @@ def main() -> int:
     scenes = [str(scene) for scene in manifest["scenes"]]
     report_rows: list[dict[str, Any]] = []
     report_sections: list[dict[str, Any]] = []
+    reference_metadata: dict[str, Any] | None = None
+    reference_run: dict[str, Any] | None = None
 
     for experiment in manifest["experiments"]:
         profile = str(experiment["profile"])
@@ -406,6 +422,14 @@ def main() -> int:
             project_directory / str(experiment["directory"])
         ).resolve()
         metadata = read_json(experiment_directory / "metadata.json")
+        if reference_metadata is None:
+            reference_metadata = metadata
+        elif (
+            metadata["source"] != reference_metadata["source"]
+            or metadata["executables"] != reference_metadata["executables"]
+            or metadata["machine"] != reference_metadata["machine"]
+        ):
+            raise ReportError("各 Timeline Profile 的源码、二进制或机器信息不一致")
         if metadata["settings"]["workload"] != f"timeline-{profile}":
             raise ReportError(f"{profile} workload 与 manifest 不一致")
         for scene_id in scenes:
@@ -414,6 +438,8 @@ def main() -> int:
                 scene_id,
                 expected_runs,
             )
+            if reference_run is None:
+                reference_run = runs["A"][0]
             extracted = {
                 variant: [extract_run_series(run) for run in runs[variant]]
                 for variant in ("A", "B")
@@ -453,6 +479,13 @@ def main() -> int:
             )
             metric_summary: dict[str, Any] = {}
             for field, (label, unit, lower_is_better) in METRICS.items():
+                process_values = {
+                    variant: [
+                        process_statistics(series[field])
+                        for series in extracted[variant]
+                    ]
+                    for variant in ("A", "B")
+                }
                 variant_stats = {
                     variant: averaged_process_statistics(
                         [series[field] for series in extracted[variant]]
@@ -469,6 +502,7 @@ def main() -> int:
                     "lowerIsBetter": lower_is_better,
                     "A": variant_stats["A"],
                     "B": variant_stats["B"],
+                    "processValues": process_values,
                     "medianDeltaPercent": median_delta,
                 }
                 report_rows.append(
@@ -492,6 +526,9 @@ def main() -> int:
                     "difference": difference_path,
                 }
             )
+
+    if reference_metadata is None or reference_run is None:
+        raise ReportError("manifest 没有可报告的实验")
 
     summary_csv = output_directory / "summary.csv"
     with summary_csv.open("w", newline="", encoding="utf-8-sig") as stream:
@@ -530,17 +567,37 @@ def main() -> int:
 
     report_data = {
         "schemaVersion": 1,
-        "manifest": str(manifest_path),
+        "manifest": portable_path(manifest_path, project_directory),
+        "source": reference_metadata["source"],
+        "executables": {
+            variant: {
+                "fileName": Path(values["path"]).name,
+                "sha256": values["sha256"],
+            }
+            for variant, values in reference_metadata["executables"].items()
+        },
+        "machine": reference_metadata["machine"],
+        "configuration": reference_metadata["configuration"],
+        "resolution": reference_metadata["resolution"],
+        "opengl": {
+            "vendor": reference_run["glVendor"],
+            "renderer": reference_run["glRenderer"],
+            "version": reference_run["glVersion"],
+        },
         "statistics": (
             "每轮独立进程先计算 Median/P95/P99，再对各轮统计值取算术平均"
         ),
         "sections": [
             {
                 **section,
-                "chart": str(section["chart"]),
-                "csv": str(section["csv"]),
-                "comparison": str(section["comparison"]),
-                "difference": str(section["difference"]),
+                "chart": portable_path(section["chart"], output_directory),
+                "csv": portable_path(section["csv"], output_directory),
+                "comparison": portable_path(
+                    section["comparison"], output_directory
+                ),
+                "difference": portable_path(
+                    section["difference"], output_directory
+                ),
             }
             for section in report_sections
         ],
@@ -555,9 +612,33 @@ def main() -> int:
         "# 确定性 Shadow Motion Timeline A/B 实验报告",
         "",
         f"- 批次：`{manifest['batchId']}`",
+        f"- 日期（UTC）：`{reference_metadata['createdUtc']}`",
+        (
+            f"- 源码提交：`{reference_metadata['source']['gitHead']}`"
+            f"（dirty={str(reference_metadata['source']['gitDirty']).lower()}，"
+            f"source SHA-256="
+            f"`{reference_metadata['source']['sha256']}`）"
+        ),
+        f"- 构建：{reference_metadata['configuration']}",
         f"- 分辨率：{manifest['resolution'][0]}×{manifest['resolution'][1]}",
+        (
+            f"- CPU："
+            f"{', '.join(reference_metadata['machine'].get('cpu', []))}"
+        ),
+        (
+            f"- OpenGL GPU：{reference_run['glRenderer']}；"
+            f"OpenGL：{reference_run['glVersion']}"
+        ),
         f"- 每个变体独立运行：{expected_runs} 轮",
+        (
+            f"- 正式顺序："
+            f"`{'/'.join(reference_metadata['order'])}`"
+        ),
         f"- 每轮测量帧：{manifest['measuredFrames']}",
+        (
+            f"- Warm-up：外部 {manifest['externalWarmupFrames']} 帧，"
+            f"内部 {manifest['internalWarmupFrames']} 帧"
+        ),
         (
             f"- 时间轴：{manifest['timeline']['fixedFramesPerSecond']} Hz，"
             f"{manifest['timeline']['cycleFrames']} 帧一周期"
@@ -631,6 +712,24 @@ def main() -> int:
                 f"{format_number(values['B']['p95'], unit)} / "
                 f"{format_number(values['B']['p99'], unit)} {unit} | "
                 f"{format_delta(values['medianDeltaPercent'])} |"
+            )
+        shadow_process_values = section["metrics"][
+            "shadowGpuMilliseconds"
+        ]["processValues"]
+        lines.extend(
+            [
+                "",
+                "| 配对 | A Shadow GPU Median | B Shadow GPU Median | B 相对 A |",
+                "|---|---:|---:|---:|",
+            ]
+        )
+        for process_index in range(expected_runs):
+            before_value = shadow_process_values["A"][process_index]["median"]
+            after_value = shadow_process_values["B"][process_index]["median"]
+            lines.append(
+                f"| A{process_index + 1}/B{process_index + 1} | "
+                f"{before_value:.3f} ms | {after_value:.3f} ms | "
+                f"{format_delta(delta_percent(before_value, after_value))} |"
             )
         image_metrics = section["imageMetrics"]
         lines.extend(

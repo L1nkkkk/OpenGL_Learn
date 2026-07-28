@@ -1,6 +1,6 @@
 # Shadow Benchmark 确定性运动时间轴
 
-状态：实现完成，四类路径已通过运行时烟测
+状态：实现完成；Point 主案例正式实验完成；四类路径均通过运行时烟测
 
 ## 1. 为什么保留两套 workload
 
@@ -103,8 +103,42 @@
 - 原始实验：`benchmark-results/shadow-optimizations/`；
 - 中文报告：`docs/benchmark-images/shadow-motion-timeline/<BatchId>/report.md`。
 
-## 6. 当前烟测结论
+## 6. Point 主案例正式结果
+
+正式实验 ID：`per-light-cache-motion-timeline-point-1080p-final`
+
+实验条件：
+
+- 1920×1080；
+- Sponza 与 San Miguel；
+- A 无缓存、B Per-Light Revision Cache；
+- 每个变体三轮独立进程，顺序为 A/B/B/A/A/B；
+- 每轮 1,000 个测量帧；
+- 100 帧外部 Warm-up、15 帧内部 Warm-up；
+- 60 Hz 固定时间轴、600 帧一周期；
+- Directional、Point、Spot 各一盏，Point 使用 Six-Face 路径。
+
+| 场景 | Shadow GPU Median | Shadow GPU P95 | 帧时间 Median | Shadow CPU Median | 更新灯数 | Point 提交 |
+|---|---:|---:|---:|---:|---:|---:|
+| Sponza | 0.790→0.625 ms（-20.99%） | 0.946→0.789 ms（-16.55%） | 3.911→3.652 ms（-6.61%） | 0.319→0.184 ms（-42.34%） | 3→1 | 6→6 |
+| San Miguel | 5.011→2.757 ms（-44.98%） | 5.731→3.400 ms（-40.69%） | 11.136→9.241 ms（-17.02%） | 2.485→1.240 ms（-50.10%） | 3→1 | 6→6 |
+
+正式数据再次确认：Per-Light Cache 没有减少正在移动的 Point Cubemap 六面提交，而是持续复用没有失效的 Directional 与 Spot。场景的 Directional/Spot 阴影成本越高，收益越明显。
+
+像素校验：
+
+- Sponza：2 个变化像素，最大通道差 60；
+- San Miguel：5 个变化像素，最大通道差 64；
+- 均低于正式阈值 32 个变化像素，Point Cubemap 六面有效性与提交账户校验通过。
+
+完整中文报告、曲线、表格、逐帧 CSV 与截图：
+
+- [确定性连续运动正式报告](docs/benchmark-images/shadow-motion-timeline/per-light-cache-motion-timeline-point-1080p-final/report.md)
+- [Sponza 逐帧曲线](docs/benchmark-images/shadow-motion-timeline/per-light-cache-motion-timeline-point-1080p-final/timeline-point-sponza.png)
+- [San Miguel 逐帧曲线](docs/benchmark-images/shadow-motion-timeline/per-light-cache-motion-timeline-point-1080p-final/timeline-point-san-miguel.png)
+
+## 7. 四类路径烟测结论
 
 640×360、Sponza、每变体 4 帧的工程烟测已覆盖四种 Profile，所有运行、计数校验、逐帧对齐、报告生成和像素对比均通过。四组 A/B 截图的最大通道差和变化像素均为 0。
 
-这些烟测数据只证明实现与实验管线正确，不能替代 1920×1080、三轮独立运行的正式性能数据。
+其中 Camera、Caster、Mixed 的数据只用于证明实现与实验管线正确；目前只有 Point 主案例完成了 1920×1080、三轮独立运行的正式性能实验。
