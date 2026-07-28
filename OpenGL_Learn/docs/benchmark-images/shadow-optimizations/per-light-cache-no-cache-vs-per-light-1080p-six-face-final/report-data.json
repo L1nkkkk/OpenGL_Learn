@@ -1,0 +1,2937 @@
+{
+  "artifacts": {
+    "json": "report-data.json",
+    "markdown": "report.md",
+    "resourcesChart": "renderer-owned-resources.png",
+    "updatedLightsChart": "updated-lights-per-frame.png"
+  },
+  "checks": {
+    "allAutomatedChecksPass": true,
+    "evidenceChecks": {
+      "allCapturePairsWithinPixelTolerance": true,
+      "allPairedShadowGpuStatisticsImprove": true,
+      "imageComparisonPerformed": true,
+      "noConservativeFallbacks": true,
+      "noShadowResourceFailures": true,
+      "noUnexpectedEmptyClears": true,
+      "pointCubeAllFacesValid": true,
+      "pointCubeAllPairedContentsExact": true,
+      "pointCubeResolutionMatchesMetadata": true,
+      "pointSubmissionAccounting": true,
+      "pointUpdateAccounting": true,
+      "rendererOwnedResourcesExact": true,
+      "updatesThreeToOne": true,
+      "variantAUpdatesDirectionalPointSpot": true,
+      "variantBOnlyUpdatesPoint": true
+    },
+    "formalInputEligible": true,
+    "inputChecks": {
+      "abOrder": true,
+      "externalWarmup100Performed": true,
+      "gpuSynchronizedTiming": true,
+      "internalWarmup15": true,
+      "measuredFrames1000": true,
+      "metadataContractValidated": true,
+      "releaseX64": true,
+      "requiredScenesOnly": true,
+      "resolution1920x1080": true,
+      "runFramesMatchMetadata": true,
+      "runResolutionMatchesMetadata": true,
+      "runSchemaSuccessAndSamplesValidated": true,
+      "sameExecutableForAB": true,
+      "sixHarnessInvocationArtifactsComplete": true,
+      "summaryKeyStatisticsCrossChecked": true
+    }
+  },
+  "experiment": {
+    "aggregation": "arithmetic mean of three per-process statistics",
+    "configuration": "Release x64",
+    "effectivePointShadowResolution": 1024,
+    "externalWarmupFrames": 100,
+    "id": "per-light-cache-no-cache-vs-per-light-1080p-six-face-final",
+    "internalWarmupFrames": 15,
+    "lights": "all",
+    "measuredFrames": 1000,
+    "metadataSha256": "fb851e062cf34004fab3d2064b4695f1f2898b3e3237139e53301950538eb733",
+    "order": [
+      "A",
+      "B",
+      "B",
+      "A",
+      "A",
+      "B"
+    ],
+    "renderPath": "pbr-forward",
+    "resolution": [
+      1920,
+      1080
+    ],
+    "shadowMode": "hard",
+    "shadowResolution": 0,
+    "sourceDirectory": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\per-light-cache-no-cache-vs-per-light-1080p-six-face-final",
+    "summarySha256": "6b5c332899c897067dbe06b335df3038bf9598fff4587ff1ffd099836c21dd78",
+    "variantLabels": {
+      "A": "no-cache",
+      "B": "per-light-revision"
+    },
+    "workload": "move-point"
+  },
+  "generator": {
+    "chineseFont": "Microsoft YaHei",
+    "matplotlibBackend": "Agg",
+    "script": "generate_per_light_cache_report.py"
+  },
+  "scenes": [
+    {
+      "artifacts": {
+        "performanceChart": "performance-sponza.png"
+      },
+      "cacheSafety": {
+        "noConservativeFallbacks": true,
+        "noResourceFailures": true,
+        "noUnexpectedEmptyClears": true,
+        "values": {
+          "conservativeFallbacks": {
+            "A": [
+              0,
+              0,
+              0
+            ],
+            "B": [
+              0,
+              0,
+              0
+            ]
+          },
+          "emptyShadowClears": {
+            "A": [
+              0,
+              0,
+              0
+            ],
+            "B": [
+              0,
+              0,
+              0
+            ]
+          },
+          "resourceFailures": {
+            "A": [
+              0,
+              0,
+              0
+            ],
+            "B": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      },
+      "captures": [
+        {
+          "artifacts": {
+            "comparison": "captures/sponza-pair1-comparison.png",
+            "difference": "captures/sponza-pair1-difference.png",
+            "metrics": "captures/sponza-pair1-metrics.json"
+          },
+          "changedPixelRatio": 1.9290123456790124e-06,
+          "exact": false,
+          "exactChangedPixelCount": 4,
+          "exactChangedPixelRatio": 1.9290123456790124e-06,
+          "luminanceMeanAbsoluteDifference": 3.290668119099491e-07,
+          "maximumChannelDelta": 114,
+          "pair": 1,
+          "resolution": [
+            1920,
+            1080
+          ],
+          "rgbMeanAbsoluteDifference": 3.3221879286694103e-07,
+          "rgbRootMeanSquareDifference": 0.00030781451552622913,
+          "source": {
+            "A": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\per-light-cache-no-cache-vs-per-light-1080p-six-face-final\\formal\\sponza\\A1.ppm",
+            "B": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\per-light-cache-no-cache-vs-per-light-1080p-six-face-final\\formal\\sponza\\B1.ppm",
+            "sha256A": "0f76d57555b960df53f40ff972e2cd849f37ff3279b3b1e41e34afbd9a5ffd42",
+            "sha256B": "df878716ca716db4eec659f9a40b636b40e61d326e939c5d9056f799897282a2"
+          },
+          "withinTolerance": true
+        },
+        {
+          "artifacts": {
+            "comparison": "captures/sponza-pair2-comparison.png",
+            "difference": "captures/sponza-pair2-difference.png",
+            "metrics": "captures/sponza-pair2-metrics.json"
+          },
+          "changedPixelRatio": 1.4467592592592592e-06,
+          "exact": false,
+          "exactChangedPixelCount": 3,
+          "exactChangedPixelRatio": 1.4467592592592592e-06,
+          "luminanceMeanAbsoluteDifference": 2.780047204066812e-07,
+          "maximumChannelDelta": 88,
+          "pair": 2,
+          "resolution": [
+            1920,
+            1080
+          ],
+          "rgbMeanAbsoluteDifference": 2.7107036230129914e-07,
+          "rgbRootMeanSquareDifference": 0.0002575471934720674,
+          "source": {
+            "A": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\per-light-cache-no-cache-vs-per-light-1080p-six-face-final\\formal\\sponza\\A2.ppm",
+            "B": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\per-light-cache-no-cache-vs-per-light-1080p-six-face-final\\formal\\sponza\\B2.ppm",
+            "sha256A": "6f613fa3a1cd94ee0202f68151103b7af707b954b4ec9dd9103aba18eb695c3f",
+            "sha256B": "0f76d57555b960df53f40ff972e2cd849f37ff3279b3b1e41e34afbd9a5ffd42"
+          },
+          "withinTolerance": true
+        },
+        {
+          "artifacts": {
+            "comparison": "captures/sponza-pair3-comparison.png",
+            "difference": "captures/sponza-pair3-difference.png",
+            "metrics": "captures/sponza-pair3-metrics.json"
+          },
+          "changedPixelRatio": 4.822530864197531e-07,
+          "exact": false,
+          "exactChangedPixelCount": 1,
+          "exactChangedPixelRatio": 4.822530864197531e-07,
+          "luminanceMeanAbsoluteDifference": 1.7966291454853548e-07,
+          "maximumChannelDelta": 114,
+          "pair": 3,
+          "resolution": [
+            1920,
+            1080
+          ],
+          "rgbMeanAbsoluteDifference": 1.8470608407972242e-07,
+          "rgbRootMeanSquareDifference": 0.0002659767610748003,
+          "source": {
+            "A": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\per-light-cache-no-cache-vs-per-light-1080p-six-face-final\\formal\\sponza\\A3.ppm",
+            "B": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\per-light-cache-no-cache-vs-per-light-1080p-six-face-final\\formal\\sponza\\B3.ppm",
+            "sha256A": "08fdf715537b5be74b514fdeb7cfa01012c280691280fe59ac30be97ac1bac29",
+            "sha256B": "6f613fa3a1cd94ee0202f68151103b7af707b954b4ec9dd9103aba18eb695c3f"
+          },
+          "withinTolerance": true
+        }
+      ],
+      "displayName": "Crytek Sponza",
+      "id": "sponza",
+      "metrics": {
+        "gpuFrame": {
+          "median": {
+            "A": {
+              "mean": 1.541941,
+              "range": [
+                1.324912,
+                1.706576
+              ],
+              "values": [
+                1.706576,
+                1.594336,
+                1.324912
+              ]
+            },
+            "B": {
+              "mean": 1.451029,
+              "range": [
+                1.256576,
+                1.570624
+              ],
+              "values": [
+                1.256576,
+                1.525888,
+                1.570624
+              ]
+            },
+            "deltaPercent": -5.895945,
+            "label": "GPU 帧时间",
+            "pairedDeltaPercent": [
+              -26.368588,
+              -4.293198,
+              18.545534
+            ],
+            "sourcePath": "profiler.summary.gpuFrame.median",
+            "statistic": "median",
+            "unit": "ms"
+          },
+          "p95": {
+            "A": {
+              "mean": 1.711421,
+              "range": [
+                1.499246,
+                1.879003
+              ],
+              "values": [
+                1.879003,
+                1.756013,
+                1.499246
+              ]
+            },
+            "B": {
+              "mean": 1.578479,
+              "range": [
+                1.425646,
+                1.740278
+              ],
+              "values": [
+                1.425646,
+                1.569514,
+                1.740278
+              ]
+            },
+            "deltaPercent": -7.767931,
+            "label": "GPU 帧时间",
+            "pairedDeltaPercent": [
+              -24.127529,
+              -10.620593,
+              16.076881
+            ],
+            "sourcePath": "profiler.summary.gpuFrame.p95",
+            "statistic": "p95",
+            "unit": "ms"
+          },
+          "p99": {
+            "A": {
+              "mean": 2.232144,
+              "range": [
+                1.877953,
+                2.602123
+              ],
+              "values": [
+                2.602123,
+                1.877953,
+                2.216357
+              ]
+            },
+            "B": {
+              "mean": 2.106183,
+              "range": [
+                1.710619,
+                2.461815
+              ],
+              "values": [
+                2.146114,
+                1.710619,
+                2.461815
+              ]
+            },
+            "deltaPercent": -5.64305,
+            "label": "GPU 帧时间",
+            "pairedDeltaPercent": [
+              -17.524498,
+              -8.910447,
+              11.07484
+            ],
+            "sourcePath": "profiler.summary.gpuFrame.p99",
+            "statistic": "p99",
+            "unit": "ms"
+          }
+        },
+        "shadowCpu": {
+          "median": {
+            "A": {
+              "mean": 0.321017,
+              "range": [
+                0.3199,
+                0.32165
+              ],
+              "values": [
+                0.3199,
+                0.32165,
+                0.3215
+              ]
+            },
+            "B": {
+              "mean": 0.186233,
+              "range": [
+                0.1856,
+                0.18745
+              ],
+              "values": [
+                0.18745,
+                0.1856,
+                0.18565
+              ]
+            },
+            "deltaPercent": -41.986561,
+            "label": "阴影阶段 CPU",
+            "pairedDeltaPercent": [
+              -41.403564,
+              -42.297528,
+              -42.255054
+            ],
+            "sourcePath": "profiler.summary.cpuZones.Shadow Maps.median",
+            "statistic": "median",
+            "unit": "ms"
+          },
+          "p95": {
+            "A": {
+              "mean": 0.402235,
+              "range": [
+                0.36311,
+                0.435985
+              ],
+              "values": [
+                0.435985,
+                0.40761,
+                0.36311
+              ]
+            },
+            "B": {
+              "mean": 0.241383,
+              "range": [
+                0.238735,
+                0.243505
+              ],
+              "values": [
+                0.238735,
+                0.243505,
+                0.24191
+              ]
+            },
+            "deltaPercent": -39.989558,
+            "label": "阴影阶段 CPU",
+            "pairedDeltaPercent": [
+              -45.242382,
+              -40.260298,
+              -33.378315
+            ],
+            "sourcePath": "profiler.summary.cpuZones.Shadow Maps.p95",
+            "statistic": "p95",
+            "unit": "ms"
+          },
+          "p99": {
+            "A": {
+              "mean": 0.511324,
+              "range": [
+                0.45042,
+                0.561205
+              ],
+              "values": [
+                0.561205,
+                0.522348,
+                0.45042
+              ]
+            },
+            "B": {
+              "mean": 0.327665,
+              "range": [
+                0.30742,
+                0.338653
+              ],
+              "values": [
+                0.338653,
+                0.336921,
+                0.30742
+              ]
+            },
+            "deltaPercent": -35.918322,
+            "label": "阴影阶段 CPU",
+            "pairedDeltaPercent": [
+              -39.656097,
+              -35.498748,
+              -31.748146
+            ],
+            "sourcePath": "profiler.summary.cpuZones.Shadow Maps.p99",
+            "statistic": "p99",
+            "unit": "ms"
+          }
+        },
+        "shadowGpu": {
+          "median": {
+            "A": {
+              "mean": 0.762085,
+              "range": [
+                0.760304,
+                0.763392
+              ],
+              "values": [
+                0.76256,
+                0.763392,
+                0.760304
+              ]
+            },
+            "B": {
+              "mean": 0.597717,
+              "range": [
+                0.597408,
+                0.597952
+              ],
+              "values": [
+                0.597408,
+                0.597792,
+                0.597952
+              ]
+            },
+            "deltaPercent": -21.568198,
+            "label": "阴影更新 GPU",
+            "pairedDeltaPercent": [
+              -21.657574,
+              -21.692656,
+              -21.353564
+            ],
+            "sourcePath": "profiler.summary.gpuZones.Shadow Map Update.median",
+            "statistic": "median",
+            "unit": "ms"
+          },
+          "p95": {
+            "A": {
+              "mean": 0.836852,
+              "range": [
+                0.792619,
+                0.914114
+              ],
+              "values": [
+                0.803822,
+                0.914114,
+                0.792619
+              ]
+            },
+            "B": {
+              "mean": 0.603216,
+              "range": [
+                0.60093,
+                0.606821
+              ],
+              "values": [
+                0.601898,
+                0.60093,
+                0.606821
+              ]
+            },
+            "deltaPercent": -27.918437,
+            "label": "阴影更新 GPU",
+            "pairedDeltaPercent": [
+              -25.120487,
+              -34.260935,
+              -23.441023
+            ],
+            "sourcePath": "profiler.summary.gpuZones.Shadow Map Update.p95",
+            "statistic": "p95",
+            "unit": "ms"
+          },
+          "p99": {
+            "A": {
+              "mean": 1.211723,
+              "range": [
+                1.008022,
+                1.429041
+              ],
+              "values": [
+                1.198106,
+                1.008022,
+                1.429041
+              ]
+            },
+            "B": {
+              "mean": 0.876133,
+              "range": [
+                0.765979,
+                0.976179
+              ],
+              "values": [
+                0.886242,
+                0.765979,
+                0.976179
+              ]
+            },
+            "deltaPercent": -27.695274,
+            "label": "阴影更新 GPU",
+            "pairedDeltaPercent": [
+              -26.02975,
+              -24.011678,
+              -31.689924
+            ],
+            "sourcePath": "profiler.summary.gpuZones.Shadow Map Update.p99",
+            "statistic": "p99",
+            "unit": "ms"
+          }
+        },
+        "wall": {
+          "median": {
+            "A": {
+              "mean": 3.9146,
+              "range": [
+                3.6526,
+                4.11945
+              ],
+              "values": [
+                4.11945,
+                3.97175,
+                3.6526
+              ]
+            },
+            "B": {
+              "mean": 3.521133,
+              "range": [
+                3.3078,
+                3.67065
+              ],
+              "values": [
+                3.3078,
+                3.58495,
+                3.67065
+              ]
+            },
+            "deltaPercent": -10.05127,
+            "label": "整帧 Wall",
+            "pairedDeltaPercent": [
+              -19.702873,
+              -9.73878,
+              0.494169
+            ],
+            "sourcePath": "profiler.summary.wallFrame.median",
+            "statistic": "median",
+            "unit": "ms"
+          },
+          "p95": {
+            "A": {
+              "mean": 4.812998,
+              "range": [
+                4.581145,
+                5.179425
+              ],
+              "values": [
+                5.179425,
+                4.678425,
+                4.581145
+              ]
+            },
+            "B": {
+              "mean": 4.292677,
+              "range": [
+                4.11193,
+                4.611215
+              ],
+              "values": [
+                4.154885,
+                4.11193,
+                4.611215
+              ]
+            },
+            "deltaPercent": -10.810746,
+            "label": "整帧 Wall",
+            "pairedDeltaPercent": [
+              -19.78096,
+              -12.108669,
+              0.656386
+            ],
+            "sourcePath": "profiler.summary.wallFrame.p95",
+            "statistic": "p95",
+            "unit": "ms"
+          },
+          "p99": {
+            "A": {
+              "mean": 5.256388,
+              "range": [
+                4.956377,
+                5.782924
+              ],
+              "values": [
+                5.782924,
+                5.029862,
+                4.956377
+              ]
+            },
+            "B": {
+              "mean": 4.705351,
+              "range": [
+                4.446832,
+                4.994491
+              ],
+              "values": [
+                4.67473,
+                4.446832,
+                4.994491
+              ]
+            },
+            "deltaPercent": -10.483187,
+            "label": "整帧 Wall",
+            "pairedDeltaPercent": [
+              -19.163212,
+              -11.591372,
+              0.768989
+            ],
+            "sourcePath": "profiler.summary.wallFrame.p99",
+            "statistic": "p99",
+            "unit": "ms"
+          }
+        }
+      },
+      "pointShadowCube": {
+        "allFacesValid": true,
+        "allPairedContentsExact": true,
+        "paired": [
+          {
+            "allSixFaceHashesExact": true,
+            "minimumNonFarSamplesA": 1048576,
+            "minimumNonFarSamplesB": 1048576,
+            "pair": 1,
+            "resolution": [
+              1024,
+              1024
+            ]
+          },
+          {
+            "allSixFaceHashesExact": true,
+            "minimumNonFarSamplesA": 1048576,
+            "minimumNonFarSamplesB": 1048576,
+            "pair": 2,
+            "resolution": [
+              1024,
+              1024
+            ]
+          },
+          {
+            "allSixFaceHashesExact": true,
+            "minimumNonFarSamplesA": 1048576,
+            "minimumNonFarSamplesB": 1048576,
+            "pair": 3,
+            "resolution": [
+              1024,
+              1024
+            ]
+          }
+        ],
+        "runs": {
+          "A1": {
+            "depthRanges": [
+              [
+                0.008644,
+                0.404708
+              ],
+              [
+                0.008644,
+                0.405465
+              ],
+              [
+                0.008644,
+                0.121873
+              ],
+              [
+                0.008644,
+                0.336741
+              ],
+              [
+                0.04377,
+                0.141384
+              ],
+              [
+                0.006109,
+                0.010575
+              ]
+            ],
+            "facesValid": [
+              true,
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "hashes": [
+              "0x728594404c8e3696",
+              "0x71a026b3ac4ad959",
+              "0x73c658101a600698",
+              "0x76f3db6b5a2936ac",
+              "0x0fdc766eecd77a98",
+              "0x4f22756d258fb525"
+            ],
+            "nonFarSampleCounts": [
+              1048576,
+              1048576,
+              1048576,
+              1048576,
+              1048576,
+              1048576
+            ],
+            "resolution": [
+              1024,
+              1024
+            ],
+            "resolutionMatchesMetadata": true,
+            "sampleCountPerFace": 1048576,
+            "valid": true
+          },
+          "A2": {
+            "depthRanges": [
+              [
+                0.008644,
+                0.404708
+              ],
+              [
+                0.008644,
+                0.405465
+              ],
+              [
+                0.008644,
+                0.121873
+              ],
+              [
+                0.008644,
+                0.336741
+              ],
+              [
+                0.04377,
+                0.141384
+              ],
+              [
+                0.006109,
+                0.010575
+              ]
+            ],
+            "facesValid": [
+              true,
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "hashes": [
+              "0x728594404c8e3696",
+              "0x71a026b3ac4ad959",
+              "0x73c658101a600698",
+              "0x76f3db6b5a2936ac",
+              "0x0fdc766eecd77a98",
+              "0x4f22756d258fb525"
+            ],
+            "nonFarSampleCounts": [
+              1048576,
+              1048576,
+              1048576,
+              1048576,
+              1048576,
+              1048576
+            ],
+            "resolution": [
+              1024,
+              1024
+            ],
+            "resolutionMatchesMetadata": true,
+            "sampleCountPerFace": 1048576,
+            "valid": true
+          },
+          "A3": {
+            "depthRanges": [
+              [
+                0.008644,
+                0.404708
+              ],
+              [
+                0.008644,
+                0.405465
+              ],
+              [
+                0.008644,
+                0.121873
+              ],
+              [
+                0.008644,
+                0.336741
+              ],
+              [
+                0.04377,
+                0.141384
+              ],
+              [
+                0.006109,
+                0.010575
+              ]
+            ],
+            "facesValid": [
+              true,
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "hashes": [
+              "0x728594404c8e3696",
+              "0x71a026b3ac4ad959",
+              "0x73c658101a600698",
+              "0x76f3db6b5a2936ac",
+              "0x0fdc766eecd77a98",
+              "0x4f22756d258fb525"
+            ],
+            "nonFarSampleCounts": [
+              1048576,
+              1048576,
+              1048576,
+              1048576,
+              1048576,
+              1048576
+            ],
+            "resolution": [
+              1024,
+              1024
+            ],
+            "resolutionMatchesMetadata": true,
+            "sampleCountPerFace": 1048576,
+            "valid": true
+          },
+          "B1": {
+            "depthRanges": [
+              [
+                0.008644,
+                0.404708
+              ],
+              [
+                0.008644,
+                0.405465
+              ],
+              [
+                0.008644,
+                0.121873
+              ],
+              [
+                0.008644,
+                0.336741
+              ],
+              [
+                0.04377,
+                0.141384
+              ],
+              [
+                0.006109,
+                0.010575
+              ]
+            ],
+            "facesValid": [
+              true,
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "hashes": [
+              "0x728594404c8e3696",
+              "0x71a026b3ac4ad959",
+              "0x73c658101a600698",
+              "0x76f3db6b5a2936ac",
+              "0x0fdc766eecd77a98",
+              "0x4f22756d258fb525"
+            ],
+            "nonFarSampleCounts": [
+              1048576,
+              1048576,
+              1048576,
+              1048576,
+              1048576,
+              1048576
+            ],
+            "resolution": [
+              1024,
+              1024
+            ],
+            "resolutionMatchesMetadata": true,
+            "sampleCountPerFace": 1048576,
+            "valid": true
+          },
+          "B2": {
+            "depthRanges": [
+              [
+                0.008644,
+                0.404708
+              ],
+              [
+                0.008644,
+                0.405465
+              ],
+              [
+                0.008644,
+                0.121873
+              ],
+              [
+                0.008644,
+                0.336741
+              ],
+              [
+                0.04377,
+                0.141384
+              ],
+              [
+                0.006109,
+                0.010575
+              ]
+            ],
+            "facesValid": [
+              true,
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "hashes": [
+              "0x728594404c8e3696",
+              "0x71a026b3ac4ad959",
+              "0x73c658101a600698",
+              "0x76f3db6b5a2936ac",
+              "0x0fdc766eecd77a98",
+              "0x4f22756d258fb525"
+            ],
+            "nonFarSampleCounts": [
+              1048576,
+              1048576,
+              1048576,
+              1048576,
+              1048576,
+              1048576
+            ],
+            "resolution": [
+              1024,
+              1024
+            ],
+            "resolutionMatchesMetadata": true,
+            "sampleCountPerFace": 1048576,
+            "valid": true
+          },
+          "B3": {
+            "depthRanges": [
+              [
+                0.008644,
+                0.404708
+              ],
+              [
+                0.008644,
+                0.405465
+              ],
+              [
+                0.008644,
+                0.121873
+              ],
+              [
+                0.008644,
+                0.336741
+              ],
+              [
+                0.04377,
+                0.141384
+              ],
+              [
+                0.006109,
+                0.010575
+              ]
+            ],
+            "facesValid": [
+              true,
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "hashes": [
+              "0x728594404c8e3696",
+              "0x71a026b3ac4ad959",
+              "0x73c658101a600698",
+              "0x76f3db6b5a2936ac",
+              "0x0fdc766eecd77a98",
+              "0x4f22756d258fb525"
+            ],
+            "nonFarSampleCounts": [
+              1048576,
+              1048576,
+              1048576,
+              1048576,
+              1048576,
+              1048576
+            ],
+            "resolution": [
+              1024,
+              1024
+            ],
+            "resolutionMatchesMetadata": true,
+            "sampleCountPerFace": 1048576,
+            "valid": true
+          }
+        }
+      },
+      "pointShadowPath": {
+        "allSubmissionAccountingValid": true,
+        "allUpdateAccountingValid": true,
+        "layeredUpdatesPerFrame": {
+          "A": {
+            "mean": 0.0,
+            "range": [
+              0.0,
+              0.0
+            ],
+            "values": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "B": {
+            "mean": 0.0,
+            "range": [
+              0.0,
+              0.0
+            ],
+            "values": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "deltaPercent": null,
+          "label": "layeredUpdatesPerFrame",
+          "pairedDeltaPercent": [
+            null,
+            null,
+            null
+          ],
+          "sourceField": "measuredPointShadowLayeredUpdateCount",
+          "unit": "updates/frame"
+        },
+        "renderPolicy": {
+          "A": [
+            "six-face",
+            "six-face",
+            "six-face"
+          ],
+          "B": [
+            "six-face",
+            "six-face",
+            "six-face"
+          ]
+        },
+        "sixFaceUpdatesPerFrame": {
+          "A": {
+            "mean": 1.0,
+            "range": [
+              1.0,
+              1.0
+            ],
+            "values": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          "B": {
+            "mean": 1.0,
+            "range": [
+              1.0,
+              1.0
+            ],
+            "values": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          "deltaPercent": 0.0,
+          "label": "sixFaceUpdatesPerFrame",
+          "pairedDeltaPercent": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sourceField": "measuredPointShadowSixFaceUpdateCount",
+          "unit": "updates/frame"
+        },
+        "submissionAccounting": {
+          "A": [
+            true,
+            true,
+            true
+          ],
+          "B": [
+            true,
+            true,
+            true
+          ]
+        },
+        "submissionPassesPerFrame": {
+          "A": {
+            "mean": 6.0,
+            "range": [
+              6.0,
+              6.0
+            ],
+            "values": [
+              6.0,
+              6.0,
+              6.0
+            ]
+          },
+          "B": {
+            "mean": 6.0,
+            "range": [
+              6.0,
+              6.0
+            ],
+            "values": [
+              6.0,
+              6.0,
+              6.0
+            ]
+          },
+          "deltaPercent": 0.0,
+          "label": "submissionPassesPerFrame",
+          "pairedDeltaPercent": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sourceField": "measuredPointShadowSubmissionPassCount",
+          "unit": "updates/frame"
+        },
+        "updateAccounting": {
+          "A": [
+            true,
+            true,
+            true
+          ],
+          "B": [
+            true,
+            true,
+            true
+          ]
+        }
+      },
+      "resources": {
+        "meshGpuBytes": {
+          "A": {
+            "meanBytes": 15011180.0,
+            "meanMiB": 14.315777,
+            "valuesBytes": [
+              15011180,
+              15011180,
+              15011180
+            ]
+          },
+          "B": {
+            "meanBytes": 15011180.0,
+            "meanMiB": 14.315777,
+            "valuesBytes": [
+              15011180,
+              15011180,
+              15011180
+            ]
+          },
+          "allSixRunsExact": true,
+          "label": "Mesh GPU",
+          "pairedExact": [
+            true,
+            true,
+            true
+          ],
+          "sourceField": "memoryBytes.meshGpu",
+          "unit": "bytes"
+        },
+        "renderTargetBytes": {
+          "A": {
+            "meanBytes": 87609344.0,
+            "meanMiB": 83.550781,
+            "valuesBytes": [
+              87609344,
+              87609344,
+              87609344
+            ]
+          },
+          "B": {
+            "meanBytes": 87609344.0,
+            "meanMiB": 83.550781,
+            "valuesBytes": [
+              87609344,
+              87609344,
+              87609344
+            ]
+          },
+          "allSixRunsExact": true,
+          "label": "渲染目标",
+          "pairedExact": [
+            true,
+            true,
+            true
+          ],
+          "sourceField": "memoryBytes.renderTarget",
+          "unit": "bytes"
+        },
+        "textureBytes": {
+          "A": {
+            "meanBytes": 243742611.0,
+            "meanMiB": 232.451068,
+            "valuesBytes": [
+              243742611,
+              243742611,
+              243742611
+            ]
+          },
+          "B": {
+            "meanBytes": 243742611.0,
+            "meanMiB": 232.451068,
+            "valuesBytes": [
+              243742611,
+              243742611,
+              243742611
+            ]
+          },
+          "allSixRunsExact": true,
+          "label": "纹理",
+          "pairedExact": [
+            true,
+            true,
+            true
+          ],
+          "sourceField": "memoryBytes.texture",
+          "unit": "bytes"
+        }
+      },
+      "runConditions": {
+        "frameMeasurement": {
+          "A": [
+            "gpu-synchronized-wall",
+            "gpu-synchronized-wall",
+            "gpu-synchronized-wall"
+          ],
+          "B": [
+            "gpu-synchronized-wall",
+            "gpu-synchronized-wall",
+            "gpu-synchronized-wall"
+          ]
+        },
+        "measuredFrames": {
+          "A": [
+            1000,
+            1000,
+            1000
+          ],
+          "B": [
+            1000,
+            1000,
+            1000
+          ]
+        },
+        "resolution": {
+          "A": [
+            [
+              1920,
+              1080
+            ],
+            [
+              1920,
+              1080
+            ],
+            [
+              1920,
+              1080
+            ]
+          ],
+          "B": [
+            [
+              1920,
+              1080
+            ],
+            [
+              1920,
+              1080
+            ],
+            [
+              1920,
+              1080
+            ]
+          ]
+        }
+      },
+      "runFiles": {
+        "A1": {
+          "path": "formal/sponza/A1.json",
+          "sha256": "680356aee8d664aeb6ab4c50b013245d64cf236e6d73d5d5ce153e92295dff5a"
+        },
+        "A2": {
+          "path": "formal/sponza/A2.json",
+          "sha256": "fb11fb314481e67b10749075b5bcbdfe9185c8b3f72186ea3465dd2cae694a3d"
+        },
+        "A3": {
+          "path": "formal/sponza/A3.json",
+          "sha256": "322159a03d025267d6fd6a493d3235b25c1d4987ff2ddbe5fd02577fd73c3a23"
+        },
+        "B1": {
+          "path": "formal/sponza/B1.json",
+          "sha256": "a507a4b4087db4a32fe7376e87aa17bba8c3f132ead718c975bd1cbf9b8c6a1b"
+        },
+        "B2": {
+          "path": "formal/sponza/B2.json",
+          "sha256": "aa2dc05fc004bb55b1505750327f2891f9bfe109559a5e4ecdd79b92b6924d44"
+        },
+        "B3": {
+          "path": "formal/sponza/B3.json",
+          "sha256": "71b9b8659ff6d8c012b16a46f9cf158ca5f7a306f0262e1519305afcad320bc6"
+        }
+      },
+      "updates": {
+        "directionalUpdatesPerFrame": {
+          "A": {
+            "mean": 1.0,
+            "range": [
+              1.0,
+              1.0
+            ],
+            "values": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          "B": {
+            "mean": 0.0,
+            "range": [
+              0.0,
+              0.0
+            ],
+            "values": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "deltaPercent": -100.0,
+          "label": "Directional 更新数/帧",
+          "pairedDeltaPercent": [
+            -100.0,
+            -100.0,
+            -100.0
+          ],
+          "sourceField": "measuredDirectionalLightUpdateCount",
+          "unit": "updates/frame"
+        },
+        "pointUpdatesPerFrame": {
+          "A": {
+            "mean": 1.0,
+            "range": [
+              1.0,
+              1.0
+            ],
+            "values": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          "B": {
+            "mean": 1.0,
+            "range": [
+              1.0,
+              1.0
+            ],
+            "values": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          "deltaPercent": 0.0,
+          "label": "Point 更新数/帧",
+          "pairedDeltaPercent": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sourceField": "measuredPointLightUpdateCount",
+          "unit": "updates/frame"
+        },
+        "spotUpdatesPerFrame": {
+          "A": {
+            "mean": 1.0,
+            "range": [
+              1.0,
+              1.0
+            ],
+            "values": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          "B": {
+            "mean": 0.0,
+            "range": [
+              0.0,
+              0.0
+            ],
+            "values": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "deltaPercent": -100.0,
+          "label": "Spot 更新数/帧",
+          "pairedDeltaPercent": [
+            -100.0,
+            -100.0,
+            -100.0
+          ],
+          "sourceField": "measuredSpotLightUpdateCount",
+          "unit": "updates/frame"
+        },
+        "updatedLightsPerFrame": {
+          "A": {
+            "mean": 3.0,
+            "range": [
+              3.0,
+              3.0
+            ],
+            "values": [
+              3.0,
+              3.0,
+              3.0
+            ]
+          },
+          "B": {
+            "mean": 1.0,
+            "range": [
+              1.0,
+              1.0
+            ],
+            "values": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          "deltaPercent": -66.666667,
+          "label": "每帧更新总灯数",
+          "pairedDeltaPercent": [
+            -66.666667,
+            -66.666667,
+            -66.666667
+          ],
+          "sourceField": "measuredUpdatedLightCount",
+          "unit": "updates/frame"
+        }
+      }
+    },
+    {
+      "artifacts": {
+        "performanceChart": "performance-san-miguel.png"
+      },
+      "cacheSafety": {
+        "noConservativeFallbacks": true,
+        "noResourceFailures": true,
+        "noUnexpectedEmptyClears": true,
+        "values": {
+          "conservativeFallbacks": {
+            "A": [
+              0,
+              0,
+              0
+            ],
+            "B": [
+              0,
+              0,
+              0
+            ]
+          },
+          "emptyShadowClears": {
+            "A": [
+              0,
+              0,
+              0
+            ],
+            "B": [
+              0,
+              0,
+              0
+            ]
+          },
+          "resourceFailures": {
+            "A": [
+              0,
+              0,
+              0
+            ],
+            "B": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      },
+      "captures": [
+        {
+          "artifacts": {
+            "comparison": "captures/san-miguel-pair1-comparison.png",
+            "difference": "captures/san-miguel-pair1-difference.png",
+            "metrics": "captures/san-miguel-pair1-metrics.json"
+          },
+          "changedPixelRatio": 1.4467592592592592e-06,
+          "exact": false,
+          "exactChangedPixelCount": 3,
+          "exactChangedPixelRatio": 1.4467592592592592e-06,
+          "luminanceMeanAbsoluteDifference": 3.7823771483902205e-08,
+          "maximumChannelDelta": 24,
+          "pair": 1,
+          "resolution": [
+            1920,
+            1080
+          ],
+          "rgbMeanAbsoluteDifference": 4.7910110546276124e-08,
+          "rgbRootMeanSquareDifference": 4.843100156478925e-05,
+          "source": {
+            "A": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\per-light-cache-no-cache-vs-per-light-1080p-six-face-final\\formal\\san-miguel\\A1.ppm",
+            "B": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\per-light-cache-no-cache-vs-per-light-1080p-six-face-final\\formal\\san-miguel\\B1.ppm",
+            "sha256A": "df5cc6697fe8e0f77787fdc7ba0d0f10191b7f47787d79de668ad0259e095eb4",
+            "sha256B": "800d257807c242dbffc9fb9e1579b23b01e5937bc097b1e998c117a5a3550fd8"
+          },
+          "withinTolerance": true
+        },
+        {
+          "artifacts": {
+            "comparison": "captures/san-miguel-pair2-comparison.png",
+            "difference": "captures/san-miguel-pair2-difference.png",
+            "metrics": "captures/san-miguel-pair2-metrics.json"
+          },
+          "changedPixelRatio": 1.4467592592592592e-06,
+          "exact": false,
+          "exactChangedPixelCount": 3,
+          "exactChangedPixelRatio": 1.4467592592592592e-06,
+          "luminanceMeanAbsoluteDifference": 2.6476640038731545e-08,
+          "maximumChannelDelta": 21,
+          "pair": 2,
+          "resolution": [
+            1920,
+            1080
+          ],
+          "rgbMeanAbsoluteDifference": 4.538852578068264e-08,
+          "rgbRootMeanSquareDifference": 4.689340929576858e-05,
+          "source": {
+            "A": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\per-light-cache-no-cache-vs-per-light-1080p-six-face-final\\formal\\san-miguel\\A2.ppm",
+            "B": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\per-light-cache-no-cache-vs-per-light-1080p-six-face-final\\formal\\san-miguel\\B2.ppm",
+            "sha256A": "3a677a36485351a200f27c5c24338ba4168b8d9bb389b96067c7c86ca121f2e9",
+            "sha256B": "c1e72bd3990aec3a52d9edfa732421e0140921fcc5d3fe9a9963dfebed7ebcd6"
+          },
+          "withinTolerance": true
+        },
+        {
+          "artifacts": {
+            "comparison": "captures/san-miguel-pair3-comparison.png",
+            "difference": "captures/san-miguel-pair3-difference.png",
+            "metrics": "captures/san-miguel-pair3-metrics.json"
+          },
+          "changedPixelRatio": 2.8935185185185184e-06,
+          "exact": false,
+          "exactChangedPixelCount": 6,
+          "exactChangedPixelRatio": 2.8935185185185184e-06,
+          "luminanceMeanAbsoluteDifference": 6.430041152263375e-08,
+          "maximumChannelDelta": 33,
+          "pair": 3,
+          "resolution": [
+            1920,
+            1080
+          ],
+          "rgbMeanAbsoluteDifference": 1.1914488017429195e-07,
+          "rgbRootMeanSquareDifference": 8.663448165597428e-05,
+          "source": {
+            "A": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\per-light-cache-no-cache-vs-per-light-1080p-six-face-final\\formal\\san-miguel\\A3.ppm",
+            "B": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\per-light-cache-no-cache-vs-per-light-1080p-six-face-final\\formal\\san-miguel\\B3.ppm",
+            "sha256A": "1d1a115e1bb20f6512c44a8ca13a9ca847ae9a26cccfb90e057c539a0b172bc6",
+            "sha256B": "9553508f624e7b31e08296f72577ce2733c7dd261ecee87b5a951f7c25cafe23"
+          },
+          "withinTolerance": true
+        }
+      ],
+      "displayName": "San Miguel 2.1 (low-poly)",
+      "id": "san-miguel",
+      "metrics": {
+        "gpuFrame": {
+          "median": {
+            "A": {
+              "mean": 7.751403,
+              "range": [
+                7.642048,
+                7.863456
+              ],
+              "values": [
+                7.748704,
+                7.863456,
+                7.642048
+              ]
+            },
+            "B": {
+              "mean": 5.594123,
+              "range": [
+                5.48752,
+                5.755808
+              ],
+              "values": [
+                5.48752,
+                5.755808,
+                5.53904
+              ]
+            },
+            "deltaPercent": -27.830833,
+            "label": "GPU 帧时间",
+            "pairedDeltaPercent": [
+              -29.181448,
+              -26.803075,
+              -27.518906
+            ],
+            "sourcePath": "profiler.summary.gpuFrame.median",
+            "statistic": "median",
+            "unit": "ms"
+          },
+          "p95": {
+            "A": {
+              "mean": 8.255863,
+              "range": [
+                8.110378,
+                8.474757
+              ],
+              "values": [
+                8.182454,
+                8.474757,
+                8.110378
+              ]
+            },
+            "B": {
+              "mean": 6.342254,
+              "range": [
+                6.135339,
+                6.579442
+              ],
+              "values": [
+                6.135339,
+                6.579442,
+                6.311982
+              ]
+            },
+            "deltaPercent": -23.178788,
+            "label": "GPU 帧时间",
+            "pairedDeltaPercent": [
+              -25.01835,
+              -22.36424,
+              -22.17401
+            ],
+            "sourcePath": "profiler.summary.gpuFrame.p95",
+            "statistic": "p95",
+            "unit": "ms"
+          },
+          "p99": {
+            "A": {
+              "mean": 8.745062,
+              "range": [
+                8.488795,
+                8.994302
+              ],
+              "values": [
+                8.752088,
+                8.994302,
+                8.488795
+              ]
+            },
+            "B": {
+              "mean": 6.676889,
+              "range": [
+                6.536118,
+                6.851849
+              ],
+              "values": [
+                6.536118,
+                6.851849,
+                6.642699
+              ]
+            },
+            "deltaPercent": -23.649609,
+            "label": "GPU 帧时间",
+            "pairedDeltaPercent": [
+              -25.31933,
+              -23.820114,
+              -21.747445
+            ],
+            "sourcePath": "profiler.summary.gpuFrame.p99",
+            "statistic": "p99",
+            "unit": "ms"
+          }
+        },
+        "shadowCpu": {
+          "median": {
+            "A": {
+              "mean": 2.531267,
+              "range": [
+                2.5182,
+                2.5488
+              ],
+              "values": [
+                2.5268,
+                2.5488,
+                2.5182
+              ]
+            },
+            "B": {
+              "mean": 1.260067,
+              "range": [
+                1.2475,
+                1.27155
+              ],
+              "values": [
+                1.26115,
+                1.2475,
+                1.27155
+              ]
+            },
+            "deltaPercent": -50.21991,
+            "label": "阴影阶段 CPU",
+            "pairedDeltaPercent": [
+              -50.089045,
+              -51.055399,
+              -49.505599
+            ],
+            "sourcePath": "profiler.summary.cpuZones.Shadow Maps.median",
+            "statistic": "median",
+            "unit": "ms"
+          },
+          "p95": {
+            "A": {
+              "mean": 2.961502,
+              "range": [
+                2.849965,
+                3.02144
+              ],
+              "values": [
+                3.0131,
+                2.849965,
+                3.02144
+              ]
+            },
+            "B": {
+              "mean": 1.559403,
+              "range": [
+                1.4516,
+                1.62148
+              ],
+              "values": [
+                1.60513,
+                1.4516,
+                1.62148
+              ]
+            },
+            "deltaPercent": -47.344185,
+            "label": "阴影阶段 CPU",
+            "pairedDeltaPercent": [
+              -46.728286,
+              -49.066041,
+              -46.334198
+            ],
+            "sourcePath": "profiler.summary.cpuZones.Shadow Maps.p95",
+            "statistic": "p95",
+            "unit": "ms"
+          },
+          "p99": {
+            "A": {
+              "mean": 3.609353,
+              "range": [
+                3.36613,
+                3.765376
+              ],
+              "values": [
+                3.36613,
+                3.765376,
+                3.696552
+              ]
+            },
+            "B": {
+              "mean": 1.831232,
+              "range": [
+                1.75964,
+                1.871123
+              ],
+              "values": [
+                1.862934,
+                1.75964,
+                1.871123
+              ]
+            },
+            "deltaPercent": -49.264259,
+            "label": "阴影阶段 CPU",
+            "pairedDeltaPercent": [
+              -44.656505,
+              -53.267881,
+              -49.381938
+            ],
+            "sourcePath": "profiler.summary.cpuZones.Shadow Maps.p99",
+            "statistic": "p99",
+            "unit": "ms"
+          }
+        },
+        "shadowGpu": {
+          "median": {
+            "A": {
+              "mean": 4.819301,
+              "range": [
+                4.809872,
+                4.827312
+              ],
+              "values": [
+                4.809872,
+                4.82072,
+                4.827312
+              ]
+            },
+            "B": {
+              "mean": 2.599525,
+              "range": [
+                2.594416,
+                2.605152
+              ],
+              "values": [
+                2.594416,
+                2.605152,
+                2.599008
+              ]
+            },
+            "deltaPercent": -46.060124,
+            "label": "阴影更新 GPU",
+            "pairedDeltaPercent": [
+              -46.060602,
+              -45.959276,
+              -46.160348
+            ],
+            "sourcePath": "profiler.summary.gpuZones.Shadow Map Update.median",
+            "statistic": "median",
+            "unit": "ms"
+          },
+          "p95": {
+            "A": {
+              "mean": 5.282373,
+              "range": [
+                5.226144,
+                5.334338
+              ],
+              "values": [
+                5.226144,
+                5.334338,
+                5.286637
+              ]
+            },
+            "B": {
+              "mean": 3.074098,
+              "range": [
+                3.062277,
+                3.080893
+              ],
+              "values": [
+                3.062277,
+                3.079125,
+                3.080893
+              ]
+            },
+            "deltaPercent": -41.804602,
+            "label": "阴影更新 GPU",
+            "pairedDeltaPercent": [
+              -41.404657,
+              -42.27728,
+              -41.723008
+            ],
+            "sourcePath": "profiler.summary.gpuZones.Shadow Map Update.p95",
+            "statistic": "p95",
+            "unit": "ms"
+          },
+          "p99": {
+            "A": {
+              "mean": 5.685727,
+              "range": [
+                5.534654,
+                5.835426
+              ],
+              "values": [
+                5.534654,
+                5.835426,
+                5.687101
+              ]
+            },
+            "B": {
+              "mean": 3.521256,
+              "range": [
+                3.382113,
+                3.593479
+              ],
+              "values": [
+                3.382113,
+                3.588176,
+                3.593479
+              ]
+            },
+            "deltaPercent": -38.0685,
+            "label": "阴影更新 GPU",
+            "pairedDeltaPercent": [
+              -38.892061,
+              -38.51047,
+              -36.813519
+            ],
+            "sourcePath": "profiler.summary.gpuZones.Shadow Map Update.p99",
+            "statistic": "p99",
+            "unit": "ms"
+          }
+        },
+        "wall": {
+          "median": {
+            "A": {
+              "mean": 11.200183,
+              "range": [
+                11.0641,
+                11.3734
+              ],
+              "values": [
+                11.16305,
+                11.3734,
+                11.0641
+              ]
+            },
+            "B": {
+              "mean": 8.997233,
+              "range": [
+                8.90725,
+                9.16985
+              ],
+              "values": [
+                8.90725,
+                9.16985,
+                8.9146
+              ]
+            },
+            "deltaPercent": -19.668875,
+            "label": "整帧 Wall",
+            "pairedDeltaPercent": [
+              -20.207739,
+              -19.374593,
+              -19.427699
+            ],
+            "sourcePath": "profiler.summary.wallFrame.median",
+            "statistic": "median",
+            "unit": "ms"
+          },
+          "p95": {
+            "A": {
+              "mean": 12.297473,
+              "range": [
+                12.106405,
+                12.65877
+              ],
+              "values": [
+                12.127245,
+                12.65877,
+                12.106405
+              ]
+            },
+            "B": {
+              "mean": 10.178045,
+              "range": [
+                9.95992,
+                10.53439
+              ],
+              "values": [
+                9.95992,
+                10.53439,
+                10.039825
+              ]
+            },
+            "deltaPercent": -17.234663,
+            "label": "整帧 Wall",
+            "pairedDeltaPercent": [
+              -17.871536,
+              -16.781883,
+              -17.070138
+            ],
+            "sourcePath": "profiler.summary.wallFrame.p95",
+            "statistic": "p95",
+            "unit": "ms"
+          },
+          "p99": {
+            "A": {
+              "mean": 13.05016,
+              "range": [
+                12.542134,
+                13.63026
+              ],
+              "values": [
+                12.542134,
+                13.63026,
+                12.978087
+              ]
+            },
+            "B": {
+              "mean": 10.827921,
+              "range": [
+                10.602473,
+                11.214446
+              ],
+              "values": [
+                10.602473,
+                11.214446,
+                10.666844
+              ]
+            },
+            "deltaPercent": -17.028443,
+            "label": "整帧 Wall",
+            "pairedDeltaPercent": [
+              -15.465159,
+              -17.723903,
+              -17.808811
+            ],
+            "sourcePath": "profiler.summary.wallFrame.p99",
+            "statistic": "p99",
+            "unit": "ms"
+          }
+        }
+      },
+      "pointShadowCube": {
+        "allFacesValid": true,
+        "allPairedContentsExact": true,
+        "paired": [
+          {
+            "allSixFaceHashesExact": true,
+            "minimumNonFarSamplesA": 0,
+            "minimumNonFarSamplesB": 0,
+            "pair": 1,
+            "resolution": [
+              1024,
+              1024
+            ]
+          },
+          {
+            "allSixFaceHashesExact": true,
+            "minimumNonFarSamplesA": 0,
+            "minimumNonFarSamplesB": 0,
+            "pair": 2,
+            "resolution": [
+              1024,
+              1024
+            ]
+          },
+          {
+            "allSixFaceHashesExact": true,
+            "minimumNonFarSamplesA": 0,
+            "minimumNonFarSamplesB": 0,
+            "pair": 3,
+            "resolution": [
+              1024,
+              1024
+            ]
+          }
+        ],
+        "runs": {
+          "A1": {
+            "depthRanges": [
+              [
+                0.015996,
+                1.0
+              ],
+              [
+                0.015996,
+                1.0
+              ],
+              [
+                1.0,
+                1.0
+              ],
+              [
+                0.011306,
+                0.019569
+              ],
+              [
+                0.015996,
+                1.0
+              ],
+              [
+                0.015996,
+                1.0
+              ]
+            ],
+            "facesValid": [
+              true,
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "hashes": [
+              "0xf5b1424933623649",
+              "0xf746349037d949eb",
+              "0x1f8663e4d6a22325",
+              "0x1121a9ac4ba1fc9d",
+              "0x0e41c3ff668824f6",
+              "0x154a5023d9e15c2b"
+            ],
+            "nonFarSampleCounts": [
+              466516,
+              463060,
+              0,
+              1048576,
+              555835,
+              336896
+            ],
+            "resolution": [
+              1024,
+              1024
+            ],
+            "resolutionMatchesMetadata": true,
+            "sampleCountPerFace": 1048576,
+            "valid": true
+          },
+          "A2": {
+            "depthRanges": [
+              [
+                0.015996,
+                1.0
+              ],
+              [
+                0.015996,
+                1.0
+              ],
+              [
+                1.0,
+                1.0
+              ],
+              [
+                0.011306,
+                0.019569
+              ],
+              [
+                0.015996,
+                1.0
+              ],
+              [
+                0.015996,
+                1.0
+              ]
+            ],
+            "facesValid": [
+              true,
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "hashes": [
+              "0xf5b1424933623649",
+              "0xf746349037d949eb",
+              "0x1f8663e4d6a22325",
+              "0x1121a9ac4ba1fc9d",
+              "0x0e41c3ff668824f6",
+              "0x154a5023d9e15c2b"
+            ],
+            "nonFarSampleCounts": [
+              466516,
+              463060,
+              0,
+              1048576,
+              555835,
+              336896
+            ],
+            "resolution": [
+              1024,
+              1024
+            ],
+            "resolutionMatchesMetadata": true,
+            "sampleCountPerFace": 1048576,
+            "valid": true
+          },
+          "A3": {
+            "depthRanges": [
+              [
+                0.015996,
+                1.0
+              ],
+              [
+                0.015996,
+                1.0
+              ],
+              [
+                1.0,
+                1.0
+              ],
+              [
+                0.011306,
+                0.019569
+              ],
+              [
+                0.015996,
+                1.0
+              ],
+              [
+                0.015996,
+                1.0
+              ]
+            ],
+            "facesValid": [
+              true,
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "hashes": [
+              "0xf5b1424933623649",
+              "0xf746349037d949eb",
+              "0x1f8663e4d6a22325",
+              "0x1121a9ac4ba1fc9d",
+              "0x0e41c3ff668824f6",
+              "0x154a5023d9e15c2b"
+            ],
+            "nonFarSampleCounts": [
+              466516,
+              463060,
+              0,
+              1048576,
+              555835,
+              336896
+            ],
+            "resolution": [
+              1024,
+              1024
+            ],
+            "resolutionMatchesMetadata": true,
+            "sampleCountPerFace": 1048576,
+            "valid": true
+          },
+          "B1": {
+            "depthRanges": [
+              [
+                0.015996,
+                1.0
+              ],
+              [
+                0.015996,
+                1.0
+              ],
+              [
+                1.0,
+                1.0
+              ],
+              [
+                0.011306,
+                0.019569
+              ],
+              [
+                0.015996,
+                1.0
+              ],
+              [
+                0.015996,
+                1.0
+              ]
+            ],
+            "facesValid": [
+              true,
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "hashes": [
+              "0xf5b1424933623649",
+              "0xf746349037d949eb",
+              "0x1f8663e4d6a22325",
+              "0x1121a9ac4ba1fc9d",
+              "0x0e41c3ff668824f6",
+              "0x154a5023d9e15c2b"
+            ],
+            "nonFarSampleCounts": [
+              466516,
+              463060,
+              0,
+              1048576,
+              555835,
+              336896
+            ],
+            "resolution": [
+              1024,
+              1024
+            ],
+            "resolutionMatchesMetadata": true,
+            "sampleCountPerFace": 1048576,
+            "valid": true
+          },
+          "B2": {
+            "depthRanges": [
+              [
+                0.015996,
+                1.0
+              ],
+              [
+                0.015996,
+                1.0
+              ],
+              [
+                1.0,
+                1.0
+              ],
+              [
+                0.011306,
+                0.019569
+              ],
+              [
+                0.015996,
+                1.0
+              ],
+              [
+                0.015996,
+                1.0
+              ]
+            ],
+            "facesValid": [
+              true,
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "hashes": [
+              "0xf5b1424933623649",
+              "0xf746349037d949eb",
+              "0x1f8663e4d6a22325",
+              "0x1121a9ac4ba1fc9d",
+              "0x0e41c3ff668824f6",
+              "0x154a5023d9e15c2b"
+            ],
+            "nonFarSampleCounts": [
+              466516,
+              463060,
+              0,
+              1048576,
+              555835,
+              336896
+            ],
+            "resolution": [
+              1024,
+              1024
+            ],
+            "resolutionMatchesMetadata": true,
+            "sampleCountPerFace": 1048576,
+            "valid": true
+          },
+          "B3": {
+            "depthRanges": [
+              [
+                0.015996,
+                1.0
+              ],
+              [
+                0.015996,
+                1.0
+              ],
+              [
+                1.0,
+                1.0
+              ],
+              [
+                0.011306,
+                0.019569
+              ],
+              [
+                0.015996,
+                1.0
+              ],
+              [
+                0.015996,
+                1.0
+              ]
+            ],
+            "facesValid": [
+              true,
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "hashes": [
+              "0xf5b1424933623649",
+              "0xf746349037d949eb",
+              "0x1f8663e4d6a22325",
+              "0x1121a9ac4ba1fc9d",
+              "0x0e41c3ff668824f6",
+              "0x154a5023d9e15c2b"
+            ],
+            "nonFarSampleCounts": [
+              466516,
+              463060,
+              0,
+              1048576,
+              555835,
+              336896
+            ],
+            "resolution": [
+              1024,
+              1024
+            ],
+            "resolutionMatchesMetadata": true,
+            "sampleCountPerFace": 1048576,
+            "valid": true
+          }
+        }
+      },
+      "pointShadowPath": {
+        "allSubmissionAccountingValid": true,
+        "allUpdateAccountingValid": true,
+        "layeredUpdatesPerFrame": {
+          "A": {
+            "mean": 0.0,
+            "range": [
+              0.0,
+              0.0
+            ],
+            "values": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "B": {
+            "mean": 0.0,
+            "range": [
+              0.0,
+              0.0
+            ],
+            "values": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "deltaPercent": null,
+          "label": "layeredUpdatesPerFrame",
+          "pairedDeltaPercent": [
+            null,
+            null,
+            null
+          ],
+          "sourceField": "measuredPointShadowLayeredUpdateCount",
+          "unit": "updates/frame"
+        },
+        "renderPolicy": {
+          "A": [
+            "six-face",
+            "six-face",
+            "six-face"
+          ],
+          "B": [
+            "six-face",
+            "six-face",
+            "six-face"
+          ]
+        },
+        "sixFaceUpdatesPerFrame": {
+          "A": {
+            "mean": 1.0,
+            "range": [
+              1.0,
+              1.0
+            ],
+            "values": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          "B": {
+            "mean": 1.0,
+            "range": [
+              1.0,
+              1.0
+            ],
+            "values": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          "deltaPercent": 0.0,
+          "label": "sixFaceUpdatesPerFrame",
+          "pairedDeltaPercent": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sourceField": "measuredPointShadowSixFaceUpdateCount",
+          "unit": "updates/frame"
+        },
+        "submissionAccounting": {
+          "A": [
+            true,
+            true,
+            true
+          ],
+          "B": [
+            true,
+            true,
+            true
+          ]
+        },
+        "submissionPassesPerFrame": {
+          "A": {
+            "mean": 6.0,
+            "range": [
+              6.0,
+              6.0
+            ],
+            "values": [
+              6.0,
+              6.0,
+              6.0
+            ]
+          },
+          "B": {
+            "mean": 6.0,
+            "range": [
+              6.0,
+              6.0
+            ],
+            "values": [
+              6.0,
+              6.0,
+              6.0
+            ]
+          },
+          "deltaPercent": 0.0,
+          "label": "submissionPassesPerFrame",
+          "pairedDeltaPercent": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sourceField": "measuredPointShadowSubmissionPassCount",
+          "unit": "updates/frame"
+        },
+        "updateAccounting": {
+          "A": [
+            true,
+            true,
+            true
+          ],
+          "B": [
+            true,
+            true,
+            true
+          ]
+        }
+      },
+      "resources": {
+        "meshGpuBytes": {
+          "A": {
+            "meanBytes": 434738372.0,
+            "meanMiB": 414.59882,
+            "valuesBytes": [
+              434738372,
+              434738372,
+              434738372
+            ]
+          },
+          "B": {
+            "meanBytes": 434738372.0,
+            "meanMiB": 414.59882,
+            "valuesBytes": [
+              434738372,
+              434738372,
+              434738372
+            ]
+          },
+          "allSixRunsExact": true,
+          "label": "Mesh GPU",
+          "pairedExact": [
+            true,
+            true,
+            true
+          ],
+          "sourceField": "memoryBytes.meshGpu",
+          "unit": "bytes"
+        },
+        "renderTargetBytes": {
+          "A": {
+            "meanBytes": 87609344.0,
+            "meanMiB": 83.550781,
+            "valuesBytes": [
+              87609344,
+              87609344,
+              87609344
+            ]
+          },
+          "B": {
+            "meanBytes": 87609344.0,
+            "meanMiB": 83.550781,
+            "valuesBytes": [
+              87609344,
+              87609344,
+              87609344
+            ]
+          },
+          "allSixRunsExact": true,
+          "label": "渲染目标",
+          "pairedExact": [
+            true,
+            true,
+            true
+          ],
+          "sourceField": "memoryBytes.renderTarget",
+          "unit": "bytes"
+        },
+        "textureBytes": {
+          "A": {
+            "meanBytes": 463827497.0,
+            "meanMiB": 442.340371,
+            "valuesBytes": [
+              463827497,
+              463827497,
+              463827497
+            ]
+          },
+          "B": {
+            "meanBytes": 463827497.0,
+            "meanMiB": 442.340371,
+            "valuesBytes": [
+              463827497,
+              463827497,
+              463827497
+            ]
+          },
+          "allSixRunsExact": true,
+          "label": "纹理",
+          "pairedExact": [
+            true,
+            true,
+            true
+          ],
+          "sourceField": "memoryBytes.texture",
+          "unit": "bytes"
+        }
+      },
+      "runConditions": {
+        "frameMeasurement": {
+          "A": [
+            "gpu-synchronized-wall",
+            "gpu-synchronized-wall",
+            "gpu-synchronized-wall"
+          ],
+          "B": [
+            "gpu-synchronized-wall",
+            "gpu-synchronized-wall",
+            "gpu-synchronized-wall"
+          ]
+        },
+        "measuredFrames": {
+          "A": [
+            1000,
+            1000,
+            1000
+          ],
+          "B": [
+            1000,
+            1000,
+            1000
+          ]
+        },
+        "resolution": {
+          "A": [
+            [
+              1920,
+              1080
+            ],
+            [
+              1920,
+              1080
+            ],
+            [
+              1920,
+              1080
+            ]
+          ],
+          "B": [
+            [
+              1920,
+              1080
+            ],
+            [
+              1920,
+              1080
+            ],
+            [
+              1920,
+              1080
+            ]
+          ]
+        }
+      },
+      "runFiles": {
+        "A1": {
+          "path": "formal/san-miguel/A1.json",
+          "sha256": "23338da2decd8516c3f37201c745d549e8d77c0750d76cfe76deb0d5da57ed73"
+        },
+        "A2": {
+          "path": "formal/san-miguel/A2.json",
+          "sha256": "73529bb11a6a381e8e9712db33e984e3503744f1b0891043e46885d54df6eca4"
+        },
+        "A3": {
+          "path": "formal/san-miguel/A3.json",
+          "sha256": "ecfcb521308e0a5f7274a4834c892fefd563d32660964ec3473640086dbe66c9"
+        },
+        "B1": {
+          "path": "formal/san-miguel/B1.json",
+          "sha256": "8ccb46185ab99b541b54c620b5f18f9a3d9bb9ae7f71351212be9b51bc1b61bc"
+        },
+        "B2": {
+          "path": "formal/san-miguel/B2.json",
+          "sha256": "898fae5af597c5933a702c721be4a8700a83f71aca2f6da9c1eb49ae9a8aaf8c"
+        },
+        "B3": {
+          "path": "formal/san-miguel/B3.json",
+          "sha256": "441fbc9e25a3436c239d9c6d6792e47a8be0f25241693622e1a369ce7c5e26bb"
+        }
+      },
+      "updates": {
+        "directionalUpdatesPerFrame": {
+          "A": {
+            "mean": 1.0,
+            "range": [
+              1.0,
+              1.0
+            ],
+            "values": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          "B": {
+            "mean": 0.0,
+            "range": [
+              0.0,
+              0.0
+            ],
+            "values": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "deltaPercent": -100.0,
+          "label": "Directional 更新数/帧",
+          "pairedDeltaPercent": [
+            -100.0,
+            -100.0,
+            -100.0
+          ],
+          "sourceField": "measuredDirectionalLightUpdateCount",
+          "unit": "updates/frame"
+        },
+        "pointUpdatesPerFrame": {
+          "A": {
+            "mean": 1.0,
+            "range": [
+              1.0,
+              1.0
+            ],
+            "values": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          "B": {
+            "mean": 1.0,
+            "range": [
+              1.0,
+              1.0
+            ],
+            "values": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          "deltaPercent": 0.0,
+          "label": "Point 更新数/帧",
+          "pairedDeltaPercent": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sourceField": "measuredPointLightUpdateCount",
+          "unit": "updates/frame"
+        },
+        "spotUpdatesPerFrame": {
+          "A": {
+            "mean": 1.0,
+            "range": [
+              1.0,
+              1.0
+            ],
+            "values": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          "B": {
+            "mean": 0.0,
+            "range": [
+              0.0,
+              0.0
+            ],
+            "values": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "deltaPercent": -100.0,
+          "label": "Spot 更新数/帧",
+          "pairedDeltaPercent": [
+            -100.0,
+            -100.0,
+            -100.0
+          ],
+          "sourceField": "measuredSpotLightUpdateCount",
+          "unit": "updates/frame"
+        },
+        "updatedLightsPerFrame": {
+          "A": {
+            "mean": 3.0,
+            "range": [
+              3.0,
+              3.0
+            ],
+            "values": [
+              3.0,
+              3.0,
+              3.0
+            ]
+          },
+          "B": {
+            "mean": 1.0,
+            "range": [
+              1.0,
+              1.0
+            ],
+            "values": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          "deltaPercent": -66.666667,
+          "label": "每帧更新总灯数",
+          "pairedDeltaPercent": [
+            -66.666667,
+            -66.666667,
+            -66.666667
+          ],
+          "sourceField": "measuredUpdatedLightCount",
+          "unit": "updates/frame"
+        }
+      }
+    }
+  ],
+  "schemaVersion": 1
+}

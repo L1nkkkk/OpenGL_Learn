@@ -19,16 +19,18 @@ static void BindUniformBlocks(Shader& shader) {
 void ShaderManager::Init() {
 	//load Shaders
 	for (int i = 0; i < shaderNames.size(); ++i) {
-		LoadShader(shaderNames[i]);
-		shader2Idx[m_shaderMap[shaderNames[i]]] = i;
-	}
-	//load Geometry Shaders
-	for (int i = 0; i < geometryShaderNames.size(); ++i) {
-		// 某些 geometry shader 名称也在 shaderNames 里，避免重复加载同名 shader。
-		if (m_shaderMap.find(geometryShaderNames[i]) == m_shaderMap.end()) {
-			LoadGeometryShader(geometryShaderNames[i]);
+		const bool geometryShader =
+			std::find(
+				geometryShaderNames.begin(),
+				geometryShaderNames.end(),
+				shaderNames[i]) != geometryShaderNames.end();
+		if (geometryShader) {
+			LoadGeometryShader(shaderNames[i]);
 		}
-		shader2Idx[m_shaderMap[geometryShaderNames[i]]] = static_cast<int>(shaderNames.size()) + i;
+		else {
+			LoadShader(shaderNames[i]);
+		}
+		shader2Idx[m_shaderMap[shaderNames[i]]] = i;
 	}
 	//bind uniform buffer objects
 	unsigned int matricesUBO;
@@ -151,10 +153,8 @@ void ShaderManager::SetUBOData(UniformBufferType uboType, unsigned int offset, s
 std::shared_ptr<Shader> ShaderManager::GetShader(int index) {
 	assert(index < m_shaderMap.size() && "����Shader���ʷ�Χ��");
 	const int shaderCount = static_cast<int>(shaderNames.size());
-	const int geometryCount = static_cast<int>(geometryShaderNames.size());
-	if (index < 0 || index >= shaderCount + geometryCount) return nullptr;
-	if (index < shaderCount) return GetShaderByName(shaderNames[index]);
-	return GetShaderByName(geometryShaderNames[index - shaderCount]);
+	if (index < 0 || index >= shaderCount) return nullptr;
+	return GetShaderByName(shaderNames[index]);
 }
 
 std::shared_ptr<Shader> ShaderManager::GetShaderByName(std::string name) {
@@ -198,9 +198,22 @@ void ShaderManager::UpdateSystemUBO() {
 
 	// 第四组
 	data.screenHeight = p.SCREEN_HEIGHT;
+	data.shadowSamplingPattern = p.SHADOW_SAMPLING_PATTERN;
+	data.shadowOptimizationFlags = p.GetShadowOptimizationFlags();
+	data.shadowAdaptiveMinSamples =
+		(std::max)(1, (std::min)(64, p.SHADOW_ADAPTIVE_MIN_SAMPLES));
+	data.shadowBias2DMinTexels =
+		(std::max)(0.0f, p.SHADOW_BIAS_2D_MIN_TEXELS);
+	data.shadowBias2DSlopeTexels =
+		(std::max)(0.0f, p.SHADOW_BIAS_2D_SLOPE_TEXELS);
+	data.shadowBiasCubeMinTexels =
+		(std::max)(0.0f, p.SHADOW_BIAS_CUBE_MIN_TEXELS);
+	data.shadowBiasCubeSlopeTexels =
+		(std::max)(0.0f, p.SHADOW_BIAS_CUBE_SLOPE_TEXELS);
 	// data._padding 已经在上面 = {} 时被初始化为 0 了
 
 	// 提交数据
 	// sizeof(SystemUBOData) 现在应该是 64
+	// SystemUBOData has a build-time size assertion for the 80-byte std140 block.
 	SetUBOData(UniformBufferType::SystemProperties, 0, sizeof(SystemUBOData), &data);
 }

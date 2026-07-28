@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "before": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\per-light-cache-no-cache-vs-per-light-1080p-six-face-final\\formal\\sponza\\A3.ppm",
+  "after": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\per-light-cache-no-cache-vs-per-light-1080p-six-face-final\\formal\\sponza\\B3.ppm",
+  "resolution": [
+    1920,
+    1080
+  ],
+  "rgbMeanAbsoluteDifference": 1.8470608407972242e-07,
+  "rgbRootMeanSquareDifference": 0.0002659767610748003,
+  "maximumChannelDelta": 114,
+  "exactChangedPixelCount": 1,
+  "exactChangedPixelRatio": 4.822530864197531e-07,
+  "changedPixelRatio": 4.822530864197531e-07,
+  "luminanceMeanAbsoluteDifference": 1.7966291454853548e-07,
+  "meanDarkening": 0.0,
+  "meanBrightening": 1.7966291454853548e-07,
+  "darkenedPixelRatio": 0.0,
+  "brightenedPixelRatio": 4.822530864197531e-07
+}

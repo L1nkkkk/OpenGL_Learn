@@ -17,6 +17,7 @@ namespace {
 		CachedValue<GLuint> texture2D;
 		CachedValue<GLuint> textureCube;
 		CachedValue<GLuint> texture2DMultisample;
+		CachedValue<GLuint> sampler;
 	};
 
 	struct StateCache {
@@ -37,6 +38,7 @@ namespace {
 		CachedValue<std::array<GLboolean, 4>> colorWriteMask;
 
 		CachedValue<unsigned int> activeTextureUnit;
+		unsigned int maxFragmentTextureUnits = 1;
 		std::vector<TextureUnitState> textureUnits;
 		CachedValue<GLuint> vertexArray;
 		CachedValue<GLuint> drawFramebuffer;
@@ -110,12 +112,40 @@ namespace {
 		GLint maxTextureUnits = 1;
 		glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &maxTextureUnits);
 		cache.textureUnits.resize(static_cast<std::size_t>((std::max)(1, maxTextureUnits)));
+		GLint maxFragmentTextureUnits = 1;
+		glGetIntegerv(
+			GL_MAX_TEXTURE_IMAGE_UNITS,
+			&maxFragmentTextureUnits);
+		cache.maxFragmentTextureUnits =
+			static_cast<unsigned int>(
+				(std::max)(1, maxFragmentTextureUnits));
 
 		GLint activeTexture = GL_TEXTURE0;
 		glGetIntegerv(GL_ACTIVE_TEXTURE, &activeTexture);
 		cache.activeTextureUnit.value = static_cast<unsigned int>(activeTexture - GL_TEXTURE0);
 		cache.activeTextureUnit.valid = true;
 		cache.initialized = true;
+	}
+
+	void SetSamplerBinding(GLuint textureUnit, GLuint sampler)
+	{
+		EnsureInitialized();
+		auto& cache = Cache();
+		if (textureUnit >= cache.textureUnits.size()) {
+			RecordTextureState(false);
+			return;
+		}
+
+		auto& cached = cache.textureUnits[textureUnit].sampler;
+		if (cached.valid && cached.value == sampler) {
+			RecordTextureState(true);
+			return;
+		}
+
+		glBindSampler(textureUnit, sampler);
+		cached.value = sampler;
+		cached.valid = true;
+		RecordTextureState(false);
 	}
 
 	void SetCapability(GLenum capability, bool enabled)
@@ -189,6 +219,7 @@ void GLState::InvalidateTextureState()
 		unit.texture2D.valid = false;
 		unit.textureCube.valid = false;
 		unit.texture2DMultisample.valid = false;
+		unit.sampler.valid = false;
 	}
 }
 
@@ -448,6 +479,10 @@ void GLState::ActiveTexture(GLenum textureUnit)
 	EnsureInitialized();
 	auto& cache = Cache();
 	const unsigned int unit = static_cast<unsigned int>(textureUnit - GL_TEXTURE0);
+	if (unit >= cache.textureUnits.size()) {
+		RecordTextureState(false);
+		return;
+	}
 	if (cache.activeTextureUnit.valid && cache.activeTextureUnit.value == unit) {
 		RecordTextureState(true);
 		return;
@@ -457,6 +492,12 @@ void GLState::ActiveTexture(GLenum textureUnit)
 	cache.activeTextureUnit.value = unit;
 	cache.activeTextureUnit.valid = true;
 	RecordTextureState(false);
+}
+
+unsigned int GLState::GetMaxFragmentTextureUnits()
+{
+	EnsureInitialized();
+	return Cache().maxFragmentTextureUnits;
 }
 
 void GLState::BindTexture(GLenum target, GLuint texture)
@@ -477,6 +518,14 @@ void GLState::BindTexture(GLenum target, GLuint texture)
 		return;
 	}
 
+	// Generic texture binds use the texture object's own sampling state. Clear
+	// any specialized sampler left by a previous shadow comparison binding.
+	auto& sampler =
+		cache.textureUnits[cache.activeTextureUnit.value].sampler;
+	if (!sampler.valid || sampler.value != 0) {
+		SetSamplerBinding(cache.activeTextureUnit.value, 0);
+	}
+
 	auto& unit = cache.textureUnits[cache.activeTextureUnit.value];
 	if (auto* cached = FindTextureBinding(unit, target)) {
 		if (cached->valid && cached->value == texture) {
@@ -493,6 +542,11 @@ void GLState::BindTexture(GLenum target, GLuint texture)
 
 	glBindTexture(target, texture);
 	RecordTextureState(false);
+}
+
+void GLState::BindSampler(GLuint textureUnit, GLuint sampler)
+{
+	SetSamplerBinding(textureUnit, sampler);
 }
 
 void GLState::ForgetTexture(GLuint texture)
@@ -521,6 +575,30 @@ void GLState::ForgetTextures(GLsizei count, const GLuint* textures)
 	}
 	for (GLsizei i = 0; i < count; ++i) {
 		ForgetTexture(textures[i]);
+	}
+}
+
+void GLState::ForgetSampler(GLuint sampler)
+{
+	if (sampler == 0) {
+		return;
+	}
+
+	auto& cache = Cache();
+	for (auto& unit : cache.textureUnits) {
+		if (unit.sampler.valid && unit.sampler.value == sampler) {
+			unit.sampler.value = 0;
+		}
+	}
+}
+
+void GLState::ForgetSamplers(GLsizei count, const GLuint* samplers)
+{
+	if (!samplers) {
+		return;
+	}
+	for (GLsizei i = 0; i < count; ++i) {
+		ForgetSampler(samplers[i]);
 	}
 }
 

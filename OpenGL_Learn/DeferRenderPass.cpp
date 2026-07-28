@@ -147,15 +147,20 @@ void DeferRenderPass::DrawPointLightVolumesDeferred(Scene* scene)
 		lightVolumeShader->setVec3("pointLight.diffuse", pointLight.diffuse);
 		lightVolumeShader->setVec3("pointLight.specular", pointLight.specular);
 		lightVolumeShader->setFloat("pointLight.far_plane", pointLight.far);
+		FBO* pointShadowFBO = pointLight.shadowFBO;
+		const bool pointShadowSampleable =
+			pointLight.useShadowMap &&
+			pointLight.shadowCache.IsSampleable(pointShadowFBO);
 		GLState::ActiveTexture(GL_TEXTURE4);
-		FBO* pointShadowFBO = pointLight.useShadowMap ? pointLight.EnsureShadowFBO() : nullptr;
 		GLState::BindTexture(
 			GL_TEXTURE_CUBE_MAP,
-			pointShadowFBO && !pointShadowFBO->textureIDs.empty()
+			pointShadowSampleable
 				? pointShadowFBO->textureIDs[0]
 				: 0);
 		lightVolumeShader->setInt("pointLight.shadowCubeMap", 4);
-		lightVolumeShader->setBool("pointLight.useShadowMap", pointLight.useShadowMap);
+		lightVolumeShader->setBool(
+			"pointLight.useShadowMap",
+			pointShadowSampleable);
 		lightVolumeShader->setMat4("model", pointLight.getModelMatrix());
 
 		GLState::ActiveTexture(GL_TEXTURE0);
@@ -288,7 +293,10 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 		if (!deferLightShader) return;
 		deferLightShader->use();
 		scene->SetLightUniforms(*deferLightShader);
-		unsigned int texSlot = scene->SetShadowMap(*deferLightShader);
+		unsigned int texSlot = scene->SetShadowMap(
+			*deferLightShader,
+			Scene::ShadowLightBinding::AllLights,
+			9);
 		if (scene->camera_ptr) {
 			deferLightShader->setVec3("viewPos", scene->camera_ptr->cameraPos);
 		}
@@ -311,7 +319,10 @@ void DeferRenderPass::Render(Scene* scene, const FBO* inputFBO)
 		if (!deferDirShader) return;
 		deferDirShader->use();
 		scene->SetLightUniforms(*deferDirShader);
-		unsigned int texSlot = scene->SetShadowMap(*deferDirShader);
+		unsigned int texSlot = scene->SetShadowMap(
+			*deferDirShader,
+			Scene::ShadowLightBinding::DirectionalOnly,
+			6);
 		if (scene->camera_ptr) {
 			deferDirShader->setVec3("viewPos", scene->camera_ptr->cameraPos);
 		}

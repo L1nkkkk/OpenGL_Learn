@@ -28,6 +28,7 @@
 #include "Model.h"
 #include "Profiler.h"
 #include "SceneStateIO.h"
+#include "EditorSceneManager.h"
 
 class MyGui {
 public:
@@ -49,6 +50,40 @@ public:
 		ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
 		if (GetOpenFileNameA(&ofn) == TRUE) {
 			outPath = fileBuf;
+			return true;
+		}
+		return false;
+	}
+
+	static bool PickSceneFileWithDialog(
+		std::string& outPath,
+		bool saveDialog)
+	{
+		char fileBuffer[4096] = { 0 };
+		std::error_code error;
+		const std::string initialDirectory =
+			std::filesystem::absolute("saved", error).string();
+
+		OPENFILENAMEA ofn = {};
+		ofn.lStructSize = sizeof(ofn);
+		ofn.lpstrFile = fileBuffer;
+		ofn.nMaxFile = static_cast<DWORD>(sizeof(fileBuffer));
+		ofn.lpstrFilter =
+			"OpenGL Learn Scene (*.json)\0*.json\0All Files (*.*)\0*.*\0";
+		ofn.nFilterIndex = 1;
+		ofn.lpstrDefExt = "json";
+		ofn.lpstrInitialDir =
+			error ? nullptr : initialDirectory.c_str();
+		ofn.Flags =
+			OFN_EXPLORER |
+			OFN_NOCHANGEDIR |
+			OFN_PATHMUSTEXIST;
+
+		const BOOL accepted = saveDialog
+			? (ofn.Flags |= OFN_OVERWRITEPROMPT, GetSaveFileNameA(&ofn))
+			: (ofn.Flags |= OFN_FILEMUSTEXIST, GetOpenFileNameA(&ofn));
+		if (accepted == TRUE) {
+			outPath = fileBuffer;
 			return true;
 		}
 		return false;
@@ -502,9 +537,16 @@ public:
 	}
 
 	// Scene 面板：可单独停靠到 DockSpace 中
-	void Scene_UI(Scene& scene) {
+	void Scene_UI(
+		Scene& scene,
+		Camera& camera,
+		EditorSceneManager& sceneManager)
+	{
 		if (ImGui::Begin("Scene")) {
+			DrawSceneBrowserContent(scene, camera, sceneManager);
+			ImGui::Separator();
 			scene.SetSceneGui();
+			DrawSceneReplacementPopup(scene, camera, sceneManager);
 		}
 		ImGui::End();
 	}
@@ -743,8 +785,8 @@ public:
 				}
 			}
 		}
-		ImGui::DragInt("shadow samples", &properties.SHADOW_PCF_SAMPLE_NUM, 1.0, 16, 512);
-		ImGui::DragInt("shadow rings", &properties.SHADOW_PCF_RING_NUM, 1.0, 5, 20);
+		ImGui::DragInt("shadow samples", &properties.SHADOW_PCF_SAMPLE_NUM, 1.0, 1, 64);
+		ImGui::TextUnformatted("Sampling: stable Vogel disk");
 	}
 
 	// 绘制单个材质的 Shader / Render State / Properties（供 Materials Inspector 与 Model Materials 共用）
@@ -1139,6 +1181,290 @@ public:
 		ImGui::End();
 	}
 private:
+	enum class SceneUiReplacementAction {
+		None,
+		NewScene,
+		OpenScene,
+		LoadClassicScene
+	};
+
+	void QueueSceneReplacement(
+		SceneUiReplacementAction action,
+		const std::string& path = std::string(),
+		std::size_t classicSceneIndex = 0,
+		const ClassicSceneLoadOptions& options = {})
+	{
+		m_sceneReplacementAction = action;
+		m_sceneReplacementPath = path;
+		m_sceneReplacementClassicIndex = classicSceneIndex;
+		m_sceneReplacementOptions = options;
+		ImGui::OpenPopup("Replace Current Scene##scene_browser_replace");
+	}
+
+	void ExecuteSceneReplacement(EditorSceneManager& sceneManager)
+	{
+		switch (m_sceneReplacementAction) {
+		case SceneUiReplacementAction::NewScene:
+			sceneManager.RequestNewScene();
+			break;
+		case SceneUiReplacementAction::OpenScene:
+			sceneManager.RequestOpenScene(m_sceneReplacementPath);
+			break;
+		case SceneUiReplacementAction::LoadClassicScene:
+			sceneManager.RequestLoadClassicScene(
+				m_sceneReplacementClassicIndex,
+				m_sceneReplacementOptions);
+			break;
+		default:
+			break;
+		}
+		m_sceneReplacementAction = SceneUiReplacementAction::None;
+		m_sceneReplacementPath.clear();
+		ImGui::CloseCurrentPopup();
+	}
+
+	void DrawSceneBrowserContent(
+		Scene& scene,
+		Camera& camera,
+		EditorSceneManager& sceneManager)
+	{
+		if (!ImGui::CollapsingHeader(
+			"Scene Browser",
+			ImGuiTreeNodeFlags_DefaultOpen)) {
+			return;
+		}
+
+		ImGui::TextUnformatted("Current");
+		ImGui::SameLine();
+		ImGui::TextColored(
+			ImVec4(0.35f, 0.85f, 0.78f, 1.0f),
+			"%s",
+			sceneManager.GetCurrentSceneName().c_str());
+		if (!sceneManager.GetCurrentDocumentPath().empty()) {
+			ImGui::TextDisabled(
+				"%s",
+				sceneManager.GetCurrentDocumentPath().c_str());
+		}
+		ImGui::TextDisabled(
+			"%llu model(s), %llu light(s)",
+			static_cast<unsigned long long>(scene.modelSource.models.size()),
+			static_cast<unsigned long long>(
+				scene.lightSource.pointLights.size() +
+				scene.lightSource.directionLights.size() +
+				scene.lightSource.spotLights.size()));
+
+		const bool busy = sceneManager.IsBusy();
+		ImGui::BeginDisabled(busy);
+		if (ImGui::Button("New")) {
+			QueueSceneReplacement(SceneUiReplacementAction::NewScene);
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Open...")) {
+			std::string path;
+			if (PickSceneFileWithDialog(path, false)) {
+				QueueSceneReplacement(
+					SceneUiReplacementAction::OpenScene,
+					path);
+			}
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Save")) {
+			if (sceneManager.GetCurrentDocumentPath().empty()) {
+				std::string path;
+				if (PickSceneFileWithDialog(path, true)) {
+					sceneManager.SaveAs(scene, camera, path);
+				}
+			}
+			else {
+				sceneManager.SaveCurrent(scene, camera);
+			}
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Save As...")) {
+			std::string path;
+			if (PickSceneFileWithDialog(path, true)) {
+				sceneManager.SaveAs(scene, camera, path);
+			}
+		}
+		ImGui::EndDisabled();
+
+		if (SceneStateIO::HasPendingAsyncLoads()) {
+			const int pending = SceneStateIO::GetPendingAsyncLoadCount();
+			const int total = SceneStateIO::GetTotalAsyncLoadCount();
+			const int completed = total >= pending ? total - pending : 0;
+			const float progress = total > 0
+				? static_cast<float>(completed) / static_cast<float>(total)
+				: 0.0f;
+			ImGui::ProgressBar(progress, ImVec2(-1.0f, 0.0f));
+		}
+		if (!sceneManager.GetStatusText().empty()) {
+			ImVec4 statusColor(0.75f, 0.78f, 0.82f, 1.0f);
+			switch (sceneManager.GetStatusKind()) {
+			case EditorSceneManager::StatusKind::Success:
+				statusColor = ImVec4(0.35f, 0.85f, 0.48f, 1.0f);
+				break;
+			case EditorSceneManager::StatusKind::Warning:
+				statusColor = ImVec4(1.0f, 0.78f, 0.25f, 1.0f);
+				break;
+			case EditorSceneManager::StatusKind::Error:
+				statusColor = ImVec4(1.0f, 0.35f, 0.35f, 1.0f);
+				break;
+			default:
+				break;
+			}
+			ImGui::PushStyleColor(ImGuiCol_Text, statusColor);
+			ImGui::TextWrapped(
+				"%s",
+				sceneManager.GetStatusText().c_str());
+			ImGui::PopStyleColor();
+			if (ImGui::IsItemHovered()) {
+				ImGui::BeginTooltip();
+				ImGui::TextColored(
+					statusColor,
+					"%s",
+					sceneManager.GetStatusText().c_str());
+				ImGui::EndTooltip();
+			}
+		}
+
+		ImGui::SeparatorText("Classic Test Scenes");
+		const auto& classicScenes = sceneManager.GetClassicScenes();
+		if (classicScenes.empty()) {
+			ImGui::TextDisabled("No classic scenes found.");
+			if (ImGui::Button("Reload Catalog")) {
+				sceneManager.ReloadClassicSceneCatalog();
+			}
+			return;
+		}
+
+		if (m_selectedClassicScene >= classicScenes.size()) {
+			m_selectedClassicScene = 0;
+		}
+		const ClassicSceneDescriptor& selectedScene =
+			classicScenes[m_selectedClassicScene];
+		if (ImGui::BeginCombo(
+			"Scene",
+			selectedScene.displayName.c_str())) {
+			for (std::size_t index = 0;
+				index < classicScenes.size();
+				++index) {
+				const bool selected = index == m_selectedClassicScene;
+				std::string label = classicScenes[index].displayName;
+				if (!classicScenes[index].available) {
+					label += " (missing)";
+				}
+				if (ImGui::Selectable(label.c_str(), selected)) {
+					m_selectedClassicScene = index;
+				}
+				if (selected) {
+					ImGui::SetItemDefaultFocus();
+				}
+			}
+			ImGui::EndCombo();
+		}
+
+		const ClassicSceneDescriptor& details =
+			classicScenes[m_selectedClassicScene];
+		ImGui::TextWrapped("%s", details.category.c_str());
+		ImGui::Text(
+			"Expected triangles: %llu",
+			static_cast<unsigned long long>(details.expectedTriangles));
+		ImGui::TextColored(
+			details.available
+				? ImVec4(0.35f, 0.85f, 0.48f, 1.0f)
+				: ImVec4(1.0f, 0.35f, 0.35f, 1.0f),
+			details.available ? "Installed" : "Asset missing");
+		if (ImGui::IsItemHovered()) {
+			ImGui::BeginTooltip();
+			ImGui::TextWrapped("%s", details.modelPath.c_str());
+			ImGui::EndTooltip();
+		}
+
+		const char* renderPresets[] = {
+			"PBR Forward",
+			"Phong Forward",
+			"PBR Deferred",
+			"Phong Deferred"
+		};
+		ImGui::Combo(
+			"Render preset",
+			&m_sceneRenderPreset,
+			renderPresets,
+			IM_ARRAYSIZE(renderPresets));
+		ImGui::Checkbox(
+			"Directional shadows",
+			&m_sceneDirectionalShadows);
+
+		ImGui::BeginDisabled(busy || !details.available);
+		if (ImGui::Button("Load Selected Scene", ImVec2(-1.0f, 0.0f))) {
+			ClassicSceneLoadOptions options;
+			options.renderPreset =
+				static_cast<ClassicSceneRenderPreset>(m_sceneRenderPreset);
+			options.enableDirectionalShadows =
+				m_sceneDirectionalShadows;
+			QueueSceneReplacement(
+				SceneUiReplacementAction::LoadClassicScene,
+				std::string(),
+				m_selectedClassicScene,
+				options);
+		}
+		ImGui::EndDisabled();
+
+		if (ImGui::SmallButton("Refresh installed scenes")) {
+			sceneManager.RefreshClassicSceneAvailability();
+		}
+		if (ImGui::TreeNode("Credits and license")) {
+			ImGui::TextWrapped("License: %s", details.license.c_str());
+			ImGui::TextWrapped("Credit: %s", details.credit.c_str());
+			ImGui::TreePop();
+		}
+	}
+
+	void DrawSceneReplacementPopup(
+		Scene& scene,
+		Camera& camera,
+		EditorSceneManager& sceneManager)
+	{
+		if (!ImGui::BeginPopupModal(
+			"Replace Current Scene##scene_browser_replace",
+			nullptr,
+			ImGuiWindowFlags_AlwaysAutoResize)) {
+			return;
+		}
+
+		ImGui::TextUnformatted(
+			"This replaces the current models, lights, and camera.");
+		ImGui::TextUnformatted("Save the current scene first?");
+		ImGui::Separator();
+
+		if (ImGui::Button("Save and Continue")) {
+			bool saved = false;
+			if (sceneManager.GetCurrentDocumentPath().empty()) {
+				std::string path;
+				if (PickSceneFileWithDialog(path, true)) {
+					saved = sceneManager.SaveAs(scene, camera, path);
+				}
+			}
+			else {
+				saved = sceneManager.SaveCurrent(scene, camera);
+			}
+			if (saved) {
+				ExecuteSceneReplacement(sceneManager);
+			}
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Continue Without Saving")) {
+			ExecuteSceneReplacement(sceneManager);
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel")) {
+			m_sceneReplacementAction = SceneUiReplacementAction::None;
+			m_sceneReplacementPath.clear();
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
+	}
+
 	struct AssetBrowserNode {
 		std::string path;
 		std::string name;
@@ -1383,6 +1709,14 @@ private:
 	bool m_layoutInitialized = false;
 	bool m_assetBrowserCacheInitialized = false;
 	std::array<AssetBrowserCategory, 3> m_assetBrowserCategories{};
+	SceneUiReplacementAction m_sceneReplacementAction =
+		SceneUiReplacementAction::None;
+	std::string m_sceneReplacementPath;
+	std::size_t m_sceneReplacementClassicIndex = 0;
+	ClassicSceneLoadOptions m_sceneReplacementOptions;
+	std::size_t m_selectedClassicScene = 0;
+	int m_sceneRenderPreset = 0;
+	bool m_sceneDirectionalShadows = true;
 	bool m_hasPickedPixel = false;
 	int m_pickedX = 0;
 	int m_pickedY = 0;

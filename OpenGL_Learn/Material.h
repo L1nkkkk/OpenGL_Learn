@@ -296,6 +296,31 @@ public:
 		return m_propertiesMap;
 	}
 
+	// Direct editor mutation keeps the legacy public property map API. This
+	// accessor lazily compares only values that can change shadow depth, so a
+	// roughness/metallic/color edit does not invalidate a cached shadow map.
+	std::uint64_t GetShadowStateRevision(
+		std::uint64_t syncEpoch = 0) const {
+		if (syncEpoch != 0 && m_shadowLastSyncEpoch == syncEpoch) {
+			return m_shadowStateRevision;
+		}
+		const std::size_t signature = ComputeShadowStateSignature();
+		if (!m_shadowStateInitialized ||
+			signature != m_shadowStateSignature) {
+			m_shadowStateInitialized = true;
+			m_shadowStateSignature = signature;
+			++m_shadowStateRevision;
+		}
+		m_shadowLastSyncEpoch = syncEpoch;
+		return m_shadowStateRevision;
+	}
+
+	// Texture systems that replace image content in-place while retaining the
+	// same GL object can explicitly publish that otherwise invisible change.
+	void InvalidateShadowState() {
+		++m_shadowContentRevision;
+	}
+
 	// �������øò�����ʹ�õ� Shader ���ƣ����ڴ� XML ���¼���ʱ���°󶨣�
 	void SetShaderName(const std::string& shaderName) {
 		m_shaderName = shaderName;
@@ -330,12 +355,16 @@ public:
 			return;
 		}
 		overrideShader->use();
-		if (overrideShader->shaderName == "shadow" || overrideShader->shaderName == "shadowCube") {
+		if (overrideShader->shaderName == "shadow" ||
+			overrideShader->shaderName == "shadowCube" ||
+			overrideShader->shaderName == "shadowCubeFace") {
 			// Transparent materials often use depthWrite=false; shadow pass must still
 			// write depth, otherwise transparent meshes disappear from shadow maps.
 			GLState::Enable(GL_DEPTH_TEST);
 			GLState::DepthMask(true);
 			GLState::Disable(GL_BLEND);
+			GLState::Disable(GL_CULL_FACE);
+			SetShadowParamsToShader(*overrideShader);
 			return;
 		}
 		ApplyRenderState();
@@ -372,10 +401,101 @@ public:
 	}
 
 private:
+	std::size_t ComputeShadowStateSignature() const {
+		auto effectiveFloat = [&](const char* name, float fallback) {
+			const auto it = m_propertiesMap.find(name);
+			return it != m_propertiesMap.end() &&
+				it->second.type == MaterialPropertyType::Float
+				? it->second.scalarValue.floatValue
+				: fallback;
+		};
+		auto effectiveBool = [&](const char* name, bool fallback) {
+			const auto it = m_propertiesMap.find(name);
+			return it != m_propertiesMap.end() &&
+				it->second.type == MaterialPropertyType::Bool
+				? it->second.scalarValue.boolValue
+				: fallback;
+		};
+		auto effectiveTexture = [&](const char* name) {
+			const auto it = m_propertiesMap.find(name);
+			return it != m_propertiesMap.end() &&
+				it->second.type == MaterialPropertyType::Texture &&
+				!it->second.textures.empty()
+				? it->second.textures.front().textureID
+				: 0u;
+		};
+
+		std::size_t signature = 0;
+		const bool useAlphaCutoff =
+			effectiveBool("useAlphaCutoff", false);
+		hash_combine(signature, effectiveFloat("opacity", 1.0f));
+		hash_combine(signature, useAlphaCutoff);
+		if (useAlphaCutoff) {
+			hash_combine(signature, effectiveFloat("alphaCutoff", 0.0f));
+		}
+		hash_combine(signature, effectiveTexture("texture_diffuse"));
+		hash_combine(signature, effectiveTexture("texture_opacity"));
+		hash_combine(signature, m_shadowContentRevision);
+		return signature;
+	}
+
 	std::string m_shaderName;
 	std::unordered_map<std::string, MaterialProperty> m_propertiesMap;
 	RenderState m_renderState;
+	mutable bool m_shadowStateInitialized = false;
+	mutable std::size_t m_shadowStateSignature = 0;
+	mutable std::uint64_t m_shadowStateRevision = 0;
+	mutable std::uint64_t m_shadowLastSyncEpoch = 0;
+	std::uint64_t m_shadowContentRevision = 0;
 protected:
+	virtual void SetShadowParamsToShader(Shader& shader) {
+		float opacity = 1.0f;
+		float alphaCutoff = 0.0f;
+		bool useAlphaCutoff = false;
+
+		auto opacityIt = m_propertiesMap.find("opacity");
+		if (opacityIt != m_propertiesMap.end() &&
+			opacityIt->second.type == MaterialPropertyType::Float) {
+			opacity = opacityIt->second.scalarValue.floatValue;
+		}
+		auto cutoffIt = m_propertiesMap.find("alphaCutoff");
+		if (cutoffIt != m_propertiesMap.end() &&
+			cutoffIt->second.type == MaterialPropertyType::Float) {
+			alphaCutoff = cutoffIt->second.scalarValue.floatValue;
+		}
+		auto useCutoffIt = m_propertiesMap.find("useAlphaCutoff");
+		if (useCutoffIt != m_propertiesMap.end() &&
+			useCutoffIt->second.type == MaterialPropertyType::Bool) {
+			useAlphaCutoff = useCutoffIt->second.scalarValue.boolValue;
+		}
+
+		shader.setFloat("shadowOpacity", opacity);
+		shader.setFloat("shadowAlphaCutoff", alphaCutoff);
+		shader.setBool("shadowUseAlphaCutoff", useAlphaCutoff);
+		shader.setBool("shadowHasDiffuseMap", false);
+		shader.setBool("shadowHasOpacityMap", false);
+
+		auto bindFirstTexture = [&](const char* propertyName, int unit,
+			const char* samplerName, const char* enabledName) {
+			auto it = m_propertiesMap.find(propertyName);
+			if (it == m_propertiesMap.end() ||
+				it->second.type != MaterialPropertyType::Texture ||
+				it->second.textures.empty()) {
+				return;
+			}
+			GLState::ActiveTexture(GL_TEXTURE0 + unit);
+			GLState::BindTexture(GL_TEXTURE_2D, it->second.textures.front().textureID);
+			shader.setInt(samplerName, unit);
+			shader.setBool(enabledName, true);
+		};
+
+		bindFirstTexture(
+			"texture_diffuse", 0, "shadowDiffuseMap", "shadowHasDiffuseMap");
+		bindFirstTexture(
+			"texture_opacity", 1, "shadowOpacityMap", "shadowHasOpacityMap");
+		GLState::ActiveTexture(GL_TEXTURE0);
+	}
+
 	// Ӧ����Ⱦ״̬���������д��
 	virtual void ApplyRenderState() {
 		// ��Ȳ���
@@ -432,6 +552,7 @@ protected:
 			shader.setBool("material.use_texture_roughness", false);
 			shader.setBool("material.use_texture_ao", false);
 			shader.setBool("material.use_texture_emissive", false);
+			shader.setBool("material.use_texture_opacity", false);
 		}
 
 		// deferred geometry pass uses simplified sampler names.
@@ -443,6 +564,7 @@ protected:
 			shader.setBool("hasRoughnessMap", false);
 			shader.setBool("hasAoMap", false);
 			shader.setBool("hasEmissiveMap", false);
+			shader.setBool("hasOpacityMap", false);
 		}
 
 		for (auto& [propertyName, property] : m_propertiesMap) {
@@ -490,6 +612,7 @@ protected:
 					static const std::string kRoughnessSampler = "texture_roughness1";
 					static const std::string kAoSampler = "texture_ao1";
 					static const std::string kEmissiveSampler = "texture_emissive1";
+					static const std::string kOpacitySampler = "texture_opacity1";
 					static const std::string kHasDiffuse = "hasDiffuseMap";
 					static const std::string kHasSpec = "hasSpecularMap";
 					static const std::string kHasNormal = "hasNormalMap";
@@ -497,6 +620,7 @@ protected:
 					static const std::string kHasRoughness = "hasRoughnessMap";
 					static const std::string kHasAo = "hasAoMap";
 					static const std::string kHasEmissive = "hasEmissiveMap";
+					static const std::string kHasOpacity = "hasOpacityMap";
 					if (propertyName == "texture_diffuse" || propertyName == "albedo" || propertyName == "baseColor") {
 						slot = 0; samplerName = &kDiffuseSampler; hasMapName = &kHasDiffuse;
 					}
@@ -517,6 +641,9 @@ protected:
 					}
 					else if (propertyName == "texture_emissive") {
 						slot = 6; samplerName = &kEmissiveSampler; hasMapName = &kHasEmissive;
+					}
+					else if (propertyName == "texture_opacity") {
+						slot = 7; samplerName = &kOpacitySampler; hasMapName = &kHasOpacity;
 					}
 
 					if (samplerName && hasMapName) {

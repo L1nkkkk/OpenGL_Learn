@@ -107,6 +107,11 @@ void ForwardRenderPass::Render(Scene* scene, const FBO* inputFBO)
 				lastShader->use();
 				SystemProperties::GetInstance().USED_TEXTURE_NUM = 0;
 				scene->SetLightUniforms(*lastShader);
+				SystemProperties::GetInstance().USED_TEXTURE_NUM =
+					scene->SetShadowMap(
+						*lastShader,
+						Scene::ShadowLightBinding::AllLights,
+						10);
 				if (scene->camera_ptr) {
 					lastShader->setVec3("viewPos", scene->camera_ptr->cameraPos);
 				}
@@ -158,6 +163,11 @@ void ForwardRenderPass::Render(Scene* scene, const FBO* inputFBO)
 				lastShader->use();
 				SystemProperties::GetInstance().USED_TEXTURE_NUM = 0;
 				scene->SetLightUniforms(*lastShader);
+				SystemProperties::GetInstance().USED_TEXTURE_NUM =
+					scene->SetShadowMap(
+						*lastShader,
+						Scene::ShadowLightBinding::AllLights,
+						10);
 				if (scene->camera_ptr) {
 					lastShader->setVec3("viewPos", scene->camera_ptr->cameraPos);
 				}

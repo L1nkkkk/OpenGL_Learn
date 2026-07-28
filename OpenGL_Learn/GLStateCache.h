@@ -30,9 +30,13 @@ namespace GLState {
 	void ColorMask(bool red, bool green, bool blue, bool alpha);
 
 	void ActiveTexture(GLenum textureUnit);
+	unsigned int GetMaxFragmentTextureUnits();
 	void BindTexture(GLenum target, GLuint texture);
+	void BindSampler(GLuint textureUnit, GLuint sampler);
 	void ForgetTexture(GLuint texture);
 	void ForgetTextures(GLsizei count, const GLuint* textures);
+	void ForgetSampler(GLuint sampler);
+	void ForgetSamplers(GLsizei count, const GLuint* samplers);
 
 	void BindVertexArray(GLuint vertexArray);
 	void ForgetVertexArray(GLuint vertexArray);

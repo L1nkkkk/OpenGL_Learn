@@ -22,6 +22,8 @@ struct Material{
     bool use_texture_normal;
     sampler2D texture_specular1;
     bool use_texture_specular;
+    sampler2D texture_opacity1;
+    bool use_texture_opacity;
     bool hasBloom;
 };
 
@@ -30,8 +32,14 @@ uniform Material material;
 void main()
 {
     // Match alpha-cutout behavior from phongFragment.glsl so normal/depth remain consistent.
-    if (material.useAlphaCutoff && material.use_texture_diffuse) {
-        float alpha = texture(material.texture_diffuse1, fs_in.TexCoords).a;
+    if (material.useAlphaCutoff) {
+        float alpha = material.opacity;
+        if (material.use_texture_diffuse) {
+            alpha *= texture(material.texture_diffuse1, fs_in.TexCoords).a;
+        }
+        if (material.use_texture_opacity) {
+            alpha *= texture(material.texture_opacity1, fs_in.TexCoords).r;
+        }
         if (alpha < material.alphaCutoff) discard;
     }
 

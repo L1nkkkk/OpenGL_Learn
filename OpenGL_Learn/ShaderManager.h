@@ -4,12 +4,13 @@
 #include "Global.h"
 #include "GLStateCache.h"
 #include <memory>
+#include <algorithm>
 #include <string>
 #include <utility>
 #include <vector>
 #include <unordered_map>
 
-// std140 布局与 shader 中 SystemProperties 块一致：4*bool + 3*float + 6*int，共 52 字节，对齐到 64
+// std140 mirror of the shader SystemProperties block: 80 bytes.
 struct alignas(16) SystemUBOData {
 	int useBloom;
 	int useShadowMap;
@@ -24,8 +25,15 @@ struct alignas(16) SystemUBOData {
 	int shadowType;
 	int screenWidth;
 	int screenHeight;
-	int padding[3];
+	int shadowSamplingPattern;
+	int shadowOptimizationFlags;
+	int shadowAdaptiveMinSamples;
+	float shadowBias2DMinTexels;
+	float shadowBias2DSlopeTexels;
+	float shadowBiasCubeMinTexels;
+	float shadowBiasCubeSlopeTexels;
 };
+static_assert(sizeof(SystemUBOData) == 80);
 
 struct UBOInfo {
 	unsigned int UBO;
@@ -58,6 +66,7 @@ public:
 		Explode,
 		NormalLines,
 		ShadowCube,
+		ShadowCubeFace,
 	};
 
 	enum UniformBufferType {
@@ -96,14 +105,17 @@ public:
 		else {
 			for(int i = 0; i < shaderNames.size(); ++i){
 				if(shaderNames[i] == name){
-					LoadShader(name);
-					m_shaderMap[name]->use();
-					return;
-				}
-			}
-			for(int i = 0; i < geometryShaderNames.size(); ++i){
-				if(geometryShaderNames[i] == name){
-					LoadGeometryShader(name);
+					const bool geometryShader =
+						std::find(
+							geometryShaderNames.begin(),
+							geometryShaderNames.end(),
+							name) != geometryShaderNames.end();
+					if (geometryShader) {
+						LoadGeometryShader(name);
+					}
+					else {
+						LoadShader(name);
+					}
 					m_shaderMap[name]->use();
 					return;
 				}
@@ -142,7 +154,8 @@ private:
 		"ssao",
 		"explode",
 		"normal",
-		"shadowCube"
+		"shadowCube",
+		"shadowCubeFace"
 	};
 	std::vector<std::string> geometryShaderNames = {
 		"explode",

@@ -16,7 +16,9 @@ struct DirLight {
 	vec3 specular;
 	mat4 lightSpaceMatrix;
 	sampler2D shadowMap;
+	sampler2DShadow shadowCompareMap;
 	bool useShadowMap;
+	vec4 shadowBiasParams;
 	bool isActive;
 };
 
@@ -45,6 +47,11 @@ struct SpotLight {
 	vec3 ambient;
 	vec3 diffuse;
 	vec3 specular;
+	sampler2D shadowMap;
+	sampler2DShadow shadowCompareMap;
+	bool useShadowMap;
+	mat4 lightSpaceMatrix;
+	vec4 shadowBiasParams;
 	bool isActive;
 };
 
@@ -81,7 +88,16 @@ layout(std140) uniform SystemProperties {
 	int shadowType;
 	int screenWidth;
 	int screenHeight;
+	int shadowSamplingPattern;
+	int shadowOptimizationFlags;
+	int shadowAdaptiveMinSamples;
+	float shadowBias2DMinTexels;
+	float shadowBias2DSlopeTexels;
+	float shadowBiasCubeMinTexels;
+	float shadowBiasCubeSlopeTexels;
 };
+
+#include "shadowSampling.glsl"
 
 float DistributionGGX(vec3 normal, vec3 halfDir, float roughness)
 {
@@ -162,37 +178,60 @@ vec3 EvaluatePbrIBL(
 float DirectionalShadow(DirLight light, vec3 normal, vec3 fragPos)
 {
 	if (!light.useShadowMap) return 0.0;
-	vec4 lightSpace = light.lightSpaceMatrix * vec4(fragPos, 1.0);
-	vec3 projected = lightSpace.xyz / lightSpace.w;
-	projected = projected * 0.5 + 0.5;
-	if (projected.z >= 1.0 || projected.z <= 0.0) return 0.0;
-	float bias = max(0.005 * (1.0 - dot(normal, normalize(-light.direction))), 0.0005);
-	if (shadowType == 0) {
-		return projected.z - bias > texture(light.shadowMap, projected.xy).r ? 1.0 : 0.0;
-	}
-	vec2 texel = 1.0 / vec2(textureSize(light.shadowMap, 0));
-	int radius = shadowType == 2 ? 2 : 1;
-	float shadow = 0.0;
-	float samples = 0.0;
-	for (int x = -2; x <= 2; ++x) {
-		for (int y = -2; y <= 2; ++y) {
-			if (abs(x) > radius || abs(y) > radius) continue;
-			shadow += projected.z - bias >
-				texture(light.shadowMap, projected.xy + vec2(x, y) * texel).r ? 1.0 : 0.0;
-			samples += 1.0;
-		}
-	}
-	return shadow / max(samples, 1.0);
+	float nDotL = max(
+		dot(normalize(normal), normalize(-light.direction)),
+		0.0);
+	return SampleShadow2D(
+		light.shadowMap,
+		light.shadowCompareMap,
+		light.lightSpaceMatrix * vec4(fragPos, 1.0),
+		nDotL,
+		light.shadowBiasParams);
+}
+
+float SpotShadow(SpotLight light, vec3 normal, vec3 fragPos)
+{
+	if (!light.useShadowMap) return 0.0;
+	vec3 biasLightDirection = ShadowOptimizationEnabled(
+		SHADOW_OPT_SPOT_RADIAL_BIAS_DIRECTION)
+		? light.position - fragPos
+		: -light.direction;
+	float nDotL = max(
+		dot(normalize(normal), normalize(biasLightDirection)),
+		0.0);
+	return SampleShadow2D(
+		light.shadowMap,
+		light.shadowCompareMap,
+		light.lightSpaceMatrix * vec4(fragPos, 1.0),
+		nDotL,
+		light.shadowBiasParams);
 }
 
 float PointShadow(PointLight light, vec3 normal, vec3 fragPos)
 {
 	if (!light.useShadowMap) return 0.0;
-	vec3 fragToLight = fragPos - light.position;
-	float currentDepth = length(fragToLight);
-	float bias = max(0.02 * (1.0 - dot(normal, normalize(-fragToLight))), 0.005);
-	float closest = texture(light.shadowCubeMap, fragToLight).r * light.far_plane;
-	return currentDepth - bias > closest ? 1.0 : 0.0;
+	return SampleShadowCube(
+		light.shadowCubeMap,
+		fragPos - light.position,
+		normal,
+		light.far_plane);
+}
+
+float PointShadowPrepared(
+	PointLight light,
+	vec3 lightToSurfaceDirection,
+	float currentDepth,
+	float nDotL,
+	float lightContribution)
+{
+	if (!light.useShadowMap) return 0.0;
+	return SampleShadowCubePrepared(
+		light.shadowCubeMap,
+		lightToSurfaceDirection,
+		currentDepth,
+		nDotL,
+		light.far_plane,
+		lightContribution);
 }
 
 vec3 LegacyDirectional(
@@ -247,7 +286,8 @@ vec3 LegacySpot(
 	vec3 viewDir,
 	vec3 albedo,
 	vec4 material,
-	float ao)
+	float ao,
+	float shadow)
 {
 	vec3 lightVector = light.position - fragPos;
 	float distanceToLight = length(lightVector);
@@ -266,8 +306,9 @@ vec3 LegacySpot(
 	float specularTerm = pow(max(dot(viewDir, reflected), 0.0), material.a);
 	return attenuation * (
 		light.ambient * material.r * ao +
-		light.diffuse * material.g * diffuseTerm +
-		light.specular * material.b * specularTerm) * albedo;
+		(1.0 - shadow) * (
+			light.diffuse * material.g * diffuseTerm +
+			light.specular * material.b * specularTerm)) * albedo;
 }
 
 void main()
@@ -292,16 +333,25 @@ void main()
 	vec3 color = isPbr
 		? EvaluatePbrIBL(normal, viewDir, albedo, metallic, roughness, ao) + emissive
 		: vec3(0.0);
+	bool exactEarlyOut =
+		ShadowOptimizationEnabled(SHADOW_OPT_EXACT_EARLY_OUT);
 
 	int dirCount = min(NR_DIR_LIGHTS, MAX_DIR_LIGHTS);
 	for (int i = 0; i < dirCount; ++i) {
 		if (!dirLights[i].isActive) continue;
-		float shadow = DirectionalShadow(dirLights[i], normal, fragPos);
 		if (isPbr) {
+			vec3 lightDir = normalize(-dirLights[i].direction);
+			if (exactEarlyOut && dot(normal, lightDir) <= 0.0) {
+				continue;
+			}
+			float shadow =
+				DirectionalShadow(dirLights[i], normal, fragPos);
 			color += (1.0 - shadow) * EvaluatePbrDirect(
-				normal, viewDir, normalize(-dirLights[i].direction), dirLights[i].diffuse,
+				normal, viewDir, lightDir, dirLights[i].diffuse,
 				albedo, metallic, roughness);
 		} else {
+			float shadow =
+				DirectionalShadow(dirLights[i], normal, fragPos);
 			color += LegacyDirectional(dirLights[i], normal, viewDir, albedo, material, ao, shadow);
 		}
 	}
@@ -309,18 +359,43 @@ void main()
 	int pointCount = min(NR_POINT_LIGHTS, MAX_POINT_LIGHTS);
 	for (int i = 0; i < pointCount; ++i) {
 		if (!pointLights[i].isActive) continue;
-		float shadow = PointShadow(pointLights[i], normal, fragPos);
 		if (isPbr) {
 			vec3 lightVector = pointLights[i].position - fragPos;
 			float distanceToLight = length(lightVector);
+			vec3 lightDir = distanceToLight > SHADOW_EPSILON
+				? lightVector / distanceToLight
+				: vec3(0.0);
+			float nDotL = max(dot(normal, lightDir), 0.0);
+			if (exactEarlyOut && nDotL <= 0.0) {
+				continue;
+			}
 			float attenuation = 1.0 / max(
 				pointLights[i].constant + pointLights[i].linear * distanceToLight +
 				pointLights[i].quadratic * distanceToLight * distanceToLight,
 				0.0001);
+			float lightStrength = max(
+				max(pointLights[i].diffuse.r, pointLights[i].diffuse.g),
+				pointLights[i].diffuse.b);
+			float lightContribution = lightStrength * attenuation;
+			bool usePreparedPointShadow =
+				ShadowOptimizationEnabled(
+					SHADOW_OPT_PREPARED_POINT_INPUTS) ||
+				ShadowOptimizationEnabled(
+					SHADOW_OPT_ADAPTIVE_POINT_SAMPLES);
+			float shadow = usePreparedPointShadow
+				? PointShadowPrepared(
+					pointLights[i],
+					-lightDir,
+					distanceToLight,
+					nDotL,
+					lightContribution)
+				: PointShadow(pointLights[i], normal, fragPos);
 			color += (1.0 - shadow) * EvaluatePbrDirect(
-				normal, viewDir, lightVector / max(distanceToLight, 0.0001),
+				normal, viewDir, lightDir,
 				pointLights[i].diffuse * attenuation, albedo, metallic, roughness);
 		} else {
+			float shadow =
+				PointShadow(pointLights[i], normal, fragPos);
 			color += LegacyPoint(pointLights[i], normal, fragPos, viewDir, albedo, material, ao, shadow);
 		}
 	}
@@ -342,11 +417,20 @@ void main()
 				spotLights[i].constant + spotLights[i].linear * distanceToLight +
 				spotLights[i].quadratic * distanceToLight * distanceToLight,
 				0.0001);
-			color += EvaluatePbrDirect(
+			if (exactEarlyOut &&
+				(dot(normal, lightDir) <= 0.0 || cone <= 0.0)) {
+				continue;
+			}
+			float shadow =
+				SpotShadow(spotLights[i], normal, fragPos);
+			color += (1.0 - shadow) * EvaluatePbrDirect(
 				normal, viewDir, lightDir, spotLights[i].diffuse * attenuation,
 				albedo, metallic, roughness);
 		} else {
-			color += LegacySpot(spotLights[i], normal, fragPos, viewDir, albedo, material, ao);
+			float shadow =
+				SpotShadow(spotLights[i], normal, fragPos);
+			color += LegacySpot(
+				spotLights[i], normal, fragPos, viewDir, albedo, material, ao, shadow);
 		}
 	}
 

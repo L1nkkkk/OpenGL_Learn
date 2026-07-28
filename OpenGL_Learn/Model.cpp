@@ -26,8 +26,10 @@ namespace {
 	constexpr unsigned int kModelImportFlags =
 		aiProcess_Triangulate |
 		aiProcess_FlipUVs |
+		aiProcess_GenSmoothNormals |
 		aiProcess_CalcTangentSpace |
-		aiProcess_JoinIdenticalVertices;
+		aiProcess_JoinIdenticalVertices |
+		aiProcess_SortByPType;
 	constexpr std::uint64_t kModelImportCacheVersion = 1;
 
 	bool IsValidScene(const aiScene* scene)
@@ -356,6 +358,32 @@ float Mesh::GetBoundingRadius() const
 	return m_geometry ? m_geometry->GetBoundingRadius() : 0.0f;
 }
 
+std::uint64_t Mesh::SyncShadowStateRevision(
+	std::uint64_t syncEpoch) const
+{
+	std::size_t signature = 0;
+	hash_combine(signature, m_active);
+	if (m_active) {
+		hash_combine(signature, GetVAO());
+		hash_combine(signature, GetDrawCount());
+		hash_combine(
+			signature,
+			reinterpret_cast<std::uintptr_t>(material_ptr));
+		if (material_ptr) {
+			hash_combine(
+				signature,
+				material_ptr->GetShadowStateRevision(syncEpoch));
+		}
+	}
+	if (!m_shadowStateInitialized ||
+		signature != m_shadowStateSignature) {
+		m_shadowStateInitialized = true;
+		m_shadowStateSignature = signature;
+		++m_shadowStateRevision;
+	}
+	return m_shadowStateRevision;
+}
+
 void Mesh::Draw(Shader* shader, bool forcePbrMaterial)
 {
     if (!material_ptr) {
@@ -415,7 +443,7 @@ void Model::loadModel(std::string path,Material* mat)
 		auto it = g_modelMeshCache.find(cacheKey);
 		if (it != g_modelMeshCache.end()) {
 			meshes = it->second;
-			directory = path.substr(0, path.find_last_of('/'));
+			directory = std::filesystem::path(path).parent_path().generic_string();
 			return;
 		}
 	}
@@ -450,7 +478,7 @@ void Model::loadModel(std::string path,Material* mat)
 	// 防止 meshes 在 push_back 时多次扩容触发移动/销毁链，先按 Assimp 总 mesh 数预留容量
 	meshes.clear();
 	meshes.reserve(scene->mNumMeshes);
-	directory = path.substr(0, path.find_last_of('/'));
+	directory = std::filesystem::path(path).parent_path().generic_string();
 	processNode(scene->mRootNode, scene,mat);
 	if (!mat) {
 		g_modelMeshCache[cacheKey] = meshes;
@@ -459,8 +487,23 @@ void Model::loadModel(std::string path,Material* mat)
 
 void Model::processNode(aiNode* node, const aiScene* scene,Material* mat)
 {
+	if (!node || !scene) {
+		return;
+	}
 	for (unsigned int i = 0; i < node->mNumMeshes; ++i) {
-		aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
+		const unsigned int meshIndex = node->mMeshes[i];
+		if (meshIndex >= scene->mNumMeshes) {
+			std::cerr << "[Model] skipping invalid mesh index " << meshIndex
+				<< " (mesh count " << scene->mNumMeshes << ')' << std::endl;
+			continue;
+		}
+		aiMesh* mesh = scene->mMeshes[meshIndex];
+		if (!mesh ||
+			!mesh->HasPositions() ||
+			mesh->mNumVertices == 0 ||
+			(mesh->mPrimitiveTypes & aiPrimitiveType_TRIANGLE) == 0) {
+			continue;
+		}
 		meshes.emplace_back(processMesh(mesh, scene,mat));
 	}
 	for (unsigned int i = 0; i < node->mNumChildren; ++i) {
@@ -537,6 +580,30 @@ void Model::RefreshMaterialDrivenState()
 	m_lastAppliedMaterialRevision = materialRevision;
 }
 
+std::uint64_t Model::SyncShadowStateRevision(
+	std::uint64_t syncEpoch)
+{
+	std::size_t signature = 0;
+	hash_combine(signature, m_active);
+	if (m_active) {
+		hash_combine(signature, GetTransformRevision());
+		hash_combine(signature, meshes.size());
+		for (const Mesh& mesh : meshes) {
+			hash_combine(
+				signature,
+				mesh.SyncShadowStateRevision(syncEpoch));
+			hash_combine(signature, mesh.GetShadowStateSignature());
+		}
+	}
+	if (!m_shadowStateInitialized ||
+		signature != m_shadowStateSignature) {
+		m_shadowStateInitialized = true;
+		m_shadowStateSignature = signature;
+		++m_shadowStateRevision;
+	}
+	return m_shadowStateRevision;
+}
+
 Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 {
 	std::vector<Vertex> vertices;
@@ -553,10 +620,15 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 		vector.y = mesh->mVertices[i].y;
 		vector.z = mesh->mVertices[i].z;
 		vertex.Position = vector;
-		vector.x = mesh->mNormals[i].x;
-		vector.y = mesh->mNormals[i].y;
-		vector.z = mesh->mNormals[i].z;
-		vertex.Normal = vector;
+		if (mesh->HasNormals()) {
+			vector.x = mesh->mNormals[i].x;
+			vector.y = mesh->mNormals[i].y;
+			vector.z = mesh->mNormals[i].z;
+			vertex.Normal = vector;
+		}
+		else {
+			vertex.Normal = glm::vec3(0.0f, 1.0f, 0.0f);
+		}
 		if (mesh->mTextureCoords[0]) {
 			glm::vec2 vec;
 			vec.x = mesh->mTextureCoords[0][i].x;
@@ -580,9 +652,15 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 	}
 	for (unsigned int i = 0; i < mesh->mNumFaces; ++i) {
 		const aiFace& face = mesh->mFaces[i];
-		for (unsigned int j = 0; j < face.mNumIndices; ++j) {
-			indices.push_back(face.mIndices[j]);
+		if (face.mNumIndices != 3 ||
+			face.mIndices[0] >= mesh->mNumVertices ||
+			face.mIndices[1] >= mesh->mNumVertices ||
+			face.mIndices[2] >= mesh->mNumVertices) {
+			continue;
 		}
+		indices.push_back(face.mIndices[0]);
+		indices.push_back(face.mIndices[1]);
+		indices.push_back(face.mIndices[2]);
 	}
 	std::cout << "[Mesh Debug] Name: " << mesh->mName.C_Str()
 		<< " | Vertices: " << mesh->mNumVertices
@@ -592,7 +670,8 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 	if(mat) {
 		return Mesh(std::move(vertices), std::move(indices), mat, std::shared_ptr<Material>(), std::string(), tangentBasisReady);
 	}
-	else if (mesh->mMaterialIndex >= 0) {
+	else if (mesh->mMaterialIndex < scene->mNumMaterials &&
+		scene->mMaterials[mesh->mMaterialIndex]) {
 		aiMaterial* aiMat = scene->mMaterials[mesh->mMaterialIndex];
 
 		aiString aiName;
@@ -680,6 +759,11 @@ void Model::prosessMaterial(aiMaterial* mat,Material* material)
 		normalTextures = loadMaterialTextures(mat, aiTextureType_HEIGHT, "texture_normal");
 	}
 	material->AddProperty("texture_normal", MaterialProperty::CreateTexture(normalTextures));
+	auto opacityTextures = loadMaterialTextures(
+		mat,
+		aiTextureType_OPACITY,
+		"texture_opacity");
+	material->AddProperty("texture_opacity", MaterialProperty::CreateTexture(opacityTextures));
 
 	if (material->GetShaderName() == "pbr") {
 		aiColor4D baseColor(diffuseColor.r, diffuseColor.g, diffuseColor.b, opacity);
@@ -798,8 +882,10 @@ void Model::prosessMaterial(aiMaterial* mat,Material* material)
 		material->AddProperty("texture_emissive", MaterialProperty::CreateTexture(emissiveTextures));
 		material->AddProperty("opacity", MaterialProperty::CreateFloat(opacity));
 	}
-	// For cloth/card-like alpha textures use cutout by default to avoid transparent sorting artifacts.
-	bool autoCutout = opacity < 0.999f;
+	// OBJ map_d is often a separate grayscale image rather than alpha embedded
+	// in the diffuse texture. Enable cutout whenever that mask is present.
+	const bool hasOpacityTexture = !opacityTextures.empty();
+	bool autoCutout = opacity < 0.999f || hasOpacityTexture;
 	material->AddProperty("useAlphaCutoff", MaterialProperty::CreateBool(autoCutout));
 	material->AddProperty("alphaCutoff", MaterialProperty::CreateFloat(autoCutout ? 0.4f : 0.0f, 0.0f, 1.0f, 0.01f));
 
@@ -885,7 +971,7 @@ glm::vec3 Model::CalculateLocalCenter()
 	return center;
 }
 
-std::vector<Vertex> ComputeTBNVertices(
+  std::vector<Vertex> ComputeTBNVertices(
 	std::vector<Vertex>& vertices,
 	const std::vector<unsigned int>& indices) {
 	if (vertices.empty()) {
@@ -904,7 +990,7 @@ std::vector<Vertex> ComputeTBNVertices(
 	std::vector<glm::vec3> tangentSums(vertices.size(), glm::vec3(0.0f));
 	std::vector<glm::vec3> bitangentSums(vertices.size(), glm::vec3(0.0f));
 	constexpr float determinantEpsilon = 1.0e-8f;
-	for (size_t i = 0; i < indices.size(); i += 3) {
+	for (size_t i = 0; i + 2 < indices.size(); i += 3) {
 		const unsigned int i0 = indices[i];
 		const unsigned int i1 = indices[i + 1];
 		const unsigned int i2 = indices[i + 2];

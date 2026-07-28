@@ -38,6 +38,7 @@ uniform sampler2D texture_metallic1;
 uniform sampler2D texture_roughness1;
 uniform sampler2D texture_ao1;
 uniform sampler2D texture_emissive1;
+uniform sampler2D texture_opacity1;
 
 uniform bool hasDiffuseMap;
 uniform bool hasSpecularMap;
@@ -46,6 +47,7 @@ uniform bool hasMetallicMap;
 uniform bool hasRoughnessMap;
 uniform bool hasAoMap;
 uniform bool hasEmissiveMap;
+uniform bool hasOpacityMap;
 uniform Material material;
 
 layout(std140) uniform SystemProperties {
@@ -95,6 +97,9 @@ void main()
 			: SampleLegacyColor(texture_diffuse1, fs_in.TexCoords);
 	}
 	float alpha = baseSample.a * material.opacity;
+	if (hasOpacityMap) {
+		alpha *= texture(texture_opacity1, fs_in.TexCoords).r;
+	}
 	float cutoff = material.useAlphaCutoff ? material.alphaCutoff : 0.0;
 	if (alpha < cutoff) discard;
 

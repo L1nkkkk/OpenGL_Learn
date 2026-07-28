@@ -6,6 +6,7 @@
 #include <GLFW/glfw3.h>
 #include <string>
 #include <cstdint>
+#include <array>
 #include <unordered_map>
 #include <vector>
 #include <functional>
@@ -21,10 +22,32 @@ namespace ShadowProperty {
         PCF,
         PCSS,
     };
+    enum SamplingPattern {
+        LegacyRandom = 0,
+        StableVogel,
+    };
     inline const char* ShadowTypeStrs[] = {
-        "Default",
-        "PCF",
-        "PCSS",
+        "Hard",
+        "Stable Vogel PCF",
+        "Stable Vogel PCSS",
+    };
+}
+
+namespace ShadowOptimization {
+    enum Flag {
+        ExactEarlyOut = 1 << 0,
+        AdaptivePointSamples = 1 << 1,
+        AdaptivePcssFilter = 1 << 2,
+        StagedPcssBlocker = 1 << 3,
+        HardwareDepthCompare = 1 << 4,
+        HardwareLinearPcf = 1 << 5,
+        HardwareReducedPcf = 1 << 6,
+        TexelScaledBias = 1 << 7,
+        SpotRadialBiasDirection = 1 << 8,
+        SpotPcssLinearDepth = 1 << 9,
+        SpotPcssReducedFilter = 1 << 10,
+        SpotCasterDepthFit = 1 << 11,
+        PreparedPointInputs = 1 << 12,
     };
 }
 
@@ -62,6 +85,140 @@ public:
     int SHADOW_PCF_SAMPLE_NUM = 16;
     int SHADOW_PCF_RING_NUM = 10;
     int SHADOW_TYPE = ShadowProperty::Default;
+    int SHADOW_SAMPLING_PATTERN = ShadowProperty::StableVogel;
+    // Production uses the revision/dirty shadow-cache check. Set
+    // OPENGL_LEARN_SHADOW_CACHE=none before process launch to force the
+    // historical redraw-every-frame behavior while retaining the current
+    // renderer, shaders, targets, and correctness instrumentation.
+    bool SHADOW_CACHE_DISABLED = false;
+    // Set
+    // OPENGL_LEARN_SHADOW_CACHE=legacy before process launch to retain the
+    // original deep-signature path for controlled same-binary A/B runs.
+    bool SHADOW_CACHE_USE_LEGACY_SIGNATURE = false;
+    // The revision path uses independent per-light caches by default.
+    // OPENGL_LEARN_SHADOW_PER_LIGHT_CACHE=0 retains the global revision cache
+    // as the same-binary control path.
+    bool SHADOW_PER_LIGHT_CACHE = true;
+    // Build a per-Mesh shadow submission list and reject casters outside each
+    // light's projection. Set OPENGL_LEARN_SHADOW_CASTER_CULLING=0 for the
+    // original all-caster submission path in controlled A/B runs.
+    bool SHADOW_CASTER_CULLING = true;
+    // The production candidate can fit directional shadows to the complete
+    // caster AABB in light space. Keep the historical sphere fit available
+    // through OPENGL_LEARN_DIRECTIONAL_SHADOW_FIT=sphere for same-binary A/B.
+    bool DIRECTIONAL_SHADOW_LIGHT_AABB_FIT = false;
+    // With the light-space AABB fit, preserve the historical sphere fit's
+    // world-units-per-texel while selecting a smaller quantized square target.
+    // OPENGL_LEARN_DIRECTIONAL_SHADOW_RESOLUTION=density enables it.
+    bool DIRECTIONAL_SHADOW_DENSITY_RESOLUTION = false;
+    // Skip shadow work only when the lighting contribution is provably zero.
+    // OPENGL_LEARN_SHADOW_EXACT_EARLY_OUT=0 retains the control path.
+    bool SHADOW_EXACT_EARLY_OUT = true;
+    // Experimental reuse of point-light direction, distance, and N dot L
+    // already computed by PBR lighting. It remains independent from exact
+    // zero-contribution rejection; formal A/B did not justify enabling it.
+    bool SHADOW_PREPARED_POINT_INPUTS = false;
+    // Receiver-side sample budgets remain independently switchable so the
+    // same executable can isolate performance and image-quality impact.
+    bool SHADOW_ADAPTIVE_POINT_SAMPLES = false;
+    bool SHADOW_ADAPTIVE_PCSS_FILTER = true;
+    bool SHADOW_STAGED_PCSS_BLOCKER = false;
+    int SHADOW_ADAPTIVE_MIN_SAMPLES = 8;
+    // Accepted PCF-only path: four hardware-linear comparison lookups replace
+    // sixteen manual depth reads. Hard shadows remain on the exact raw-depth
+    // path, while PCSS keeps raw depth for blocker search. The switches remain
+    // independently overridable for same-binary A/B.
+    bool SHADOW_HARDWARE_DEPTH_COMPARE = true;
+    bool SHADOW_HARDWARE_LINEAR_PCF = true;
+    bool SHADOW_HARDWARE_REDUCED_PCF = true;
+    // Scale receiver bias from the actual shadow texel footprint instead of
+    // using one normalized-depth constant for every projection and distance.
+    // The legacy constants remain available through
+    // OPENGL_LEARN_SHADOW_TEXEL_BIAS=0 for controlled A/B validation.
+    bool SHADOW_TEXEL_SCALED_BIAS = true;
+    // A spot light is positional, so its receiver-bias angle must use the
+    // fragment-to-light vector rather than the cone's center direction.
+    // Keep the correction independently switchable for single-variable A/B.
+    bool SHADOW_SPOT_RADIAL_BIAS_DIRECTION = true;
+    // Spot shadows use a perspective projection, so PCSS must estimate the
+    // receiver/blocker separation in linear light-view distance. The legacy
+    // projected-depth approximation remains available through
+    // OPENGL_LEARN_SHADOW_SPOT_PCSS_LINEAR_DEPTH=0 for controlled diagnosis.
+    bool SHADOW_SPOT_PCSS_LINEAR_DEPTH = true;
+    // A wide, correctly linearized Spot penumbra can promote the adaptive
+    // filter from 8 to 16 raw-depth taps. Production caps only that final
+    // Spot PCSS filter at eight well-distributed stable taps; blocker search
+    // and every other light/mode stay unchanged. Set the environment flag to
+    // zero to restore the complete adaptive 8/12/16 filter.
+    bool SHADOW_SPOT_PCSS_REDUCED_FILTER = true;
+    // Experimental: fit Spot near/far against Mesh OBBs that conservatively
+    // intersect the light's square projection. Formal production scenes kept
+    // identical output and draw counts while dynamic updates paid extra CPU,
+    // so the time-first production default retains the global scene sphere.
+    bool SHADOW_SPOT_CASTER_DEPTH_FIT = false;
+    // Receiver-bias coefficients are expressed in shadow-map texels and can
+    // be overridden independently for controlled, same-binary parameter
+    // sweeps through OPENGL_LEARN_SHADOW_BIAS_{2D,CUBE}_{MIN,SLOPE}_TEXELS.
+    float SHADOW_BIAS_2D_MIN_TEXELS = 0.75f;
+    float SHADOW_BIAS_2D_SLOPE_TEXELS = 2.0f;
+    float SHADOW_BIAS_CUBE_MIN_TEXELS = 5.0f;
+    float SHADOW_BIAS_CUBE_SLOPE_TEXELS = 8.0f;
+    // Point shadows can either fan every triangle to all cubemap layers in a
+    // geometry shader or render one conventional pass per face. The latter is
+    // kept independently switchable so per-face caster culling can be measured
+    // without conflating it with the removal of geometry-shader amplification.
+    // Production selects by caster complexity. The environment accepts
+    // layered, six-face, or adaptive for controlled same-binary A/B.
+    bool POINT_SHADOW_ADAPTIVE_RENDERING = true;
+    // OPENGL_LEARN_POINT_SHADOW_RENDER_PATH=six-face forces the six-pass path.
+    bool POINT_SHADOW_SIX_FACE_RENDERING = false;
+    // OPENGL_LEARN_POINT_SHADOW_FACE_CULLING=1 enables a separate frustum test
+    // for every cubemap face. It has no effect on the layered path.
+    bool POINT_SHADOW_FACE_CULLING = true;
+
+    int GetShadowOptimizationFlags() const {
+        int flags = 0;
+        if (SHADOW_EXACT_EARLY_OUT) {
+            flags |= ShadowOptimization::ExactEarlyOut;
+        }
+        if (SHADOW_ADAPTIVE_POINT_SAMPLES) {
+            flags |= ShadowOptimization::AdaptivePointSamples;
+        }
+        if (SHADOW_ADAPTIVE_PCSS_FILTER) {
+            flags |= ShadowOptimization::AdaptivePcssFilter;
+        }
+        if (SHADOW_STAGED_PCSS_BLOCKER) {
+            flags |= ShadowOptimization::StagedPcssBlocker;
+        }
+        if (SHADOW_HARDWARE_DEPTH_COMPARE) {
+            flags |= ShadowOptimization::HardwareDepthCompare;
+        }
+        if (SHADOW_HARDWARE_LINEAR_PCF) {
+            flags |= ShadowOptimization::HardwareLinearPcf;
+        }
+        if (SHADOW_HARDWARE_REDUCED_PCF) {
+            flags |= ShadowOptimization::HardwareReducedPcf;
+        }
+        if (SHADOW_TEXEL_SCALED_BIAS) {
+            flags |= ShadowOptimization::TexelScaledBias;
+        }
+        if (SHADOW_SPOT_RADIAL_BIAS_DIRECTION) {
+            flags |= ShadowOptimization::SpotRadialBiasDirection;
+        }
+        if (SHADOW_SPOT_PCSS_LINEAR_DEPTH) {
+            flags |= ShadowOptimization::SpotPcssLinearDepth;
+        }
+        if (SHADOW_SPOT_PCSS_REDUCED_FILTER) {
+            flags |= ShadowOptimization::SpotPcssReducedFilter;
+        }
+        if (SHADOW_SPOT_CASTER_DEPTH_FIT) {
+            flags |= ShadowOptimization::SpotCasterDepthFit;
+        }
+        if (SHADOW_PREPARED_POINT_INPUTS) {
+            flags |= ShadowOptimization::PreparedPointInputs;
+        }
+        return flags;
+    }
 
     bool GAMMA_CORRECTION = true;
     float GAMMA_VALUE = 2.2f;
@@ -92,7 +249,7 @@ public:
 	}
 
 private:
-    SystemProperties() = default;
+    SystemProperties();
 };
 
 /// ???????????????? defer / lightVolume ?????????
@@ -521,12 +678,14 @@ struct FBOAttributes {
 	bool isDefer = false;
 	// For forward/AO 等后处理：需要把深度作为 texture 供采样。
 	bool hasDepthTexture = false;
+	int width = 0;
+	int height = 0;
 	std::vector<TextureAttributes> textureAttrs;
 
 
     bool operator==(const FBOAttributes& other) const {
-        return std::tie(aaType, isHDR, isGamma, isShadowMap, shadowType, isBloom, isDefer, hasDepthTexture) ==
-            std::tie(other.aaType, other.isHDR, other.isGamma, other.isShadowMap, other.shadowType, other.isBloom, other.isDefer, other.hasDepthTexture)
+        return std::tie(aaType, isHDR, isGamma, isShadowMap, shadowType, isBloom, isDefer, hasDepthTexture, width, height) ==
+            std::tie(other.aaType, other.isHDR, other.isGamma, other.isShadowMap, other.shadowType, other.isBloom, other.isDefer, other.hasDepthTexture, other.width, other.height)
             && textureAttrs == other.textureAttrs;
     }
 };
@@ -554,6 +713,8 @@ namespace std {
             hash_combine(seed, attr.isBloom);
             hash_combine(seed, attr.isDefer);
             hash_combine(seed, attr.hasDepthTexture);
+            hash_combine(seed, attr.width);
+            hash_combine(seed, attr.height);
 
             for (const auto& tex : attr.textureAttrs) {
                 hash_combine(seed, tex);
@@ -614,6 +775,13 @@ public:
 	~FBO() { Delete(); }
 	void Delete();
 	void Init(FBOAttributes attr);
+	unsigned int GetCubeFaceFramebuffer(int face);
+	bool IsComplete() const {
+		return init;
+	}
+	std::uint64_t GetResourceGeneration() const {
+		return m_resourceGeneration;
+	}
 
 	void Resize() {
 		Delete();
@@ -622,6 +790,8 @@ public:
 private:
 	SystemProperties& properties = SystemProperties::GetInstance();
 	std::uint64_t m_trackedBytes = 0;
+	std::uint64_t m_resourceGeneration = 0;
+	std::array<unsigned int, 6> m_cubeFaceFramebufferIDs{};
 };
 
 class FramebuffersManager {
@@ -677,6 +847,7 @@ public:
 	}
 
 	FBO* GetFBO(FBOAttributes);
+	unsigned int GetShadowCompareSampler(bool linearFiltering);
 
 	void Resize();
 	void TrimUnusedFBOs();
@@ -695,6 +866,8 @@ private:
 	std::unordered_map<FBOAttributes, std::vector<FBO*>> m_hashMapFBO;
     //record the active FBOs by name
     std::unordered_map<std::string, FBO*> m_fboMap;
+	unsigned int m_shadowCompareNearestSampler = 0;
+	unsigned int m_shadowCompareLinearSampler = 0;
 
 };
 //Frambuffer End
@@ -730,6 +903,10 @@ public:
 	bool m_active = true;
 	glm::mat4 getModelMatrix();
 	void setModelMatrix(glm::mat4);
+	std::uint64_t GetTransformRevision() {
+		getModelMatrix();
+		return m_transformRevision;
+	}
 
 	bool GetActiveStatus() {
 		return m_active;
@@ -740,21 +917,34 @@ public:
 	}
 
     void SetScale(glm::vec3 s) {
+		if (scale == s) {
+			return;
+		}
         scale = s;
 		m_transformCacheValid = false;
 	}
     
     void SetScale(float s) {
-        scale = glm::vec3(s);
+		const glm::vec3 uniformScale(s);
+		if (scale == uniformScale) {
+			return;
+		}
+        scale = uniformScale;
 		m_transformCacheValid = false;
     }
 
     void SetPosition(glm::vec3 p) {
+		if (position == p) {
+			return;
+		}
         position = p;
 		m_transformCacheValid = false;
     }
 
     void SetRotation(glm::vec3 r) {
+		if (rotation == r) {
+			return;
+		}
         rotation = r;
 		m_transformCacheValid = false;
     }
@@ -764,4 +954,5 @@ protected:
 	glm::vec3 m_cachedRotation = glm::vec3(0);
 	glm::vec3 m_cachedScale = glm::vec3(1);
 	bool m_transformCacheValid = false;
+	std::uint64_t m_transformRevision = 0;
 };

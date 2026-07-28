@@ -9,7 +9,9 @@
 #include <sstream>
 #include <iostream>
 #include <filesystem>
+#include <cstdint>
 #include <unordered_map>
+#include <vector>
 
 class Shader {
 public:
@@ -42,6 +44,7 @@ public:
 	bool ReloadIfChanged(std::string* errorMessage = nullptr);
 	bool HasSourceChanges() const;
 	bool IsGeometryShader() const { return m_isGeometryShader; }
+	std::uint64_t GetRevision() const { return m_revision; }
 	const std::string& GetVertexPath() const { return m_vertexPath; }
 	const std::string& GetFragmentPath() const { return m_fragmentPath; }
 	const std::string& GetGeometryPath() const { return m_geometryPath; }
@@ -49,6 +52,11 @@ public:
 protected:
 	bool BuildProgram(unsigned int& outProgram, std::string& errorMessage) const;
 	bool ReadTextFile(const std::string& path, std::string& outText, std::string& errorMessage) const;
+	bool ReadTextFileWithIncludes(
+		const std::string& path,
+		std::string& outText,
+		std::string& errorMessage,
+		std::vector<std::string>& includeStack) const;
 	bool CompileStage(unsigned int& shaderHandle, unsigned int shaderType, const std::string& source, const char* stageName, std::string& errorMessage) const;
 	static bool TryGetWriteTime(const std::string& path, std::filesystem::file_time_type& outTime);
 	void UpdateCachedWriteTimes();
@@ -60,7 +68,10 @@ protected:
 	std::filesystem::file_time_type m_vertexWriteTime = {};
 	std::filesystem::file_time_type m_fragmentWriteTime = {};
 	std::filesystem::file_time_type m_geometryWriteTime = {};
+	mutable std::vector<std::string> m_sourceDependencies;
+	std::unordered_map<std::string, std::filesystem::file_time_type> m_dependencyWriteTimes;
 	bool m_isGeometryShader = false;
+	std::uint64_t m_revision = 0;
 	mutable std::unordered_map<std::string, int> m_uniformLocationCache;
 	inline static unsigned int s_boundProgram = 0;
 };

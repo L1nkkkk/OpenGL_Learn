@@ -400,6 +400,8 @@ bool SceneStateIO::Save(const Scene& scene, const Camera& camera, const std::str
 		Value one(rapidjson::kObjectType);
 		one.AddMember("active", pl.m_active, alloc);
 		one.AddMember("useShadowMap", pl.useShadowMap, alloc);
+		one.AddMember("autoFitShadow", pl.autoFitShadow, alloc);
+		one.AddMember("shadowResolution", pl.shadowResolution, alloc);
 		Value pos, scale, amb, diff, spec;
 		SetVec3(pos, alloc, pl.position);
 		SetVec3(scale, alloc, pl.scale);
@@ -425,12 +427,16 @@ bool SceneStateIO::Save(const Scene& scene, const Camera& camera, const std::str
 		Value one(rapidjson::kObjectType);
 		one.AddMember("active", dl.m_active, alloc);
 		one.AddMember("useShadowMap", dl.useShadowMap, alloc);
-		Value dir, amb, diff, spec;
+		one.AddMember("autoFitShadow", dl.autoFitShadow, alloc);
+		one.AddMember("shadowResolution", dl.shadowResolution, alloc);
+		Value dir, shadowCenter, amb, diff, spec;
 		SetVec3(dir, alloc, dl.direction);
+		SetVec3(shadowCenter, alloc, dl.shadowCenter);
 		SetVec3(amb, alloc, dl.ambient);
 		SetVec3(diff, alloc, dl.diffuse);
 		SetVec3(spec, alloc, dl.specular);
 		one.AddMember("direction", dir, alloc);
+		one.AddMember("shadowCenter", shadowCenter, alloc);
 		one.AddMember("ambient", amb, alloc);
 		one.AddMember("diffuse", diff, alloc);
 		one.AddMember("specular", spec, alloc);
@@ -446,6 +452,9 @@ bool SceneStateIO::Save(const Scene& scene, const Camera& camera, const std::str
 	for (const auto& sl : scene.lightSource.spotLights) {
 		Value one(rapidjson::kObjectType);
 		one.AddMember("active", sl.m_active, alloc);
+		one.AddMember("useShadowMap", sl.useShadowMap, alloc);
+		one.AddMember("autoFitShadow", sl.autoFitShadow, alloc);
+		one.AddMember("shadowResolution", sl.shadowResolution, alloc);
 		Value pos, dir, amb, diff, spec;
 		SetVec3(pos, alloc, sl.position);
 		SetVec3(dir, alloc, sl.direction);
@@ -462,6 +471,8 @@ bool SceneStateIO::Save(const Scene& scene, const Camera& camera, const std::str
 		one.AddMember("constant", sl.constant, alloc);
 		one.AddMember("linear", sl.linear, alloc);
 		one.AddMember("quadratic", sl.quadratic, alloc);
+		one.AddMember("nearPlane", sl.near_plane, alloc);
+		one.AddMember("farPlane", sl.far_plane, alloc);
 		spotLights.PushBack(one, alloc);
 	}
 	lightsObj.AddMember("spot", spotLights, alloc);
@@ -528,6 +539,8 @@ bool SceneStateIO::Load(Scene& scene, Camera& camera, const std::string& path) {
 				if (p.HasMember("near") && p["near"].IsNumber()) pl.near = p["near"].GetFloat();
 				if (p.HasMember("far") && p["far"].IsNumber()) pl.far = p["far"].GetFloat();
 				if (p.HasMember("useShadowMap") && p["useShadowMap"].IsBool()) pl.useShadowMap = p["useShadowMap"].GetBool();
+				if (p.HasMember("autoFitShadow") && p["autoFitShadow"].IsBool()) pl.autoFitShadow = p["autoFitShadow"].GetBool();
+				if (p.HasMember("shadowResolution") && p["shadowResolution"].IsInt()) pl.shadowResolution = p["shadowResolution"].GetInt();
 				if (p.HasMember("active") && p["active"].IsBool()) pl.m_active = p["active"].GetBool();
 				scene.lightSource.AddPointLight(pl);
 			}
@@ -547,6 +560,7 @@ bool SceneStateIO::Load(Scene& scene, Camera& camera, const std::string& path) {
 					glm::vec3(0.5f)
 				);
 				if (d.HasMember("direction")) dl.direction = GetVec3(d["direction"], dl.direction);
+				if (d.HasMember("shadowCenter")) dl.shadowCenter = GetVec3(d["shadowCenter"], dl.shadowCenter);
 				if (d.HasMember("ambient")) dl.ambient = GetVec3(d["ambient"], dl.ambient);
 				if (d.HasMember("diffuse")) dl.diffuse = GetVec3(d["diffuse"], dl.diffuse);
 				if (d.HasMember("specular")) dl.specular = GetVec3(d["specular"], dl.specular);
@@ -555,6 +569,8 @@ bool SceneStateIO::Load(Scene& scene, Camera& camera, const std::string& path) {
 				if (d.HasMember("distance") && d["distance"].IsNumber()) dl.distance = d["distance"].GetFloat();
 				if (d.HasMember("width") && d["width"].IsNumber()) dl.width = d["width"].GetFloat();
 				if (d.HasMember("useShadowMap") && d["useShadowMap"].IsBool()) dl.useShadowMap = d["useShadowMap"].GetBool();
+				if (d.HasMember("autoFitShadow") && d["autoFitShadow"].IsBool()) dl.autoFitShadow = d["autoFitShadow"].GetBool();
+				if (d.HasMember("shadowResolution") && d["shadowResolution"].IsInt()) dl.shadowResolution = d["shadowResolution"].GetInt();
 				if (d.HasMember("active") && d["active"].IsBool()) dl.m_active = d["active"].GetBool();
 				scene.lightSource.AddDirectionLight(dl);
 			}
@@ -586,6 +602,11 @@ bool SceneStateIO::Load(Scene& scene, Camera& camera, const std::string& path) {
 				if (s.HasMember("constant") && s["constant"].IsNumber()) sl.constant = s["constant"].GetFloat();
 				if (s.HasMember("linear") && s["linear"].IsNumber()) sl.linear = s["linear"].GetFloat();
 				if (s.HasMember("quadratic") && s["quadratic"].IsNumber()) sl.quadratic = s["quadratic"].GetFloat();
+				if (s.HasMember("nearPlane") && s["nearPlane"].IsNumber()) sl.near_plane = s["nearPlane"].GetFloat();
+				if (s.HasMember("farPlane") && s["farPlane"].IsNumber()) sl.far_plane = s["farPlane"].GetFloat();
+				if (s.HasMember("useShadowMap") && s["useShadowMap"].IsBool()) sl.useShadowMap = s["useShadowMap"].GetBool();
+				if (s.HasMember("autoFitShadow") && s["autoFitShadow"].IsBool()) sl.autoFitShadow = s["autoFitShadow"].GetBool();
+				if (s.HasMember("shadowResolution") && s["shadowResolution"].IsInt()) sl.shadowResolution = s["shadowResolution"].GetInt();
 				if (s.HasMember("active") && s["active"].IsBool()) sl.m_active = s["active"].GetBool();
 				scene.lightSource.AddSpotLight(sl);
 			}
@@ -641,6 +662,8 @@ bool SceneStateIO::LoadAsync(Scene& scene, Camera& camera, const std::string& pa
 				if (p.HasMember("near") && p["near"].IsNumber()) pl.near = p["near"].GetFloat();
 				if (p.HasMember("far") && p["far"].IsNumber()) pl.far = p["far"].GetFloat();
 				if (p.HasMember("useShadowMap") && p["useShadowMap"].IsBool()) pl.useShadowMap = p["useShadowMap"].GetBool();
+				if (p.HasMember("autoFitShadow") && p["autoFitShadow"].IsBool()) pl.autoFitShadow = p["autoFitShadow"].GetBool();
+				if (p.HasMember("shadowResolution") && p["shadowResolution"].IsInt()) pl.shadowResolution = p["shadowResolution"].GetInt();
 				if (p.HasMember("active") && p["active"].IsBool()) pl.m_active = p["active"].GetBool();
 				scene.lightSource.AddPointLight(pl);
 			}
@@ -652,6 +675,7 @@ bool SceneStateIO::LoadAsync(Scene& scene, Camera& camera, const std::string& pa
 				if (!d.IsObject()) continue;
 				auto dl = DirectionLight(glm::vec3(-0.2f, -1.0f, -0.3f), glm::vec3(10.f), glm::vec3(0.4f), glm::vec3(0.5f));
 				if (d.HasMember("direction")) dl.direction = GetVec3(d["direction"], dl.direction);
+				if (d.HasMember("shadowCenter")) dl.shadowCenter = GetVec3(d["shadowCenter"], dl.shadowCenter);
 				if (d.HasMember("ambient")) dl.ambient = GetVec3(d["ambient"], dl.ambient);
 				if (d.HasMember("diffuse")) dl.diffuse = GetVec3(d["diffuse"], dl.diffuse);
 				if (d.HasMember("specular")) dl.specular = GetVec3(d["specular"], dl.specular);
@@ -660,6 +684,8 @@ bool SceneStateIO::LoadAsync(Scene& scene, Camera& camera, const std::string& pa
 				if (d.HasMember("distance") && d["distance"].IsNumber()) dl.distance = d["distance"].GetFloat();
 				if (d.HasMember("width") && d["width"].IsNumber()) dl.width = d["width"].GetFloat();
 				if (d.HasMember("useShadowMap") && d["useShadowMap"].IsBool()) dl.useShadowMap = d["useShadowMap"].GetBool();
+				if (d.HasMember("autoFitShadow") && d["autoFitShadow"].IsBool()) dl.autoFitShadow = d["autoFitShadow"].GetBool();
+				if (d.HasMember("shadowResolution") && d["shadowResolution"].IsInt()) dl.shadowResolution = d["shadowResolution"].GetInt();
 				if (d.HasMember("active") && d["active"].IsBool()) dl.m_active = d["active"].GetBool();
 				scene.lightSource.AddDirectionLight(dl);
 			}
@@ -680,6 +706,11 @@ bool SceneStateIO::LoadAsync(Scene& scene, Camera& camera, const std::string& pa
 				if (s.HasMember("constant") && s["constant"].IsNumber()) sl.constant = s["constant"].GetFloat();
 				if (s.HasMember("linear") && s["linear"].IsNumber()) sl.linear = s["linear"].GetFloat();
 				if (s.HasMember("quadratic") && s["quadratic"].IsNumber()) sl.quadratic = s["quadratic"].GetFloat();
+				if (s.HasMember("nearPlane") && s["nearPlane"].IsNumber()) sl.near_plane = s["nearPlane"].GetFloat();
+				if (s.HasMember("farPlane") && s["farPlane"].IsNumber()) sl.far_plane = s["farPlane"].GetFloat();
+				if (s.HasMember("useShadowMap") && s["useShadowMap"].IsBool()) sl.useShadowMap = s["useShadowMap"].GetBool();
+				if (s.HasMember("autoFitShadow") && s["autoFitShadow"].IsBool()) sl.autoFitShadow = s["autoFitShadow"].GetBool();
+				if (s.HasMember("shadowResolution") && s["shadowResolution"].IsInt()) sl.shadowResolution = s["shadowResolution"].GetInt();
 				if (s.HasMember("active") && s["active"].IsBool()) sl.m_active = s["active"].GetBool();
 				scene.lightSource.AddSpotLight(sl);
 			}
@@ -706,6 +737,49 @@ bool SceneStateIO::LoadAsync(Scene& scene, Camera& camera, const std::string& pa
 		}
 	}
 	return true;
+}
+
+bool SceneStateIO::ReplaceAsync(
+	Scene& scene,
+	Camera& camera,
+	const std::string& path)
+{
+	std::ifstream input(path);
+	if (!input.is_open()) {
+		return false;
+	}
+	const std::string text(
+		(std::istreambuf_iterator<char>(input)),
+		std::istreambuf_iterator<char>());
+	if (text.empty()) {
+		return false;
+	}
+	Document document;
+	document.Parse(text.c_str());
+	if (document.HasParseError() ||
+		!document.IsObject() ||
+		!document.HasMember("version") ||
+		!document["version"].IsInt() ||
+		!document.HasMember("camera") ||
+		!document["camera"].IsObject() ||
+		!document.HasMember("models") ||
+		!document["models"].IsArray() ||
+		!document.HasMember("lights") ||
+		!document["lights"].IsObject()) {
+		return false;
+	}
+
+	CancelAsyncLoads();
+	scene.ClearContent();
+	return LoadAsync(scene, camera, path);
+}
+
+void SceneStateIO::CancelAsyncLoads()
+{
+	while (!g_pendingModelJsonQueue.empty()) {
+		g_pendingModelJsonQueue.pop();
+	}
+	g_totalAsyncModelCount = 0;
 }
 
 void SceneStateIO::UpdateAsyncLoads(Scene& scene, int maxModelsPerFrame) {

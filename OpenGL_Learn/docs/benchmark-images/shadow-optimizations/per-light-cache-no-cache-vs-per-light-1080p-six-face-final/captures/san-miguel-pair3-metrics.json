@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "before": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\per-light-cache-no-cache-vs-per-light-1080p-six-face-final\\formal\\san-miguel\\A3.ppm",
+  "after": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\per-light-cache-no-cache-vs-per-light-1080p-six-face-final\\formal\\san-miguel\\B3.ppm",
+  "resolution": [
+    1920,
+    1080
+  ],
+  "rgbMeanAbsoluteDifference": 1.1914488017429195e-07,
+  "rgbRootMeanSquareDifference": 8.663448165597428e-05,
+  "maximumChannelDelta": 33,
+  "exactChangedPixelCount": 6,
+  "exactChangedPixelRatio": 2.8935185185185184e-06,
+  "changedPixelRatio": 2.8935185185185184e-06,
+  "luminanceMeanAbsoluteDifference": 6.430041152263375e-08,
+  "meanDarkening": 4.917090292907286e-08,
+  "meanBrightening": 1.512950859356088e-08,
+  "darkenedPixelRatio": 1.4467592592592592e-06,
+  "brightenedPixelRatio": 4.822530864197531e-07
+}

@@ -59,6 +59,7 @@ dlldata.c
 BenchmarkDotNet.Artifacts/
 OpenGL_Learn/benchmark-results/
 OpenGL_Learn/model-cache/
+OpenGL_Learn/classic-scenes/
 
 # .NET Core
 project.lock.json
@@ -78,6 +79,7 @@ StyleCopReport.xml
 *.ilk
 *.meta
 *.obj
+!OpenGL_Learn/models/shadow_bias_probe/shadow_bias_probe.obj
 *.iobj
 *.pch
 *.pdb
@@ -369,3 +371,14 @@ x64
 
 # Runtime scene save (loaded on startup)
 OpenGL_Learn/saved/
+
+# Shadow benchmark raw mode captures stay in the local benchmark workspace.
+# The report tracks only labeled pairwise comparisons and difference images.
+OpenGL_Learn/docs/benchmark-images/shadow-system/*-off.png
+OpenGL_Learn/docs/benchmark-images/shadow-system/*-hard.png
+OpenGL_Learn/docs/benchmark-images/shadow-system/*-pcf.png
+OpenGL_Learn/docs/benchmark-images/shadow-system/*-pcss.png
+OpenGL_Learn/docs/benchmark-images/shadow-system/sponza-comparison.png
+OpenGL_Learn/docs/benchmark-images/shadow-system/sponza-difference.png
+OpenGL_Learn/docs/benchmark-images/shadow-system/san-miguel-comparison.png
+OpenGL_Learn/docs/benchmark-images/shadow-system/san-miguel-difference.png

@@ -99,6 +99,11 @@ public:
 	const glm::vec3& GetBoundsMax() const;
 	const glm::vec3& GetBoundsCenter() const;
 	float GetBoundingRadius() const;
+	std::uint64_t SyncShadowStateRevision(
+		std::uint64_t syncEpoch) const;
+	std::size_t GetShadowStateSignature() const {
+		return m_shadowStateSignature;
+	}
 
 	bool GetActiveStatus() const {
 		return m_active;
@@ -111,6 +116,9 @@ public:
 private:
 	bool m_active = true;
 	std::shared_ptr<MeshGeometry> m_geometry;
+	mutable bool m_shadowStateInitialized = false;
+	mutable std::size_t m_shadowStateSignature = 0;
+	mutable std::uint64_t m_shadowStateRevision = 0;
 };
 
 class Model : public BaseObject {
@@ -256,6 +264,8 @@ public:
 	}
 
 	void RefreshMaterialDrivenState();
+	std::uint64_t SyncShadowStateRevision(
+		std::uint64_t syncEpoch);
 	const std::vector<MeshEntry>& GetOpaqueMeshEntries() const { return m_opaqueMeshes; }
 	const std::vector<MeshEntry>& GetTransparentMeshEntries() const { return m_transparentMeshes; }
 
@@ -290,6 +300,9 @@ private:
 	std::string m_dataSourceFilePath;
 	std::string m_dataSourceGeneratorId;
 	size_t m_lastAppliedMaterialRevision = static_cast<size_t>(-1);
+	bool m_shadowStateInitialized = false;
+	std::size_t m_shadowStateSignature = 0;
+	std::uint64_t m_shadowStateRevision = 0;
 	inline static unsigned int count = 0;
 	inline static bool s_importedMaterialSharingEnabled = true;
 protected:

@@ -157,6 +157,7 @@
     <ClCompile Include="AntiAliasManager.cpp" />
     <ClCompile Include="callbacks.cpp" />
     <ClCompile Include="DeferRenderPass.cpp" />
+    <ClCompile Include="EditorSceneManager.cpp" />
     <ClCompile Include="ForwardRenderPass.cpp" />
     <ClCompile Include="FramebufferManager.cpp" />
     <ClCompile Include="GLStateCache.cpp" />
@@ -182,6 +183,7 @@
   <ItemGroup>
     <ClInclude Include="callbacks.h" />
     <ClInclude Include="DeferRenderPass.h" />
+    <ClInclude Include="EditorSceneManager.h" />
     <ClInclude Include="ForwardRenderPass.h" />
     <ClInclude Include="GLStateCache.h" />
     <ClInclude Include="ImageBasedLighting.h" />
@@ -257,9 +259,12 @@
     <None Include="shaders\sceneFragment.glsl" />
     <None Include="shaders\sceneVertex.glsl" />
     <None Include="shaders\shadowCubeFragment.glsl" />
+    <None Include="shaders\shadowCubeFaceFragment.glsl" />
+    <None Include="shaders\shadowCubeFaceVertex.glsl" />
     <None Include="shaders\shadowCubeGeometry.glsl" />
     <None Include="shaders\shadowCubeVertex.glsl" />
     <None Include="shaders\shadowFragment.glsl" />
+    <None Include="shaders\shadowSampling.glsl" />
     <None Include="shaders\shadowVertex.glsl" />
     <None Include="shaders\skyboxFragment.glsl" />
     <None Include="shaders\skyboxVertex.glsl" />
