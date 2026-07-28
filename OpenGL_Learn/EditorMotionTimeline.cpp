@@ -565,7 +565,7 @@ bool EditorMotionTimelineController::PrepareThreeLightTestRig(
 		scene.lightSource.spotLights.size();
 	m_testRigPrepared = true;
 
-	m_profile = BenchmarkMotionProfile::Point;
+	m_profile = BenchmarkMotionProfile::PointCamera;
 	m_pointLightIndex = m_testRigPointLightIndex;
 	scene.InvalidateShadowCache();
 	ResetTelemetry(scene);
@@ -578,9 +578,10 @@ bool EditorMotionTimelineController::PrepareThreeLightTestRig(
 
 	m_testRigStatusText =
 		"Ready: one Directional, one Point, and one Spot shadow are active. "
-		"Mode B and the validated six-face point path are selected.";
+		"Point and Camera tracks are enabled; the Caster stays fixed.";
 	m_statusText =
-		"Three-light A/B rig captured. Press Play after one warm-up render.";
+		"Three-light Point + Camera A/B rig captured. Press Play after one "
+		"warm-up render.";
 	return true;
 }
 

@@ -44,6 +44,7 @@ METRICS = {
 
 PROFILE_LABELS = {
     "point": "Point 连续运动",
+    "point-camera": "Point + Camera 连续运动",
     "caster": "Caster 连续运动",
     "camera": "Camera-only",
     "mixed": "Point + Caster + Camera",
@@ -766,6 +767,8 @@ def main() -> int:
             "",
             "- `timeline-point` 用于衡量“只动 Point”时其余灯的缓存收益；"
             "Point Cubemap 仍应每个失效帧提交六面。",
+            "- `timeline-point-camera` 在 Point 运动的同时移动相机，"
+            "Caster 保持静止；相机运动不应额外使 Shadow Map 失效。",
             "- `timeline-camera` 用于证明仅相机运动不会误使阴影缓存失效。",
             "- `timeline-caster` 是所有受影响阴影灯都必须更新的保守路径。",
             "- `timeline-mixed` 是持续运动压力测试，不应被包装成 Per-Light 的最佳案例。",

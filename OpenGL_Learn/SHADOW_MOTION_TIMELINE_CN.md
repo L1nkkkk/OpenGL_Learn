@@ -1,6 +1,6 @@
 # Shadow Benchmark 确定性运动时间轴
 
-状态：实现完成；Point 主案例正式实验完成；四类路径均通过运行时烟测
+状态：实现完成；Point-only 与 Point + Camera 主案例均完成 1080p 三轮正式实验；五类路径均通过运行时烟测
 
 ## 1. 为什么保留两套 workload
 
@@ -22,11 +22,12 @@
 - 轨迹振幅按 `sceneRadius` 归一化，Sponza 与 San Miguel 使用相同的相对运动尺度；
 - A/B 变体按相同帧号采样，因此最终截图与逐帧数据可直接配对。
 
-## 3. 四种轨道组合
+## 3. 五种轨道组合
 
 | Workload | Point | Caster | Camera | 主要用途 |
 |---|---:|---:|---:|---|
 | `timeline-point` | 开 | 关 | 关 | Per-Light Cache 的主收益案例 |
+| `timeline-point-camera` | 开 | 关 | 开 | 主案例的可观察版本：Point 与相机同步运动 |
 | `timeline-camera` | 关 | 关 | 开 | 验证 Camera-only 不误使阴影失效 |
 | `timeline-caster` | 关 | 开 | 关 | 验证 Caster Revision 的保守全灯失效 |
 | `timeline-mixed` | 开 | 开 | 开 | 连续运动压力与平稳退化路径 |
@@ -36,6 +37,7 @@
 | Workload | 无缓存更新灯数 | Per-Light 更新灯数 | Per-Light Cache Hit | Per-Light Point 提交 |
 |---|---:|---:|---:|---:|
 | `timeline-point` | 3 | 1 | 2 | 6 |
+| `timeline-point-camera` | 3 | 1 | 2 | 6 |
 | `timeline-camera` | 3 | 0 | 3 | 0 |
 | `timeline-caster` | 3 | 3 | 0 | 6 |
 | `timeline-mixed` | 3 | 3 | 0 | 6 |
@@ -65,7 +67,7 @@ UI 用于交互预览和诊断，不参与正式 A/B 计时。启动编辑器后
 推荐操作顺序：
 
 1. 在 `Scene` 面板加载场景，并确认至少存在一盏 Point Light；
-2. 点击 `Quick A/B Reproduction > Prepare 3-light test`。编辑器会临时补齐测试所需的 Directional / Spot，开启三类阴影与 Point 六面路径，并自动捕获 Point 轨迹；
+2. 点击 `Quick A/B Reproduction > Prepare 3-light test`。编辑器会临时补齐测试所需的 Directional / Spot，开启三类阴影与 Point 六面路径，并自动捕获 `Point + Camera` 轨迹；Point 与相机同步运动，Caster 保持静止；
 3. 选择 `A Cache off`，等待一帧预热后点击 `Play`，最近一次运动步应显示 `3 updates / 0 hits / 6 point submits`；
 4. 暂停后选择 `B Per-light cache`，等待一帧预热后再次点击 `Play`，最近一次运动步应显示 `1 update / 2 hits / 6 point submits`；
 5. 观察右侧 `Shadow Cache Account`：
@@ -84,9 +86,9 @@ UI 与正式测试共用 `BenchmarkMotionTimeline` 的固定帧采样函数，�
 
 预览期间如果场景被替换、目标对象被增删或引用失效，控制器会保守停播并要求重新 `Capture base`，不会继续写入可能已经变化的对象。
 
-实际播放截图（Point 轨迹、Per-Light Cache、单灯更新与六面提交账户）：
+当前默认界面（Point + Camera 轨道、Quick A/B、单灯更新与六面提交账户）：
 
-![Motion Timeline 编辑器播放界面](docs/editor-ui-motion-timeline.png)
+![Point + Camera Motion Timeline 编辑器界面](docs/editor-ui-ab-font.png)
 
 ## 6. 一键正式实验
 
@@ -104,13 +106,13 @@ UI 与正式测试共用 `BenchmarkMotionTimeline` 的固定帧采样函数，�
 - 每个变体三轮独立进程；
 - 每轮 1,000 个测量帧；
 - 100 帧外部 Warm-up、15 帧内部 Warm-up；
-- Point、Camera、Caster、Mixed 四种 Profile；
+- Point、Point + Camera、Camera、Caster、Mixed 五种 Profile；
 - 自动生成中文 Markdown 报告、汇总 CSV、逐帧 CSV、曲线图、A/B 截图和差异热力图。
 
-只运行主案例：
+只运行带相机运动的主案例：
 
 ```powershell
-.\tools\Test-ShadowMotionTimeline.ps1 -Profiles point
+.\tools\Test-ShadowMotionTimeline.ps1 -Profiles point-camera
 ```
 
 快速烟测：
@@ -167,8 +169,39 @@ UI 与正式测试共用 `BenchmarkMotionTimeline` 的固定帧采样函数，�
 - [Sponza 逐帧曲线](docs/benchmark-images/shadow-motion-timeline/per-light-cache-motion-timeline-point-1080p-final/timeline-point-sponza.png)
 - [San Miguel 逐帧曲线](docs/benchmark-images/shadow-motion-timeline/per-light-cache-motion-timeline-point-1080p-final/timeline-point-san-miguel.png)
 
-## 8. 四类路径烟测结论
+## 8. Point + Camera 主案例正式结果
 
-640×360、Sponza、每变体 4 帧的工程烟测已覆盖四种 Profile，所有运行、计数校验、逐帧对齐、报告生成和像素对比均通过。四组 A/B 截图的最大通道差和变化像素均为 0。
+正式实验 ID：`per-light-cache-motion-timeline-point-camera-1080p-final`
 
-其中 Camera、Caster、Mixed 的数据只用于证明实现与实验管线正确；目前只有 Point 主案例完成了 1920×1080、三轮独立运行的正式性能实验。
+实验条件与 Point-only 正式实验相同：1920×1080、Sponza 与 San Miguel、A/B 各三轮独立进程、每轮 1,000 个测量帧、60 Hz 固定时间轴。区别是 Point 与 Camera Position / Target 同步运动，Caster 始终保持静止。
+
+| 场景 | Shadow GPU Median | Shadow GPU P95 | 帧时间 Median | Shadow CPU Median | 更新灯数 | Cache Hit | Point 提交 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Sponza | 0.790→0.620 ms（-21.46%） | 0.990→0.757 ms（-23.50%） | 4.187→3.739 ms（-10.68%） | 0.328→0.192 ms（-41.40%） | 3→1 | 0→2 | 6→6 |
+| San Miguel | 4.897→2.657 ms（-45.76%） | 5.531→3.297 ms（-40.39%） | 11.261→8.972 ms（-20.33%） | 2.524→1.212 ms（-51.97%） | 3→1 | 0→2 | 6→6 |
+
+轨迹校验：
+
+- 每轮 1,000 帧覆盖一个完整 600 帧周期再重复 400 帧；
+- Point Position、Camera Position、Camera Target 在一个周期内均有 600 个不同样本；
+- Caster Position 始终只有 1 个样本；
+- Camera 运动没有额外触发 Directional 或 Spot Shadow 失效。
+
+正确性校验：
+
+- Sponza：A/B 截图 0 像素差；
+- San Miguel：10 个变化像素，最大通道差 49，低于正式阈值；
+- 两个场景的 Point Cubemap 六面均完全一致；
+- Texture、Mesh CPU、Mesh GPU、Render Target 占用均一致。
+
+完整中文报告、曲线、表格和截图：
+
+- [Point + Camera 正式报告](docs/benchmark-images/shadow-motion-timeline/per-light-cache-motion-timeline-point-camera-1080p-final/report.md)
+- [Sponza Point + Camera 曲线](docs/benchmark-images/shadow-motion-timeline/per-light-cache-motion-timeline-point-camera-1080p-final/timeline-point-camera-sponza.png)
+- [San Miguel Point + Camera 曲线](docs/benchmark-images/shadow-motion-timeline/per-light-cache-motion-timeline-point-camera-1080p-final/timeline-point-camera-san-miguel.png)
+
+## 9. 五类路径烟测结论
+
+640×360、Sponza 的工程烟测已覆盖五种 Profile，所有运行、计数校验、逐帧对齐、报告生成和像素对比均通过。A/B 截图的最大通道差和变化像素均为 0。
+
+其中 Camera、Caster、Mixed 的数据只用于证明实现与实验管线正确；Point 与 Point + Camera 是 Per-Light Cache 的主收益案例。

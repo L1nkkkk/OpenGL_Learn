@@ -115,6 +115,9 @@ BenchmarkMotionProfile BenchmarkMotionTimeline::ProfileFromWorkload(
 	if (workload == "timeline-camera") {
 		return BenchmarkMotionProfile::Camera;
 	}
+	if (workload == "timeline-point-camera") {
+		return BenchmarkMotionProfile::PointCamera;
+	}
 	if (workload == "timeline-mixed") {
 		return BenchmarkMotionProfile::Mixed;
 	}
@@ -131,6 +134,8 @@ const char* BenchmarkMotionTimeline::ProfileName(
 		return "caster";
 	case BenchmarkMotionProfile::Camera:
 		return "camera";
+	case BenchmarkMotionProfile::PointCamera:
+		return "point-camera";
 	case BenchmarkMotionProfile::Mixed:
 		return "mixed";
 	default:
@@ -148,6 +153,10 @@ std::uint32_t BenchmarkMotionTimeline::TrackMask(
 		return static_cast<std::uint32_t>(BenchmarkMotionTrack::Caster);
 	case BenchmarkMotionProfile::Camera:
 		return static_cast<std::uint32_t>(BenchmarkMotionTrack::Camera);
+	case BenchmarkMotionProfile::PointCamera:
+		return
+			static_cast<std::uint32_t>(BenchmarkMotionTrack::Point) |
+			static_cast<std::uint32_t>(BenchmarkMotionTrack::Camera);
 	case BenchmarkMotionProfile::Mixed:
 		return
 			static_cast<std::uint32_t>(BenchmarkMotionTrack::Point) |

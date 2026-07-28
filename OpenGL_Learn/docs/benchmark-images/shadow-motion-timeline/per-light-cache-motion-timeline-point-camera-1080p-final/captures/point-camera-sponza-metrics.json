@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "before": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\per-light-cache-motion-timeline-point-camera-1080p-final-point-camera-1920x1080\\formal\\sponza\\A1.ppm",
+  "after": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\per-light-cache-motion-timeline-point-camera-1080p-final-point-camera-1920x1080\\formal\\sponza\\B1.ppm",
+  "resolution": [
+    1920,
+    1080
+  ],
+  "rgbMeanAbsoluteDifference": 0.0,
+  "rgbRootMeanSquareDifference": 0.0,
+  "maximumChannelDelta": 0,
+  "exactChangedPixelCount": 0,
+  "exactChangedPixelRatio": 0.0,
+  "changedPixelRatio": 0.0,
+  "luminanceMeanAbsoluteDifference": 0.0,
+  "meanDarkening": 0.0,
+  "meanBrightening": 0.0,
+  "darkenedPixelRatio": 0.0,
+  "brightenedPixelRatio": 0.0
+}

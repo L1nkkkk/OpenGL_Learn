@@ -134,7 +134,8 @@ private:
 		std::uint64_t current);
 	static void PushHistory(std::vector<float>& history, float value);
 
-	BenchmarkMotionProfile m_profile = BenchmarkMotionProfile::Point;
+	BenchmarkMotionProfile m_profile =
+		BenchmarkMotionProfile::PointCamera;
 	BenchmarkMotionTimelineConfig m_config;
 	BenchmarkMotionBaseState m_baseState;
 	BenchmarkMotionSample m_currentSample;

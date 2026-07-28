@@ -10,6 +10,7 @@ enum class BenchmarkMotionProfile {
 	Point,
 	Caster,
 	Camera,
+	PointCamera,
 	Mixed
 };
 

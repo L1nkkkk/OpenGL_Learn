@@ -45,7 +45,7 @@
 为了让本地手动测试不依赖当前存档恰好包含三盏阴影灯，面板增加了 `Quick A/B Reproduction`：
 
 1. 点击 `Prepare 3-light test`。编辑器会保留当前灯光状态，必要时临时补一盏 Directional 与一盏 Spot，并保证正好有 Directional、Point、Spot 各一盏参与阴影；
-2. 准备动作会自动启用 Point Shadow、选择经过验证的六面渲染路径，并捕获 Point Light 确定性轨迹；
+2. 准备动作会自动启用 Point Shadow、选择经过验证的六面渲染路径，并捕获 Point Light + Camera 确定性轨迹；Caster 保持静止；
 3. 选择 `A Cache off`，预热一帧后播放。单次运动步预期为 `3 updates / 0 hits`；
 4. 选择 `B Per-light cache`，预热一帧后播放。单次运动步预期为 `1 update / 2 hits`，Point Shadow 仍为 `6 submits`；
 5. 点击 `Restore original lighting`，恢复原灯光开关、缓存模式和 Point Shadow 路径，并释放临时阴影资源。
@@ -55,7 +55,7 @@
 正式性能结论仍使用：
 
 ```powershell
-.\tools\Test-ShadowMotionTimeline.ps1 -Profiles point
+.\tools\Test-ShadowMotionTimeline.ps1 -Profiles point-camera
 ```
 
 完整使用步骤和指标解释见 [SHADOW_MOTION_TIMELINE_CN.md](SHADOW_MOTION_TIMELINE_CN.md)。

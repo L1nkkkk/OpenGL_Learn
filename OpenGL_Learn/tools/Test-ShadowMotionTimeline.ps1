@@ -21,8 +21,14 @@ param(
     [switch]$SkipExternalWarmup,
     [ValidateSet("sponza", "san-miguel")]
     [string[]]$SceneIds = @("sponza", "san-miguel"),
-    [ValidateSet("point", "caster", "camera", "mixed")]
-    [string[]]$Profiles = @("point", "camera", "caster", "mixed"),
+    [ValidateSet("point", "point-camera", "caster", "camera", "mixed")]
+    [string[]]$Profiles = @(
+        "point",
+        "point-camera",
+        "camera",
+        "caster",
+        "mixed"
+    ),
     [ValidateRange(1, 1000)]
     [int]$TimelineFps = 60,
     [ValidateRange(4, 36000)]

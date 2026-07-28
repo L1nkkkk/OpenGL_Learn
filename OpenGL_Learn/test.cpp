@@ -444,6 +444,7 @@ bool ParseClassicSceneTestOptions(
 		options.shadowWorkload != "replace-point-shadow-target" &&
 		options.shadowWorkload != "toggle-caster" &&
 		options.shadowWorkload != "timeline-point" &&
+		options.shadowWorkload != "timeline-point-camera" &&
 		options.shadowWorkload != "timeline-caster" &&
 		options.shadowWorkload != "timeline-camera" &&
 		options.shadowWorkload != "timeline-mixed") {
@@ -453,7 +454,8 @@ bool ParseClassicSceneTestOptions(
 			"change-caster-material, reload-shadow-2d, "
 			"reload-shadow-point, resize-point-shadow, "
 			"replace-point-shadow-target, toggle-caster, timeline-point, "
-			"timeline-caster, timeline-camera, or timeline-mixed";
+			"timeline-point-camera, timeline-caster, timeline-camera, "
+			"or timeline-mixed";
 		return false;
 	}
 	if (options.shadowVariant.empty()) {
@@ -505,7 +507,8 @@ bool ParseClassicSceneTestOptions(
 		return false;
 	}
 	if ((options.shadowWorkload == "move-point" ||
-			options.shadowWorkload == "timeline-point") &&
+			options.shadowWorkload == "timeline-point" ||
+			options.shadowWorkload == "timeline-point-camera") &&
 		options.shadowLights != "point" &&
 		options.shadowLights != "all") {
 		errorMessage =

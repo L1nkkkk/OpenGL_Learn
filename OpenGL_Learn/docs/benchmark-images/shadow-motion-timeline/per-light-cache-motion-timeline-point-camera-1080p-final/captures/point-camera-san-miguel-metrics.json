@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "before": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\per-light-cache-motion-timeline-point-camera-1080p-final-point-camera-1920x1080\\formal\\san-miguel\\A1.ppm",
+  "after": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\per-light-cache-motion-timeline-point-camera-1080p-final-point-camera-1920x1080\\formal\\san-miguel\\B1.ppm",
+  "resolution": [
+    1920,
+    1080
+  ],
+  "rgbMeanAbsoluteDifference": 4.4505971112724923e-07,
+  "rgbRootMeanSquareDifference": 0.00023568566506720998,
+  "maximumChannelDelta": 49,
+  "exactChangedPixelCount": 10,
+  "exactChangedPixelRatio": 4.822530864197531e-06,
+  "changedPixelRatio": 4.822530864197531e-06,
+  "luminanceMeanAbsoluteDifference": 4.1417029774872914e-07,
+  "meanDarkening": 2.798959089808763e-07,
+  "meanBrightening": 1.3427438876785282e-07,
+  "darkenedPixelRatio": 2.4112654320987654e-06,
+  "brightenedPixelRatio": 9.645061728395062e-07
+}

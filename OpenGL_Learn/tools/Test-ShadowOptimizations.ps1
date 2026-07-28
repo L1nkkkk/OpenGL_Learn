@@ -43,6 +43,7 @@ param(
         "replace-point-shadow-target",
         "toggle-caster",
         "timeline-point",
+        "timeline-point-camera",
         "timeline-caster",
         "timeline-camera",
         "timeline-mixed"
@@ -258,7 +259,11 @@ if ($Workload -eq "move-directional" -and
     $Lights -notin @("directional", "all")) {
     throw "move-directional requires -Lights directional or all."
 }
-if ($Workload -in @("move-point", "timeline-point") -and
+if ($Workload -in @(
+        "move-point",
+        "timeline-point",
+        "timeline-point-camera"
+    ) -and
     $Lights -notin @("point", "all")) {
     throw "$Workload requires -Lights point or all."
 }
@@ -1337,6 +1342,7 @@ function Assert-RunResult {
     }
     $timelineWorkloads = @(
         "timeline-point",
+        "timeline-point-camera",
         "timeline-caster",
         "timeline-camera",
         "timeline-mixed"
@@ -1356,6 +1362,7 @@ function Assert-RunResult {
         $expectedProfile = $Workload.Substring("timeline-".Length)
         $expectedTracks = switch ($Workload) {
             "timeline-point" { @("point") }
+            "timeline-point-camera" { @("point", "camera") }
             "timeline-caster" { @("caster") }
             "timeline-camera" { @("camera") }
             "timeline-mixed" { @("point", "caster", "camera") }
@@ -1573,6 +1580,7 @@ function Assert-RunResult {
                 $Workload -in @(
                     "move-point",
                     "timeline-point",
+                    "timeline-point-camera",
                     "timeline-mixed",
                     "reload-shadow-point",
                     "resize-point-shadow",

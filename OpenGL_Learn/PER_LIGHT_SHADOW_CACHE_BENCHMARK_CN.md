@@ -1,8 +1,11 @@
 # Per-Light 阴影缓存与增量更新：实现及 1080p A/B 实验报告
 
 状态：正式实验完成
-日期：2026-07-28
-最终实验 ID：`per-light-cache-no-cache-vs-per-light-1080p-six-face-final`
+日期：2026-07-29
+正式实验 ID：
+
+- 基础 A/B：`per-light-cache-no-cache-vs-per-light-1080p-six-face-final`
+- Point + Camera 连续运动：`per-light-cache-motion-timeline-point-camera-1080p-final`
 
 ## 1. 结论
 
@@ -13,6 +16,7 @@
 - 两个场景、A/B 各三轮独立 renderer 调用、每轮 1,000 测量帧，更新量都稳定为 `3 → 1`；
 - Sponza 的 Shadow Pass GPU Median 从 `0.7621 ms` 降至 `0.5977 ms`，下降 `21.57%`；
 - San Miguel 的 Shadow Pass GPU Median 从 `4.8193 ms` 降至 `2.5995 ms`，下降 `46.06%`；
+- 在更接近实际观察的固定轨迹中，Point Light 与相机同时运动、Caster 保持静止；Sponza / San Miguel 的 Shadow Pass GPU Median 分别下降 `21.46% / 45.76%`，更新量仍稳定为 `3 → 1`；
 - 两个场景的 Shadow GPU、GPU Frame、Shadow CPU 与 Wall Frame 的 Median、P95、P99 均改善；
 - 12 次正式运行的 72 个点阴影 Cubemap 面均成功读回，三组 A/B 配对共 36 个基于深度位模式的 Hash 全部一致；
 - A/B 的 renderer-owned Texture、Mesh CPU、Mesh GPU、Render Target 聚合字节统计在六组配对中数值完全一致；
@@ -25,7 +29,8 @@
 - [技术原理、推导过程与工程权衡](PER_LIGHT_SHADOW_CACHE_TECHNICAL_PRINCIPLES_CN.md)
 - [自动生成的中文详细报告](docs/benchmark-images/shadow-optimizations/per-light-cache-no-cache-vs-per-light-1080p-six-face-final/report.md)
 - [机器可读报告数据](docs/benchmark-images/shadow-optimizations/per-light-cache-no-cache-vs-per-light-1080p-six-face-final/report-data.json)
-- [确定性 Point 连续运动正式报告](docs/benchmark-images/shadow-motion-timeline/per-light-cache-motion-timeline-point-1080p-final/report.md)
+- [Point + Camera 连续运动正式报告](docs/benchmark-images/shadow-motion-timeline/per-light-cache-motion-timeline-point-camera-1080p-final/report.md)
+- [Point-only 隔离实验报告](docs/benchmark-images/shadow-motion-timeline/per-light-cache-motion-timeline-point-1080p-final/report.md)
 - [正式实验汇总](benchmark-results/shadow-optimizations/per-light-cache-no-cache-vs-per-light-1080p-six-face-final/summary.json)
 - [完整失效矩阵](benchmark-results/shadow-optimizations/per-light-cache-invalidation-matrix.json)
 
@@ -186,20 +191,31 @@ Harness 对每个 A1/B1/B2/A2/A3/B3 都同步启动一个新的 native renderer�
 
 这个计数与性能变化形成直接因果链：Point Shadow 的六面工作没有减少，减少的是与 Point 变化无关的 Directional 和 Spot Shadow Pass。
 
-### 6.3 确定性连续运动复验
+### 6.3 Point + Camera 确定性连续运动复验
 
-为避免只依赖相邻帧两点微扰，补充实验使用固定 60 Hz、600 帧一周期的 Point 连续轨迹；轨迹按场景半径归一化，A/B 的测量帧号与空间位置逐帧一致。实验仍为 1920×1080、两个场景、每个变体三轮独立进程、每轮 1,000 帧。
+为避免只依赖相邻帧两点微扰，主复验使用固定 60 Hz、600 帧一周期的确定性轨迹：Point Light 与相机 Position / Target 同时运动，Caster 保持静止。轨迹按场景半径归一化，A/B 的测量帧号与空间位置逐帧一致。实验仍为 1920×1080、两个场景、每个变体三轮独立进程、每轮 1,000 帧。
+
+相机轨迹用于让观察视角同步变化，不应成为 Shadow Map 的失效源；因此它同时检验了“移动相机不会误伤灯光缓存”这条边界。
+
+| 场景 | Shadow GPU Median | Shadow GPU P95 | Frame Median | Shadow CPU Median | 更新灯数 | Cache Hit | Point Face 提交 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Sponza | 0.790→0.620 ms（-21.46%） | 0.990→0.757 ms（-23.50%） | 4.187→3.739 ms（-10.68%） | 0.328→0.192 ms（-41.40%） | 3→1 | 0→2 | 6→6 |
+| San Miguel | 4.897→2.657 ms（-45.76%） | 5.531→3.297 ms（-40.39%） | 11.261→8.972 ms（-20.33%） | 2.524→1.212 ms（-51.97%） | 3→1 | 0→2 | 6→6 |
+
+![Sponza Point + Camera 连续运动曲线](docs/benchmark-images/shadow-motion-timeline/per-light-cache-motion-timeline-point-camera-1080p-final/timeline-point-camera-sponza.png)
+
+![San Miguel Point + Camera 连续运动曲线](docs/benchmark-images/shadow-motion-timeline/per-light-cache-motion-timeline-point-camera-1080p-final/timeline-point-camera-san-miguel.png)
+
+每轮的一个完整周期中，Point Position、Camera Position、Camera Target 各有 600 个不同样本，Caster Position 始终只有 1 个样本。Point 自身仍每帧提交六面，Per-Light 只复用 Directional 与 Spot；Sponza 截图为 0 像素差，San Miguel 仅 10 个变化像素且通过阈值，两个场景的 Cubemap 六面 Hash 与 renderer-owned 资源统计均一致。完整逐帧 CSV、A/B 截图与差异热力图见 [Point + Camera 正式报告](docs/benchmark-images/shadow-motion-timeline/per-light-cache-motion-timeline-point-camera-1080p-final/report.md)。
+
+Point-only 隔离实验也保留为对照：
 
 | 场景 | Shadow GPU Median | Shadow GPU P95 | Wall Median | Shadow CPU Median | 更新灯数 | Point Face 提交 |
 |---|---:|---:|---:|---:|---:|---:|
 | Sponza | 0.790→0.625 ms（-20.99%） | 0.946→0.789 ms（-16.55%） | 3.911→3.652 ms（-6.61%） | 0.319→0.184 ms（-42.34%） | 3→1 | 6→6 |
 | San Miguel | 5.011→2.757 ms（-44.98%） | 5.731→3.400 ms（-40.69%） | 11.136→9.241 ms（-17.02%） | 2.485→1.240 ms（-50.10%） | 3→1 | 6→6 |
 
-![Sponza 连续运动曲线](docs/benchmark-images/shadow-motion-timeline/per-light-cache-motion-timeline-point-1080p-final/timeline-point-sponza.png)
-
-![San Miguel 连续运动曲线](docs/benchmark-images/shadow-motion-timeline/per-light-cache-motion-timeline-point-1080p-final/timeline-point-san-miguel.png)
-
-两组结果与微扰实验一致：Point 自身仍每帧提交六面，Per-Light 只复用 Directional 与 Spot；连续运动没有引入周期性漏更新或 P95/P99 尾延迟回退。完整逐帧 CSV、A/B 截图与差异热力图见[连续运动正式报告](docs/benchmark-images/shadow-motion-timeline/per-light-cache-motion-timeline-point-1080p-final/report.md)。
+两套连续轨迹得到一致结论；相机运动没有改变需要更新的阴影集合，也没有引入 P95/P99 尾延迟回退。Point-only 的完整材料见 [隔离实验报告](docs/benchmark-images/shadow-motion-timeline/per-light-cache-motion-timeline-point-1080p-final/report.md)。
 
 ## 7. 画面与资源一致性
 
@@ -290,6 +306,6 @@ Harness 对每个 A1/B1/B2/A2/A3/B3 都同步启动一个新的 native renderer�
 
 ## 10. 可用于简历的表述
 
-> 针对无缓存路径每帧重绘全部阴影灯的问题，设计并实现基于光源状态、Caster Revision、Shadow Shader Revision 与渲染目标身份/资源代际的 Per-Light Dirty Cache；在固定 60 Hz 的 Point 连续轨迹中，将 Directional + Point + Spot 场景的每帧阴影更新由 3 盏降至 1 盏，Sponza / San Miguel 的 Shadow Pass GPU Median 分别降低 20.99% / 44.98%，Point Cubemap 仍保持每帧六面提交，画面通过 1920×1080 三轮独立运行的像素容差校验。
+> 针对无缓存路径每帧重绘全部阴影灯的问题，设计并实现基于光源状态、Caster Revision、Shadow Shader Revision 与渲染目标身份/资源代际的 Per-Light Dirty Cache；在固定 60 Hz 的 Point Light + Camera 连续轨迹中，将 Directional + Point + Spot 场景的每帧阴影更新由 3 盏降至 1 盏，Sponza / San Miguel 的 Shadow Pass GPU Median 分别降低 21.46% / 45.76%，Point Cubemap 仍保持每帧六面提交，画面与资源通过 1920×1080、A/B 各三轮独立运行的一致性校验。
 
 这条表述使用确定性连续运动的正式 1080p 数据，没有沿用此前 1440×900 的初步结果。

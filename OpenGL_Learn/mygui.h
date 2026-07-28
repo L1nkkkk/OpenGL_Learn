@@ -1625,8 +1625,9 @@ public:
 				static_cast<unsigned long long>(spotShadowCount));
 			if (testRigReady) {
 				ImGui::TextWrapped(
-					"After one warm-up render: A expects 3 updates / 0 hits; "
-					"B expects 1 update / 2 hits; Point expects 6 submits.");
+					"Point + Camera move; Caster stays fixed. After warm-up: "
+					"A expects 3 updates / 0 hits; B expects 1 / 2; "
+					"Point expects 6 submits.");
 			}
 			else {
 				ImGui::TextWrapped(
@@ -1647,6 +1648,7 @@ public:
 				"Point light",
 				"Shadow caster",
 				"Camera control",
+				"Point + camera",
 				"Mixed tracks"
 			};
 			int profileIndex =
