@@ -3430,6 +3430,12 @@ int main(int argc, char** argv) {
 	if (benchmarkOptions.enabled && !benchmarkSession.IsComplete()) {
 		benchmarkSession.Abort();
 	}
+	if (!resourceSmokeTest &&
+		!pbrSmokeTest &&
+		!benchmarkOptions.enabled &&
+		!classicSceneOptions.enabled) {
+		mygui.RestoreTemporaryEditorState(scene, camera);
+	}
 
 	forwardRenderPass->Destroy();
 	delete forwardRenderPass;

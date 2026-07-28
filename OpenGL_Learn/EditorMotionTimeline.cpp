@@ -418,10 +418,339 @@ void EditorMotionTimelineController::UseEstimatedSceneRadius(
 	SetSceneRadius(scene, camera, EstimateSceneRadius(scene));
 }
 
+bool EditorMotionTimelineController::PrepareThreeLightTestRig(
+	Scene& scene,
+	Camera& camera)
+{
+	if (m_testRigPrepared) {
+		if (ValidateTestRigScene(scene)) {
+			m_testRigStatusText =
+				"The temporary three-light test rig is already prepared.";
+			return true;
+		}
+
+		auto& properties = SystemProperties::GetInstance();
+		properties.SHADOW_CACHE_DISABLED =
+			m_testRigPreviousShadowCacheDisabled;
+		properties.SHADOW_PER_LIGHT_CACHE =
+			m_testRigPreviousPerLightCache;
+		properties.POINT_SHADOW_ADAPTIVE_RENDERING =
+			m_testRigPreviousPointAdaptiveRendering;
+		properties.POINT_SHADOW_SIX_FACE_RENDERING =
+			m_testRigPreviousPointSixFaceRendering;
+		ClearTestRigState();
+	}
+
+	if (scene.lightSource.pointLights.empty()) {
+		m_testRigStatusText =
+			"Preparation failed: the current scene needs one existing point "
+			"light because its visible proxy and material are scene assets.";
+		return false;
+	}
+
+	if (m_captured) {
+		StopAndRestore(scene, camera);
+	}
+
+	m_testRigModelCount = scene.modelSource.GetModels().size();
+	if (m_testRigModelCount > 0) {
+		m_testRigSceneAnchor = scene.modelSource.GetModels().front();
+	}
+	else {
+		m_testRigSceneAnchor.reset();
+	}
+	m_testRigOriginalPointLightCount =
+		scene.lightSource.pointLights.size();
+	m_testRigOriginalDirectionalLightCount =
+		scene.lightSource.directionLights.size();
+	m_testRigOriginalSpotLightCount =
+		scene.lightSource.spotLights.size();
+	m_testRigPointLightFlags.clear();
+	m_testRigDirectionalLightFlags.clear();
+	m_testRigSpotLightFlags.clear();
+	for (const PointLight& light : scene.lightSource.pointLights) {
+		m_testRigPointLightFlags.push_back(
+			{ light.m_active, light.useShadowMap });
+	}
+	for (const DirectionLight& light : scene.lightSource.directionLights) {
+		m_testRigDirectionalLightFlags.push_back(
+			{ light.m_active, light.useShadowMap });
+	}
+	for (const SpotLight& light : scene.lightSource.spotLights) {
+		m_testRigSpotLightFlags.push_back(
+			{ light.m_active, light.useShadowMap });
+	}
+
+	auto& properties = SystemProperties::GetInstance();
+	m_testRigPreviousShadowCacheDisabled =
+		properties.SHADOW_CACHE_DISABLED;
+	m_testRigPreviousPerLightCache =
+		properties.SHADOW_PER_LIGHT_CACHE;
+	m_testRigPreviousPointAdaptiveRendering =
+		properties.POINT_SHADOW_ADAPTIVE_RENDERING;
+	m_testRigPreviousPointSixFaceRendering =
+		properties.POINT_SHADOW_SIX_FACE_RENDERING;
+
+	m_testRigAddedDirectionalLight =
+		scene.lightSource.directionLights.empty();
+	if (m_testRigAddedDirectionalLight) {
+		DirectionLight directionLight(
+			glm::normalize(glm::vec3(-0.45f, -1.0f, -0.35f)),
+			glm::vec3(0.02f),
+			glm::vec3(1.25f),
+			glm::vec3(1.0f));
+		directionLight.autoFitShadow = true;
+		directionLight.shadowResolution = 2048;
+		scene.lightSource.AddDirectionLight(directionLight);
+	}
+
+	m_testRigAddedSpotLight = scene.lightSource.spotLights.empty();
+	if (m_testRigAddedSpotLight) {
+		const glm::vec3 safeFront =
+			glm::length(camera.cameraFront) > 0.0001f
+				? glm::normalize(camera.cameraFront)
+				: glm::vec3(0.0f, 0.0f, -1.0f);
+		SpotLight spotLight(
+			camera.cameraPos,
+			safeFront,
+			glm::vec3(0.0f),
+			glm::vec3(1.5f),
+			glm::vec3(1.0f),
+			25.0f,
+			35.0f);
+		spotLight.SetPosition(camera.cameraPos);
+		spotLight.autoFitShadow = true;
+		spotLight.shadowResolution = 1024;
+		scene.lightSource.AddSpotLight(spotLight);
+	}
+
+	m_testRigPointLightIndex = (std::min)(
+		(std::max)(0, m_pointLightIndex),
+		static_cast<int>(scene.lightSource.pointLights.size()) - 1);
+	m_testRigDirectionalLightIndex = 0;
+	m_testRigSpotLightIndex = 0;
+	for (PointLight& light : scene.lightSource.pointLights) {
+		light.useShadowMap = false;
+	}
+	for (DirectionLight& light : scene.lightSource.directionLights) {
+		light.useShadowMap = false;
+	}
+	for (SpotLight& light : scene.lightSource.spotLights) {
+		light.useShadowMap = false;
+	}
+
+	PointLight& pointLight =
+		scene.lightSource.pointLights[
+			static_cast<std::size_t>(m_testRigPointLightIndex)];
+	DirectionLight& directionLight =
+		scene.lightSource.directionLights[
+			static_cast<std::size_t>(m_testRigDirectionalLightIndex)];
+	SpotLight& spotLight =
+		scene.lightSource.spotLights[
+			static_cast<std::size_t>(m_testRigSpotLightIndex)];
+	pointLight.m_active = true;
+	pointLight.useShadowMap = true;
+	directionLight.m_active = true;
+	directionLight.useShadowMap = true;
+	spotLight.m_active = true;
+	spotLight.useShadowMap = true;
+
+	properties.SHADOW_CACHE_DISABLED = false;
+	properties.SHADOW_PER_LIGHT_CACHE = true;
+	properties.POINT_SHADOW_ADAPTIVE_RENDERING = true;
+	properties.POINT_SHADOW_SIX_FACE_RENDERING = false;
+	m_testRigPreparedDirectionalLightCount =
+		scene.lightSource.directionLights.size();
+	m_testRigPreparedSpotLightCount =
+		scene.lightSource.spotLights.size();
+	m_testRigPrepared = true;
+
+	m_profile = BenchmarkMotionProfile::Point;
+	m_pointLightIndex = m_testRigPointLightIndex;
+	scene.InvalidateShadowCache();
+	ResetTelemetry(scene);
+	if (!CaptureBaseState(scene, camera)) {
+		RestoreThreeLightTestRig(scene, camera);
+		m_testRigStatusText =
+			"Preparation failed while capturing the point-light track.";
+		return false;
+	}
+
+	m_testRigStatusText =
+		"Ready: one Directional, one Point, and one Spot shadow are active. "
+		"Mode B and the validated six-face point path are selected.";
+	m_statusText =
+		"Three-light A/B rig captured. Press Play after one warm-up render.";
+	return true;
+}
+
+bool EditorMotionTimelineController::RestoreThreeLightTestRig(
+	Scene& scene,
+	Camera& camera)
+{
+	if (!m_testRigPrepared) {
+		m_testRigStatusText =
+			"No temporary three-light test rig is active.";
+		return false;
+	}
+
+	if (m_captured) {
+		StopAndRestore(scene, camera);
+	}
+
+	auto& properties = SystemProperties::GetInstance();
+	properties.SHADOW_CACHE_DISABLED =
+		m_testRigPreviousShadowCacheDisabled;
+	properties.SHADOW_PER_LIGHT_CACHE =
+		m_testRigPreviousPerLightCache;
+	properties.POINT_SHADOW_ADAPTIVE_RENDERING =
+		m_testRigPreviousPointAdaptiveRendering;
+	properties.POINT_SHADOW_SIX_FACE_RENDERING =
+		m_testRigPreviousPointSixFaceRendering;
+
+	if (!ValidateTestRigScene(scene)) {
+		ClearTestRigState();
+		scene.InvalidateShadowCache();
+		ResetTelemetry(scene);
+		m_testRigStatusText =
+			"The scene changed while the test rig was active. Stale light "
+			"objects were left untouched; global shadow settings were restored.";
+		return false;
+	}
+
+	for (std::size_t index = 0;
+		index < m_testRigPointLightFlags.size();
+		++index) {
+		scene.lightSource.pointLights[index].m_active =
+			m_testRigPointLightFlags[index].active;
+		scene.lightSource.pointLights[index].useShadowMap =
+			m_testRigPointLightFlags[index].useShadowMap;
+	}
+	for (std::size_t index = 0;
+		index < m_testRigDirectionalLightFlags.size();
+		++index) {
+		scene.lightSource.directionLights[index].m_active =
+			m_testRigDirectionalLightFlags[index].active;
+		scene.lightSource.directionLights[index].useShadowMap =
+			m_testRigDirectionalLightFlags[index].useShadowMap;
+	}
+	for (std::size_t index = 0;
+		index < m_testRigSpotLightFlags.size();
+		++index) {
+		scene.lightSource.spotLights[index].m_active =
+			m_testRigSpotLightFlags[index].active;
+		scene.lightSource.spotLights[index].useShadowMap =
+			m_testRigSpotLightFlags[index].useShadowMap;
+	}
+
+	auto& framebufferManager = FramebuffersManager::GetInstance();
+	if (m_testRigAddedDirectionalLight) {
+		for (std::size_t index = m_testRigOriginalDirectionalLightCount;
+			index < scene.lightSource.directionLights.size();
+			++index) {
+			DirectionLight& light =
+				scene.lightSource.directionLights[index];
+			if (light.shadowFBO) {
+				framebufferManager.ReleaseFBO(light.shadowFBO);
+				light.shadowFBO = nullptr;
+			}
+			light.shadowCache.Invalidate();
+		}
+		scene.lightSource.directionLights.erase(
+			scene.lightSource.directionLights.begin() +
+				static_cast<std::ptrdiff_t>(
+					m_testRigOriginalDirectionalLightCount),
+			scene.lightSource.directionLights.end());
+	}
+	if (m_testRigAddedSpotLight) {
+		for (std::size_t index = m_testRigOriginalSpotLightCount;
+			index < scene.lightSource.spotLights.size();
+			++index) {
+			SpotLight& light = scene.lightSource.spotLights[index];
+			if (light.shadowFBO) {
+				framebufferManager.ReleaseFBO(light.shadowFBO);
+				light.shadowFBO = nullptr;
+			}
+			light.shadowCache.Invalidate();
+		}
+		scene.lightSource.spotLights.erase(
+			scene.lightSource.spotLights.begin() +
+				static_cast<std::ptrdiff_t>(
+					m_testRigOriginalSpotLightCount),
+			scene.lightSource.spotLights.end());
+	}
+
+	ClearTestRigState();
+	scene.InvalidateShadowCache();
+	ResetTelemetry(scene);
+	m_testRigStatusText =
+		"Original lights, shadow flags, render path, and cache mode restored.";
+	m_statusText = "Temporary A/B test rig restored without saving scene data.";
+	return true;
+}
+
+void EditorMotionTimelineController::SetShadowComparisonMode(
+	Scene& scene,
+	bool perLightCache)
+{
+	Pause();
+	auto& properties = SystemProperties::GetInstance();
+	properties.SHADOW_CACHE_DISABLED = !perLightCache;
+	properties.SHADOW_PER_LIGHT_CACHE = perLightCache;
+	scene.InvalidateShadowCache();
+	ResetTelemetry(scene);
+	if (IsThreeLightTestRigReady(scene)) {
+		m_testRigStatusText = perLightCache
+			? "Mode B selected: Per-Light Dirty Cache. Allow one warm-up "
+				"render, then Play should show 1 update and 2 hits per "
+				"point-light step."
+			: "Mode A selected: cache disabled. Play should show all 3 shadow "
+				"lights updating on every point-light step.";
+	}
+	else {
+		m_testRigStatusText = perLightCache
+			? "Mode B selected. Prepare the temporary three-light rig before "
+				"using the 1-update / 2-hit expectation."
+			: "Mode A selected. Prepare the temporary three-light rig before "
+				"using the 3-update / 0-hit expectation.";
+	}
+	m_statusText =
+		"Comparison mode changed and preview paused for a clean warm-up.";
+}
+
 bool EditorMotionTimelineController::HasValidTargets(
 	const Scene& scene) const
 {
 	return m_captured && ValidateTargets(scene);
+}
+
+bool EditorMotionTimelineController::IsThreeLightTestRigReady(
+	const Scene& scene) const
+{
+	if (!m_testRigPrepared || !ValidateTestRigScene(scene)) {
+		return false;
+	}
+	const auto shadowEnabled = [](const auto& light) {
+		return light.m_active && light.useShadowMap;
+	};
+	const std::size_t activePointLights = static_cast<std::size_t>(
+		std::count_if(
+			scene.lightSource.pointLights.begin(),
+			scene.lightSource.pointLights.end(),
+			shadowEnabled));
+	const std::size_t activeDirectionalLights = static_cast<std::size_t>(
+		std::count_if(
+			scene.lightSource.directionLights.begin(),
+			scene.lightSource.directionLights.end(),
+			shadowEnabled));
+	const std::size_t activeSpotLights = static_cast<std::size_t>(
+		std::count_if(
+			scene.lightSource.spotLights.begin(),
+			scene.lightSource.spotLights.end(),
+			shadowEnabled));
+	return activePointLights == 1 &&
+		activeDirectionalLights == 1 &&
+		activeSpotLights == 1;
 }
 
 float EditorMotionTimelineController::EstimateSceneRadius(
@@ -482,6 +811,36 @@ bool EditorMotionTimelineController::ValidateTargets(
 		}
 	}
 	return true;
+}
+
+bool EditorMotionTimelineController::ValidateTestRigScene(
+	const Scene& scene) const
+{
+	if (!m_testRigPrepared ||
+		scene.modelSource.GetModels().size() != m_testRigModelCount ||
+		scene.lightSource.pointLights.size() !=
+			m_testRigOriginalPointLightCount ||
+		scene.lightSource.directionLights.size() !=
+			m_testRigPreparedDirectionalLightCount ||
+		scene.lightSource.spotLights.size() !=
+			m_testRigPreparedSpotLightCount) {
+		return false;
+	}
+	if (m_testRigModelCount > 0) {
+		const std::shared_ptr<Model> anchor = m_testRigSceneAnchor.lock();
+		if (!ContainsModel(scene, anchor)) {
+			return false;
+		}
+	}
+	return m_testRigPointLightIndex >= 0 &&
+		static_cast<std::size_t>(m_testRigPointLightIndex) <
+			scene.lightSource.pointLights.size() &&
+		m_testRigDirectionalLightIndex >= 0 &&
+		static_cast<std::size_t>(m_testRigDirectionalLightIndex) <
+			scene.lightSource.directionLights.size() &&
+		m_testRigSpotLightIndex >= 0 &&
+		static_cast<std::size_t>(m_testRigSpotLightIndex) <
+			scene.lightSource.spotLights.size();
 }
 
 bool EditorMotionTimelineController::ApplyCurrentSample(
@@ -578,6 +937,26 @@ void EditorMotionTimelineController::ResetTelemetry(
 	m_updatedLightHistory.clear();
 	m_lightCacheHitHistory.clear();
 	m_pointSubmissionHistory.clear();
+}
+
+void EditorMotionTimelineController::ClearTestRigState()
+{
+	m_testRigPrepared = false;
+	m_testRigAddedDirectionalLight = false;
+	m_testRigAddedSpotLight = false;
+	m_testRigModelCount = 0;
+	m_testRigOriginalPointLightCount = 0;
+	m_testRigOriginalDirectionalLightCount = 0;
+	m_testRigOriginalSpotLightCount = 0;
+	m_testRigPreparedDirectionalLightCount = 0;
+	m_testRigPreparedSpotLightCount = 0;
+	m_testRigPointLightIndex = 0;
+	m_testRigDirectionalLightIndex = 0;
+	m_testRigSpotLightIndex = 0;
+	m_testRigSceneAnchor.reset();
+	m_testRigPointLightFlags.clear();
+	m_testRigDirectionalLightFlags.clear();
+	m_testRigSpotLightFlags.clear();
 }
 
 std::uint64_t EditorMotionTimelineController::CounterDelta(

@@ -97,6 +97,7 @@ public:
 		ImGui::CreateContext();
 		ImGuiIO& io = ImGui::GetIO(); (void)io;
 		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+		LoadEditorFonts(io);
 		ApplyEditorStyle();
 		ImGui_ImplGlfw_InitForOpenGL(window, true);
 		ImGui_ImplOpenGL3_Init("#version 330 core");
@@ -241,6 +242,9 @@ public:
 				? "Idle"
 				: materialManager.GetLastReloadMessage().c_str(),
 			materialManager.GetReloadCount());
+		ImGui::TextDisabled(
+			"UI font: %s",
+			m_editorFontDescription.c_str());
 
 		ImGui::End();
 	}
@@ -1461,6 +1465,16 @@ public:
 		return m_motionTimeline.IsPlaying();
 	}
 
+	void RestoreTemporaryEditorState(Scene& scene, Camera& camera)
+	{
+		if (m_motionTimeline.IsThreeLightTestRigActive()) {
+			m_motionTimeline.RestoreThreeLightTestRig(scene, camera);
+		}
+		else if (m_motionTimeline.IsCaptured()) {
+			m_motionTimeline.StopAndRestore(scene, camera);
+		}
+	}
+
 	void MotionTimeline_UI(Scene& scene, Camera& camera)
 	{
 		if (!ImGui::Begin("Motion Timeline")) {
@@ -1530,6 +1544,103 @@ public:
 				1.15f);
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
+
+			ImGui::SeparatorText("Quick A/B Reproduction");
+			bool testRigActive =
+				m_motionTimeline.IsThreeLightTestRigActive();
+			bool testRigReady =
+				m_motionTimeline.IsThreeLightTestRigReady(scene);
+			if (ImGui::Button(
+				testRigActive
+					? "Restore original lighting"
+					: "Prepare 3-light test",
+				ImVec2(-1.0f, 30.0f))) {
+				if (testRigActive) {
+					m_motionTimeline.RestoreThreeLightTestRig(
+						scene,
+						camera);
+				}
+				else {
+					m_motionTimeline.PrepareThreeLightTestRig(
+						scene,
+						camera);
+				}
+				testRigActive =
+					m_motionTimeline.IsThreeLightTestRigActive();
+				testRigReady =
+					m_motionTimeline.IsThreeLightTestRigReady(scene);
+			}
+
+			const float comparisonGap =
+				ImGui::GetStyle().ItemSpacing.x;
+			const float comparisonButtonWidth =
+				(ImGui::GetContentRegionAvail().x - comparisonGap) *
+					0.5f;
+			const bool noCacheMode =
+				properties.SHADOW_CACHE_DISABLED;
+			const bool perLightMode =
+				!properties.SHADOW_CACHE_DISABLED &&
+				properties.SHADOW_PER_LIGHT_CACHE;
+			DrawSelectionButton(
+				"A  Cache off",
+				noCacheMode,
+				ImVec2(comparisonButtonWidth, 30.0f));
+			if (ImGui::IsItemClicked()) {
+				m_motionTimeline.SetShadowComparisonMode(scene, false);
+			}
+			ImGui::SameLine();
+			DrawSelectionButton(
+				"B  Per-light cache",
+				perLightMode,
+				ImVec2(comparisonButtonWidth, 30.0f));
+			if (ImGui::IsItemClicked()) {
+				m_motionTimeline.SetShadowComparisonMode(scene, true);
+			}
+
+			const auto countShadowLights = [](const auto& lights) {
+				return static_cast<std::size_t>(std::count_if(
+					lights.begin(),
+					lights.end(),
+					[](const auto& light) {
+						return light.m_active && light.useShadowMap;
+					}));
+			};
+			const std::size_t directionalShadowCount =
+				countShadowLights(scene.lightSource.directionLights);
+			const std::size_t pointShadowCount =
+				countShadowLights(scene.lightSource.pointLights);
+			const std::size_t spotShadowCount =
+				countShadowLights(scene.lightSource.spotLights);
+			ImGui::TextColored(
+				testRigReady
+					? ImVec4(0.35f, 0.80f, 0.59f, 1.0f)
+					: ImVec4(0.94f, 0.69f, 0.31f, 1.0f),
+				testRigReady ? "READY" : "SCENE NOT READY");
+			ImGui::SameLine();
+			ImGui::TextDisabled(
+				"  shadow lights  D:%llu  P:%llu  S:%llu",
+				static_cast<unsigned long long>(
+					directionalShadowCount),
+				static_cast<unsigned long long>(pointShadowCount),
+				static_cast<unsigned long long>(spotShadowCount));
+			if (testRigReady) {
+				ImGui::TextWrapped(
+					"After one warm-up render: A expects 3 updates / 0 hits; "
+					"B expects 1 update / 2 hits; Point expects 6 submits.");
+			}
+			else {
+				ImGui::TextWrapped(
+					"Use Prepare so the preview has exactly one shadow-casting "
+					"Directional, Point, and Spot light.");
+			}
+			ImGui::PushStyleColor(
+				ImGuiCol_Text,
+				ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+			ImGui::TextWrapped(
+				"%s",
+				m_motionTimeline.GetTestRigStatusText().c_str());
+			ImGui::PopStyleColor();
+			ImGui::Spacing();
 
 			ImGui::SeparatorText("Workload");
 			static const char* profileNames[] = {
@@ -1858,27 +1969,27 @@ public:
 						0.5f);
 			DrawMetricCard(
 				"timeline_updated_lights",
-				"LAST STEP LIGHTS",
+				"UPDATED LIGHTS",
 				updatedLightsValue,
 				ImVec4(0.94f, 0.69f, 0.31f, 1.0f),
 				telemetryCardWidth);
 			ImGui::SameLine();
 			DrawMetricCard(
 				"timeline_cache_hits",
-				"LAST STEP HITS",
+				"CACHE HITS",
 				cacheHitsValue,
 				ImVec4(0.35f, 0.80f, 0.59f, 1.0f),
 				telemetryCardWidth);
 			DrawMetricCard(
 				"timeline_point_submissions",
-				"POINT SUBMITS / STEP",
+				"POINT SUBMITS",
 				submissionsValue,
 				ImVec4(0.48f, 0.64f, 0.96f, 1.0f),
 				telemetryCardWidth);
 			ImGui::SameLine();
 			DrawMetricCard(
 				"timeline_shadow_cpu",
-				"SHADOW CPU / STEP",
+				"SHADOW CPU",
 				shadowCpuValue,
 				ImVec4(0.83f, 0.50f, 0.91f, 1.0f),
 				telemetryCardWidth);
@@ -1892,7 +2003,7 @@ public:
 				ImGui::TableSetupColumn("Directional");
 				ImGui::TableSetupColumn("Point");
 				ImGui::TableSetupColumn("Spot");
-				ImGui::TableSetupColumn("Point faces");
+				ImGui::TableSetupColumn("Submits");
 				ImGui::TableHeadersRow();
 				ImGui::TableNextRow();
 				ImGui::TableSetColumnIndex(0);
@@ -2027,6 +2138,8 @@ private:
 				scene.lightSource.spotLights.size()));
 
 		const bool busy = sceneManager.IsBusy();
+		const bool temporaryTestRigActive =
+			m_motionTimeline.IsThreeLightTestRigActive();
 		ImGui::BeginDisabled(busy);
 		if (ImGui::Button("New")) {
 			QueueSceneReplacement(SceneUiReplacementAction::NewScene);
@@ -2041,6 +2154,7 @@ private:
 			}
 		}
 		ImGui::SameLine();
+		ImGui::BeginDisabled(temporaryTestRigActive);
 		if (ImGui::Button("Save")) {
 			if (sceneManager.GetCurrentDocumentPath().empty()) {
 				std::string path;
@@ -2060,6 +2174,12 @@ private:
 			}
 		}
 		ImGui::EndDisabled();
+		ImGui::EndDisabled();
+		if (temporaryTestRigActive) {
+			ImGui::TextColored(
+				ImVec4(0.94f, 0.69f, 0.31f, 1.0f),
+				"Restore the temporary three-light test before saving.");
+		}
 
 		if (SceneStateIO::HasPendingAsyncLoads()) {
 			const int pending = SceneStateIO::GetPendingAsyncLoadCount();
@@ -2211,6 +2331,9 @@ private:
 		ImGui::Separator();
 
 		if (ImGui::Button("Save and Continue")) {
+			if (m_motionTimeline.IsThreeLightTestRigActive()) {
+				m_motionTimeline.RestoreThreeLightTestRig(scene, camera);
+			}
 			bool saved = false;
 			if (sceneManager.GetCurrentDocumentPath().empty()) {
 				std::string path;
@@ -2227,6 +2350,9 @@ private:
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Continue Without Saving")) {
+			if (m_motionTimeline.IsThreeLightTestRigActive()) {
+				m_motionTimeline.RestoreThreeLightTestRig(scene, camera);
+			}
 			ExecuteSceneReplacement(sceneManager);
 		}
 		ImGui::SameLine();
@@ -2708,6 +2834,66 @@ private:
 		ImGui::PopStyleColor();
 	}
 
+	void LoadEditorFonts(ImGuiIO& io)
+	{
+		constexpr float kEditorFontSize = 16.0f;
+		const std::filesystem::path latinFont =
+			"C:\\Windows\\Fonts\\segoeui.ttf";
+		const std::filesystem::path chineseFont =
+			"C:\\Windows\\Fonts\\msyh.ttc";
+		std::error_code error;
+
+		ImFont* editorFont = nullptr;
+		if (std::filesystem::is_regular_file(latinFont, error)) {
+			ImFontConfig latinConfig;
+			latinConfig.OversampleH = 3;
+			latinConfig.OversampleV = 2;
+			latinConfig.PixelSnapH = false;
+			latinConfig.RasterizerMultiply = 1.05f;
+			std::snprintf(
+				latinConfig.Name,
+				IM_ARRAYSIZE(latinConfig.Name),
+				"Segoe UI %.0fpx",
+				kEditorFontSize);
+			editorFont = io.Fonts->AddFontFromFileTTF(
+				latinFont.string().c_str(),
+				kEditorFontSize,
+				&latinConfig);
+		}
+
+		error.clear();
+		if (editorFont &&
+			std::filesystem::is_regular_file(chineseFont, error)) {
+			ImFontConfig chineseConfig;
+			chineseConfig.MergeMode = true;
+			chineseConfig.OversampleH = 2;
+			chineseConfig.OversampleV = 1;
+			chineseConfig.PixelSnapH = false;
+			chineseConfig.RasterizerMultiply = 1.05f;
+			std::snprintf(
+				chineseConfig.Name,
+				IM_ARRAYSIZE(chineseConfig.Name),
+				"Microsoft YaHei fallback %.0fpx",
+				kEditorFontSize);
+			io.Fonts->AddFontFromFileTTF(
+				chineseFont.string().c_str(),
+				kEditorFontSize,
+				&chineseConfig,
+				io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
+		}
+
+		if (editorFont) {
+			io.FontDefault = editorFont;
+			m_editorFontDescription =
+				"Segoe UI 16 px + Microsoft YaHei Chinese fallback";
+		}
+		else {
+			io.Fonts->AddFontDefault();
+			m_editorFontDescription =
+				"Dear ImGui default (system editor font unavailable)";
+		}
+	}
+
 	void ApplyEditorStyle() {
 		ImGui::StyleColorsDark();
 		ImGuiStyle& style = ImGui::GetStyle();
@@ -2779,8 +2965,8 @@ private:
 		ImGuiID center = dockspaceId;
 
 		ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.20f, &left, &center);
-		ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.24f, &right, &center);
-		ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, 0.38f, &bottom, &center);
+		ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.27f, &right, &center);
+		ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, 0.42f, &bottom, &center);
 		ImGui::DockBuilderSplitNode(left, ImGuiDir_Down, 0.34f, &overview, &left);
 		ImGui::DockBuilderSplitNode(
 			bottom,
@@ -2840,6 +3026,7 @@ private:
 	bool m_requestLayoutReset = false;
 	bool m_rendererPanelVisible = true;
 	bool m_assetBrowserCacheInitialized = false;
+	std::string m_editorFontDescription;
 	EditorMotionTimelineController m_motionTimeline;
 	std::array<AssetBrowserCategory, 3> m_assetBrowserCategories{};
 	SceneUiReplacementAction m_sceneReplacementAction =

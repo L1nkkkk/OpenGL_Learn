@@ -67,11 +67,18 @@ public:
 	void SetPlaybackSpeed(float speed);
 	void SetLooping(bool looping) { m_looping = looping; }
 	void UseEstimatedSceneRadius(Scene& scene, Camera& camera);
+	bool PrepareThreeLightTestRig(Scene& scene, Camera& camera);
+	bool RestoreThreeLightTestRig(Scene& scene, Camera& camera);
+	void SetShadowComparisonMode(Scene& scene, bool perLightCache);
 
 	bool IsCaptured() const { return m_captured; }
 	bool IsPlaying() const { return m_playing; }
 	bool IsLooping() const { return m_looping; }
 	bool HasValidTargets(const Scene& scene) const;
+	bool IsThreeLightTestRigActive() const {
+		return m_testRigPrepared;
+	}
+	bool IsThreeLightTestRigReady(const Scene& scene) const;
 	BenchmarkMotionProfile GetProfile() const { return m_profile; }
 	int GetPointLightIndex() const { return m_pointLightIndex; }
 	int GetCasterIndex() const { return m_casterIndex; }
@@ -103,15 +110,25 @@ public:
 		return m_pointSubmissionHistory;
 	}
 	const std::string& GetStatusText() const { return m_statusText; }
+	const std::string& GetTestRigStatusText() const {
+		return m_testRigStatusText;
+	}
 
 	static float EstimateSceneRadius(const Scene& scene);
 
 private:
+	struct ShadowLightFlags {
+		bool active = true;
+		bool useShadowMap = false;
+	};
+
 	bool ValidateTargets(const Scene& scene) const;
+	bool ValidateTestRigScene(const Scene& scene) const;
 	bool ApplyCurrentSample(Scene& scene, Camera& camera);
 	void RestoreCapturedState(Scene& scene, Camera& camera);
 	void InvalidateCapture(const std::string& reason);
 	void ResetTelemetry(const Scene& scene);
+	void ClearTestRigState();
 	static std::uint64_t CounterDelta(
 		std::uint64_t previous,
 		std::uint64_t current);
@@ -146,4 +163,27 @@ private:
 	std::vector<float> m_pointSubmissionHistory;
 	std::string m_statusText =
 		"Capture the current scene state before previewing a track.";
+
+	bool m_testRigPrepared = false;
+	bool m_testRigAddedDirectionalLight = false;
+	bool m_testRigAddedSpotLight = false;
+	bool m_testRigPreviousShadowCacheDisabled = false;
+	bool m_testRigPreviousPerLightCache = true;
+	bool m_testRigPreviousPointAdaptiveRendering = true;
+	bool m_testRigPreviousPointSixFaceRendering = false;
+	std::size_t m_testRigModelCount = 0;
+	std::size_t m_testRigOriginalPointLightCount = 0;
+	std::size_t m_testRigOriginalDirectionalLightCount = 0;
+	std::size_t m_testRigOriginalSpotLightCount = 0;
+	std::size_t m_testRigPreparedDirectionalLightCount = 0;
+	std::size_t m_testRigPreparedSpotLightCount = 0;
+	int m_testRigPointLightIndex = 0;
+	int m_testRigDirectionalLightIndex = 0;
+	int m_testRigSpotLightIndex = 0;
+	std::weak_ptr<Model> m_testRigSceneAnchor;
+	std::vector<ShadowLightFlags> m_testRigPointLightFlags;
+	std::vector<ShadowLightFlags> m_testRigDirectionalLightFlags;
+	std::vector<ShadowLightFlags> m_testRigSpotLightFlags;
+	std::string m_testRigStatusText =
+		"Prepare a temporary three-light rig for a reproducible A/B preview.";
 };

@@ -65,17 +65,18 @@ UI 用于交互预览和诊断，不参与正式 A/B 计时。启动编辑器后
 推荐操作顺序：
 
 1. 在 `Scene` 面板加载场景，并确认至少存在一盏 Point Light；
-2. 在 `Renderer > Shadows & Cache` 中启用 `Shadow cache enabled` 和 `Per-light dirty cache`；
-3. 在 `Motion Timeline` 中选择 `Point light` Profile 和目标光源；如果面板提示该灯未开启阴影，点击提示旁的 `Enable`；
-4. 点击 `Capture base` 保存光源、Caster 与相机的初始状态；
-5. 点击 `Play` 开始固定帧轨迹，也可以暂停后拖动 `Frame` 精确查看任意一帧；
-6. 观察右侧 `Shadow Cache Account`：
-   - `LAST STEP LIGHTS`：最近一次固定时间轴步进中真正重画阴影的灯数；
-   - `LAST STEP HITS`：最近一次步进中复用已有 Shadow Map 的灯数；
-   - `POINT SUBMITS / STEP`：最近一次步进的 Point Cubemap 面提交数，完整更新通常为 6；
-   - `SHADOW CPU / STEP`：最近一次步进的阴影更新 CPU 时间；
+2. 点击 `Quick A/B Reproduction > Prepare 3-light test`。编辑器会临时补齐测试所需的 Directional / Spot，开启三类阴影与 Point 六面路径，并自动捕获 Point 轨迹；
+3. 选择 `A Cache off`，等待一帧预热后点击 `Play`，最近一次运动步应显示 `3 updates / 0 hits / 6 point submits`；
+4. 暂停后选择 `B Per-light cache`，等待一帧预热后再次点击 `Play`，最近一次运动步应显示 `1 update / 2 hits / 6 point submits`；
+5. 观察右侧 `Shadow Cache Account`：
+   - `UPDATED LIGHTS`：最近一次固定时间轴步进中真正重画阴影的灯数；
+   - `CACHE HITS`：最近一次步进中复用已有 Shadow Map 的灯数；
+   - `POINT SUBMITS`：最近一次步进的 Point Cubemap 面提交数，完整更新为 6；
+   - `SHADOW CPU`：最近一次步进的阴影更新 CPU 时间；
    - Directional / Point / Spot 表格：逐灯类型拆分账户；
-7. 点击 `Restore` 停止预览并恢复捕获前的场景状态。
+6. 点击 `Restore original lighting`，恢复原灯光、缓存开关和 Point Shadow 路径，并释放临时测试资源。
+
+`Prepare 3-light test` 不会凭空创建 Point Light，因为 Point Light 同时包含可见代理模型与材质资产；没有 Point Light 时，面板会明确提示先在场景中添加一盏。临时测试期间保存按钮会禁用，避免把辅助灯误写进场景文件；替换场景或正常关闭编辑器前也会自动恢复。若要自定义轨迹目标，仍可在 `Workload` 与 `Transport` 区域手动选择 Profile、目标并执行 `Capture base`。
 
 UI 与正式测试共用 `BenchmarkMotionTimeline` 的固定帧采样函数，因此相同 Profile、帧号、周期和场景半径会得到相同轨迹。区别是 UI 按实时 `deltaTime` 推进播放，正式测试直接按测量帧号取样；后者不会受到窗口交互、Dock 布局或 ImGui 开销干扰。
 
