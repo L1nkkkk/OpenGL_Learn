@@ -7,6 +7,7 @@
 相关材料：
 
 - [正式 1080p A/B 实验报告](PER_LIGHT_SHADOW_CACHE_BENCHMARK_CN.md)
+- [确定性连续运动时间轴与逐帧遥测](SHADOW_MOTION_TIMELINE_CN.md)
 - [自动生成的详细数据、图表与截图报告](docs/benchmark-images/shadow-optimizations/per-light-cache-no-cache-vs-per-light-1080p-six-face-final/report.md)
 - [正式实验原始汇总](benchmark-results/shadow-optimizations/per-light-cache-no-cache-vs-per-light-1080p-six-face-final/summary.json)
 - [完整失效矩阵](benchmark-results/shadow-optimizations/per-light-cache-invalidation-matrix.json)

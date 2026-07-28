@@ -155,6 +155,7 @@
     <ClCompile Include="..\..\imgui-docking\imgui_tables.cpp" />
     <ClCompile Include="..\..\imgui-docking\imgui_widgets.cpp" />
     <ClCompile Include="AntiAliasManager.cpp" />
+    <ClCompile Include="BenchmarkMotionTimeline.cpp" />
     <ClCompile Include="callbacks.cpp" />
     <ClCompile Include="DeferRenderPass.cpp" />
     <ClCompile Include="EditorSceneManager.cpp" />
@@ -182,6 +183,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="callbacks.h" />
+    <ClInclude Include="BenchmarkMotionTimeline.h" />
     <ClInclude Include="DeferRenderPass.h" />
     <ClInclude Include="EditorSceneManager.h" />
     <ClInclude Include="ForwardRenderPass.h" />

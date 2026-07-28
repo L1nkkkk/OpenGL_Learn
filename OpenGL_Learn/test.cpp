@@ -29,6 +29,7 @@
 #include "ImageBasedLighting.h"
 #include "SceneStateIO.h"
 #include "EditorSceneManager.h"
+#include "BenchmarkMotionTimeline.h"
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -77,6 +78,22 @@ struct FrameTimingStats {
 	double medianMilliseconds = 0.0;
 	double p95Milliseconds = 0.0;
 	double p99Milliseconds = 0.0;
+};
+
+struct BenchmarkTimelineFrameTelemetry {
+	int measurementFrame = 0;
+	BenchmarkMotionSample motion;
+	double wallMilliseconds = 0.0;
+	double shadowUpdateCpuMilliseconds = 0.0;
+	std::uint64_t updateCount = 0;
+	std::uint64_t cacheHitCount = 0;
+	std::uint64_t lightCacheHitCount = 0;
+	std::uint64_t updatedLightCount = 0;
+	std::uint64_t directionalLightUpdateCount = 0;
+	std::uint64_t pointLightUpdateCount = 0;
+	std::uint64_t pointShadowSubmissionPassCount = 0;
+	std::uint64_t spotLightUpdateCount = 0;
+	std::uint64_t casterBoundsRebuildCount = 0;
 };
 
 struct PointShadowFaceEvidence {
@@ -133,6 +150,8 @@ struct ClassicSceneTestOptions {
 	int height = 900;
 	int warmupFrames = 15;
 	int captureFrame = 60;
+	int timelineFixedFramesPerSecond = 60;
+	int timelineCycleFrames = 600;
 };
 
 bool ParseFloatArgument(const std::string& text, float& value)
@@ -325,6 +344,14 @@ bool ParseClassicSceneTestOptions(
 		}
 		else if (readInt("--classic-scene-capture-frame", options.captureFrame)) {
 		}
+		else if (readInt(
+			"--classic-scene-timeline-fps",
+			options.timelineFixedFramesPerSecond)) {
+		}
+		else if (readInt(
+			"--classic-scene-timeline-cycle-frames",
+			options.timelineCycleFrames)) {
+		}
 		else if (argument == "--classic-scene-untextured") {
 			options.untextured = true;
 		}
@@ -415,13 +442,18 @@ bool ParseClassicSceneTestOptions(
 		options.shadowWorkload != "reload-shadow-point" &&
 		options.shadowWorkload != "resize-point-shadow" &&
 		options.shadowWorkload != "replace-point-shadow-target" &&
-		options.shadowWorkload != "toggle-caster") {
+		options.shadowWorkload != "toggle-caster" &&
+		options.shadowWorkload != "timeline-point" &&
+		options.shadowWorkload != "timeline-caster" &&
+		options.shadowWorkload != "timeline-camera" &&
+		options.shadowWorkload != "timeline-mixed") {
 		errorMessage =
 			"--classic-scene-shadow-workload must be static-hit, force-update, "
 			"move-directional, move-point, move-spot, move-caster, "
 			"change-caster-material, reload-shadow-2d, "
 			"reload-shadow-point, resize-point-shadow, "
-			"replace-point-shadow-target, or toggle-caster";
+			"replace-point-shadow-target, toggle-caster, timeline-point, "
+			"timeline-caster, timeline-camera, or timeline-mixed";
 		return false;
 	}
 	if (options.shadowVariant.empty()) {
@@ -447,6 +479,18 @@ bool ParseClassicSceneTestOptions(
 			"--classic-scene-capture-frame must be greater than the warm-up frame count";
 		return false;
 	}
+	if (options.timelineFixedFramesPerSecond < 1 ||
+		options.timelineFixedFramesPerSecond > 1000) {
+		errorMessage =
+			"--classic-scene-timeline-fps must be between 1 and 1000";
+		return false;
+	}
+	if (options.timelineCycleFrames < 4 ||
+		options.timelineCycleFrames > 36000) {
+		errorMessage =
+			"--classic-scene-timeline-cycle-frames must be between 4 and 36000";
+		return false;
+	}
 	if (options.shadowWorkload != "static-hit" &&
 		options.shadowMode == "off") {
 		errorMessage =
@@ -460,10 +504,17 @@ bool ParseClassicSceneTestOptions(
 			"move-directional requires directional or all shadow lights";
 		return false;
 	}
-	if (options.shadowWorkload == "move-point" &&
+	if ((options.shadowWorkload == "move-point" ||
+			options.shadowWorkload == "timeline-point") &&
 		options.shadowLights != "point" &&
 		options.shadowLights != "all") {
-		errorMessage = "move-point requires point or all shadow lights";
+		errorMessage =
+			"point-motion workloads require point or all shadow lights";
+		return false;
+	}
+	if (options.shadowWorkload == "timeline-mixed" &&
+		options.shadowLights != "all") {
+		errorMessage = "timeline-mixed requires all shadow lights";
 		return false;
 	}
 	if ((options.shadowWorkload == "reload-shadow-point" ||
@@ -675,6 +726,139 @@ double CounterDelta(
 	double after)
 {
 	return after >= before ? after - before : 0.0;
+}
+
+void WriteJsonVec3(std::ostream& output, const glm::vec3& value)
+{
+	output << "["
+		<< value.x << ", "
+		<< value.y << ", "
+		<< value.z << "]";
+}
+
+void WriteJsonBenchmarkMotionTimeline(
+	std::ostream& output,
+	const BenchmarkMotionTimeline& timeline,
+	const std::vector<BenchmarkTimelineFrameTelemetry>& telemetry)
+{
+	const BenchmarkMotionProfile profile = timeline.GetProfile();
+	const BenchmarkMotionTimelineConfig& config = timeline.GetConfig();
+	const BenchmarkMotionBaseState& baseState = timeline.GetBaseState();
+	const std::uint32_t trackMask = timeline.GetTrackMask();
+	output << "{\n"
+		<< "    \"schemaVersion\": 1,\n"
+		<< "    \"enabled\": "
+		<< (profile != BenchmarkMotionProfile::None ? "true" : "false")
+		<< ",\n"
+		<< "    \"profile\": \""
+		<< BenchmarkMotionTimeline::ProfileName(profile) << "\",\n"
+		<< "    \"fixedFramesPerSecond\": "
+		<< config.fixedFramesPerSecond << ",\n"
+		<< "    \"cycleFrames\": " << config.cycleFrames << ",\n"
+		<< "    \"sceneRadius\": " << config.sceneRadius << ",\n"
+		<< "    \"trackMask\": " << trackMask << ",\n"
+		<< "    \"tracks\": [";
+	bool wroteTrack = false;
+	auto writeTrack = [&](BenchmarkMotionTrack track, const char* name) {
+		if (!BenchmarkMotionTimeline::HasTrack(trackMask, track)) {
+			return;
+		}
+		output << (wroteTrack ? ", " : "") << "\"" << name << "\"";
+		wroteTrack = true;
+	};
+	writeTrack(BenchmarkMotionTrack::Point, "point");
+	writeTrack(BenchmarkMotionTrack::Caster, "caster");
+	writeTrack(BenchmarkMotionTrack::Camera, "camera");
+	output << "],\n"
+		<< "    \"amplitudeRatios\": {\n"
+		<< "      \"pointHorizontal\": "
+		<< config.pointHorizontalRadiusRatio << ",\n"
+		<< "      \"pointVertical\": "
+		<< config.pointVerticalRadiusRatio << ",\n"
+		<< "      \"casterHorizontal\": "
+		<< config.casterHorizontalRadiusRatio << ",\n"
+		<< "      \"casterVertical\": "
+		<< config.casterVerticalRadiusRatio << ",\n"
+		<< "      \"cameraPosition\": "
+		<< config.cameraPositionRadiusRatio << ",\n"
+		<< "      \"cameraTarget\": "
+		<< config.cameraTargetRadiusRatio << "\n"
+		<< "    },\n"
+		<< "    \"baseState\": {\n"
+		<< "      \"pointPosition\": ";
+	WriteJsonVec3(output, baseState.pointPosition);
+	output << ",\n"
+		<< "      \"casterPosition\": ";
+	WriteJsonVec3(output, baseState.casterPosition);
+	output << ",\n"
+		<< "      \"cameraPosition\": ";
+	WriteJsonVec3(output, baseState.cameraPosition);
+	output << ",\n"
+		<< "      \"cameraTarget\": ";
+	WriteJsonVec3(output, baseState.cameraTarget);
+	output << ",\n"
+		<< "      \"cameraUp\": ";
+	WriteJsonVec3(output, baseState.cameraUp);
+	output << "\n"
+		<< "    },\n"
+		<< "    \"samples\": [";
+	for (std::size_t index = 0; index < telemetry.size(); ++index) {
+		const BenchmarkTimelineFrameTelemetry& frame = telemetry[index];
+		output << (index == 0 ? "\n" : ",\n")
+			<< "      {\n"
+			<< "        \"measurementFrame\": "
+			<< frame.measurementFrame << ",\n"
+			<< "        \"timelineFrame\": "
+			<< frame.motion.frameIndex << ",\n"
+			<< "        \"cycleFrame\": "
+			<< frame.motion.cycleFrame << ",\n"
+			<< "        \"fixedTimeSeconds\": "
+			<< frame.motion.fixedTimeSeconds << ",\n"
+			<< "        \"normalizedPhase\": "
+			<< frame.motion.normalizedPhase << ",\n"
+			<< "        \"wallMilliseconds\": "
+			<< frame.wallMilliseconds << ",\n"
+			<< "        \"pointPosition\": ";
+		WriteJsonVec3(output, frame.motion.pointPosition);
+		output << ",\n"
+			<< "        \"casterPosition\": ";
+		WriteJsonVec3(output, frame.motion.casterPosition);
+		output << ",\n"
+			<< "        \"cameraPosition\": ";
+		WriteJsonVec3(output, frame.motion.cameraPosition);
+		output << ",\n"
+			<< "        \"cameraTarget\": ";
+		WriteJsonVec3(output, frame.motion.cameraTarget);
+		output << ",\n"
+			<< "        \"shadow\": {\n"
+			<< "          \"updateCount\": "
+			<< frame.updateCount << ",\n"
+			<< "          \"cacheHitCount\": "
+			<< frame.cacheHitCount << ",\n"
+			<< "          \"lightCacheHitCount\": "
+			<< frame.lightCacheHitCount << ",\n"
+			<< "          \"updatedLightCount\": "
+			<< frame.updatedLightCount << ",\n"
+			<< "          \"directionalLightUpdateCount\": "
+			<< frame.directionalLightUpdateCount << ",\n"
+			<< "          \"pointLightUpdateCount\": "
+			<< frame.pointLightUpdateCount << ",\n"
+			<< "          \"pointShadowSubmissionPassCount\": "
+			<< frame.pointShadowSubmissionPassCount << ",\n"
+			<< "          \"spotLightUpdateCount\": "
+			<< frame.spotLightUpdateCount << ",\n"
+			<< "          \"casterBoundsRebuildCount\": "
+			<< frame.casterBoundsRebuildCount << ",\n"
+			<< "          \"updateCpuMilliseconds\": "
+			<< frame.shadowUpdateCpuMilliseconds << "\n"
+			<< "        }\n"
+			<< "      }";
+	}
+	if (!telemetry.empty()) {
+		output << "\n    ";
+	}
+	output << "]\n"
+		<< "  }";
 }
 
 std::uint64_t HashFloatBits(const std::vector<float>& samples)
@@ -911,6 +1095,8 @@ bool WriteClassicSceneResult(
 	const MemoryStats& memory,
 	const Scene::ShadowSystemStats& shadowStats,
 	const Scene::ShadowSystemStats& measurementStartShadowStats,
+	const BenchmarkMotionTimeline& motionTimeline,
+	const std::vector<BenchmarkTimelineFrameTelemetry>& timelineTelemetry,
 	const ProfilerBenchmarkSamples& profilerSamples,
 	float actualSpotShadowNearPlane,
 	float actualSpotShadowFarPlane)
@@ -1474,6 +1660,12 @@ bool WriteClassicSceneResult(
 	WriteJsonPointShadowCubeEvidence(output, pointShadowCubeEvidence);
 	output << "\n"
 		<< "  },\n"
+		<< "  \"motionTimeline\": ";
+	WriteJsonBenchmarkMotionTimeline(
+		output,
+		motionTimeline,
+		timelineTelemetry);
+	output << ",\n"
 		<< "  \"loadMilliseconds\": " << loadMilliseconds << ",\n"
 		<< "  \"frameTimeMilliseconds\": {\n"
 		<< "    \"sampleCount\": " << frameTiming.sampleCount << ",\n"
@@ -2295,8 +2487,11 @@ int main(int argc, char** argv) {
 	int classicSceneFrames = 0;
 	std::vector<unsigned char> pbrForwardPixels;
 	std::vector<double> classicSceneFrameMilliseconds;
+	std::vector<BenchmarkTimelineFrameTelemetry>
+		classicSceneTimelineTelemetry;
 	bool classicSceneProfilerCaptureStarted = false;
 	Scene::ShadowSystemStats classicSceneMeasurementStartShadowStats;
+	Scene::ShadowSystemStats classicScenePreviousFrameShadowStats;
 	const glm::vec3 classicSceneBaseModelPosition =
 		classicSceneModel ? classicSceneModel->position : glm::vec3(0.0f);
 	const glm::vec3 classicSceneBaseDirection =
@@ -2321,10 +2516,78 @@ int main(int argc, char** argv) {
 				classicSceneOptions.cameraTarget -
 				classicSceneOptions.cameraPosition)
 			: scene.lightSource.spotLights.front().direction;
+	BenchmarkMotionTimelineConfig classicSceneTimelineConfig;
+	classicSceneTimelineConfig.fixedFramesPerSecond =
+		classicSceneOptions.timelineFixedFramesPerSecond;
+	classicSceneTimelineConfig.cycleFrames =
+		classicSceneOptions.timelineCycleFrames;
+	classicSceneTimelineConfig.sceneRadius =
+		classicSceneOptions.normalizedRadius;
+	BenchmarkMotionBaseState classicSceneMotionBaseState;
+	classicSceneMotionBaseState.pointPosition =
+		classicSceneBasePointPosition;
+	classicSceneMotionBaseState.casterPosition =
+		classicSceneBaseModelPosition;
+	classicSceneMotionBaseState.cameraPosition =
+		classicSceneOptions.cameraPosition;
+	classicSceneMotionBaseState.cameraTarget =
+		classicSceneOptions.cameraTarget;
+	classicSceneMotionBaseState.cameraUp =
+		classicSceneOptions.cameraUp;
+	const BenchmarkMotionTimeline classicSceneMotionTimeline(
+		BenchmarkMotionTimeline::ProfileFromWorkload(
+			classicSceneOptions.shadowWorkload),
+		classicSceneTimelineConfig,
+		classicSceneMotionBaseState);
+	BenchmarkMotionSample classicSceneCurrentMotionSample =
+		classicSceneMotionTimeline.Sample(
+			-classicSceneOptions.warmupFrames);
 	auto applyClassicShadowWorkload = [&](int frameNumber) {
 		if (!classicSceneOptions.enabled ||
 			!classicSceneOptions.shadowExperiment ||
 			classicSceneOptions.shadowWorkload == "static-hit") {
+			return;
+		}
+
+		if (BenchmarkMotionTimeline::IsTimelineWorkload(
+			classicSceneOptions.shadowWorkload)) {
+			const int timelineFrame =
+				frameNumber -
+				classicSceneOptions.warmupFrames -
+				1;
+			classicSceneCurrentMotionSample =
+				classicSceneMotionTimeline.Sample(timelineFrame);
+			const std::uint32_t trackMask =
+				classicSceneCurrentMotionSample.trackMask;
+			if (BenchmarkMotionTimeline::HasTrack(
+				trackMask,
+				BenchmarkMotionTrack::Point) &&
+				!scene.lightSource.pointLights.empty()) {
+				scene.lightSource.pointLights.front().SetPosition(
+					classicSceneCurrentMotionSample.pointPosition);
+			}
+			if (BenchmarkMotionTimeline::HasTrack(
+				trackMask,
+				BenchmarkMotionTrack::Caster) &&
+				classicSceneModel) {
+				classicSceneModel->SetPosition(
+					classicSceneCurrentMotionSample.casterPosition);
+			}
+			if (BenchmarkMotionTimeline::HasTrack(
+				trackMask,
+				BenchmarkMotionTrack::Camera)) {
+				const glm::vec3 cameraDirection =
+					classicSceneCurrentMotionSample.cameraTarget -
+					classicSceneCurrentMotionSample.cameraPosition;
+				camera.cameraPos =
+					classicSceneCurrentMotionSample.cameraPosition;
+				if (glm::length(cameraDirection) > 0.0001f) {
+					camera.cameraFront =
+						glm::normalize(cameraDirection);
+				}
+				camera.up =
+					classicSceneCurrentMotionSample.cameraUp;
+			}
 			return;
 		}
 
@@ -2614,6 +2877,8 @@ int main(int argc, char** argv) {
 			classicSceneFrames == classicSceneOptions.warmupFrames) {
 			classicSceneMeasurementStartShadowStats =
 				scene.GetShadowSystemStats();
+			classicScenePreviousFrameShadowStats =
+				classicSceneMeasurementStartShadowStats;
 			PerformanceProfiler::GetInstance().BeginBenchmarkCapture(
 				static_cast<std::size_t>(
 					classicSceneOptions.captureFrame -
@@ -2957,6 +3222,67 @@ int main(int argc, char** argv) {
 				classicSceneFrameMilliseconds.push_back(frameMilliseconds);
 				PerformanceProfiler::GetInstance().RecordBenchmarkWallFrame(
 					frameMilliseconds);
+				if (classicSceneMotionTimeline.GetProfile() !=
+					BenchmarkMotionProfile::None) {
+					const Scene::ShadowSystemStats& currentShadowStats =
+						scene.GetShadowSystemStats();
+					BenchmarkTimelineFrameTelemetry frameTelemetry;
+					frameTelemetry.measurementFrame =
+						classicSceneFrames -
+						classicSceneOptions.warmupFrames -
+						1;
+					frameTelemetry.motion =
+						classicSceneCurrentMotionSample;
+					frameTelemetry.wallMilliseconds =
+						frameMilliseconds;
+					frameTelemetry.updateCount = CounterDelta(
+						classicScenePreviousFrameShadowStats.updateCount,
+						currentShadowStats.updateCount);
+					frameTelemetry.cacheHitCount = CounterDelta(
+						classicScenePreviousFrameShadowStats.cacheHitCount,
+						currentShadowStats.cacheHitCount);
+					frameTelemetry.lightCacheHitCount = CounterDelta(
+						classicScenePreviousFrameShadowStats.lightCacheHitCount,
+						currentShadowStats.lightCacheHitCount);
+					frameTelemetry.directionalLightUpdateCount =
+						CounterDelta(
+							classicScenePreviousFrameShadowStats
+								.directionalLightUpdateCount,
+							currentShadowStats.directionalLightUpdateCount);
+					frameTelemetry.pointLightUpdateCount = CounterDelta(
+						classicScenePreviousFrameShadowStats
+							.pointLightUpdateCount,
+						currentShadowStats.pointLightUpdateCount);
+					frameTelemetry.pointShadowSubmissionPassCount =
+						CounterDelta(
+							classicScenePreviousFrameShadowStats
+								.pointShadowSubmissionPassCount,
+							currentShadowStats
+								.pointShadowSubmissionPassCount);
+					frameTelemetry.spotLightUpdateCount = CounterDelta(
+						classicScenePreviousFrameShadowStats
+							.spotLightUpdateCount,
+						currentShadowStats.spotLightUpdateCount);
+					frameTelemetry.updatedLightCount =
+						frameTelemetry.directionalLightUpdateCount +
+						frameTelemetry.pointLightUpdateCount +
+						frameTelemetry.spotLightUpdateCount;
+					frameTelemetry.casterBoundsRebuildCount =
+						CounterDelta(
+							classicScenePreviousFrameShadowStats
+								.casterBoundsRebuildCount,
+							currentShadowStats
+								.casterBoundsRebuildCount);
+					frameTelemetry.shadowUpdateCpuMilliseconds =
+						frameTelemetry.updateCount > 0
+							? currentShadowStats
+								.lastUpdateCpuMilliseconds
+							: 0.0;
+					classicSceneTimelineTelemetry.push_back(
+						frameTelemetry);
+					classicScenePreviousFrameShadowStats =
+						currentShadowStats;
+				}
 			}
 		}
 		}
@@ -2998,9 +3324,14 @@ int main(int argc, char** argv) {
 				classicSceneOptions.shadowMode != "off" &&
 				(classicSceneOptions.shadowLights == "point" ||
 					classicSceneOptions.shadowLights == "all");
+			const bool timelineCaptureSucceeded =
+				classicSceneMotionTimeline.GetProfile() ==
+					BenchmarkMotionProfile::None ||
+				classicSceneTimelineTelemetry.size() == expectedSamples;
 			const bool captureSucceeded =
 				capture.valid &&
 				profilerCaptureSucceeded &&
+				timelineCaptureSucceeded &&
 				(!requiresImageBasedLighting || imageBasedLighting.IsReady()) &&
 				(!requiresPointShadowEvidence ||
 					pointShadowCubeEvidence.valid) &&
@@ -3010,6 +3341,14 @@ int main(int argc, char** argv) {
 				std::cerr
 					<< "[ClassicScene] point shadow cubemap evidence "
 					<< "is unavailable or invalid"
+					<< std::endl;
+			}
+			if (!timelineCaptureSucceeded) {
+				std::cerr
+					<< "[ClassicScene] timeline telemetry count mismatch: "
+					<< "expected=" << expectedSamples
+					<< " actual="
+					<< classicSceneTimelineTelemetry.size()
 					<< std::endl;
 			}
 			const MemoryStats memory =
@@ -3038,6 +3377,8 @@ int main(int argc, char** argv) {
 				memory,
 				scene.GetShadowSystemStats(),
 				classicSceneMeasurementStartShadowStats,
+				classicSceneMotionTimeline,
+				classicSceneTimelineTelemetry,
 				profilerSamples,
 				actualSpotShadowNearPlane,
 				actualSpotShadowFarPlane)) {

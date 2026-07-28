@@ -41,7 +41,11 @@ param(
         "reload-shadow-point",
         "resize-point-shadow",
         "replace-point-shadow-target",
-        "toggle-caster"
+        "toggle-caster",
+        "timeline-point",
+        "timeline-caster",
+        "timeline-camera",
+        "timeline-mixed"
     )]
     [string]$Workload = "static-hit",
     [ValidateSet("directional", "point", "spot", "all")]
@@ -77,7 +81,11 @@ param(
     })]
     [double]$SpotFarPlane = 0.0,
     [double[]]$SpotLight = @(),
-    [double[]]$SpotDirection = @()
+    [double[]]$SpotDirection = @(),
+    [ValidateRange(1, 1000)]
+    [int]$TimelineFps = 60,
+    [ValidateRange(4, 36000)]
+    [int]$TimelineCycleFrames = 600
 )
 
 $ErrorActionPreference = "Stop"
@@ -250,8 +258,12 @@ if ($Workload -eq "move-directional" -and
     $Lights -notin @("directional", "all")) {
     throw "move-directional requires -Lights directional or all."
 }
-if ($Workload -eq "move-point" -and $Lights -notin @("point", "all")) {
-    throw "move-point requires -Lights point or all."
+if ($Workload -in @("move-point", "timeline-point") -and
+    $Lights -notin @("point", "all")) {
+    throw "$Workload requires -Lights point or all."
+}
+if ($Workload -eq "timeline-mixed" -and $Lights -ne "all") {
+    throw "timeline-mixed requires -Lights all."
 }
 if ($Workload -in @(
         "reload-shadow-point",
@@ -334,7 +346,9 @@ $reservedVariantArguments = @(
     "--classic-scene-spot-light",
     "--classic-scene-spot-direction",
     "--classic-scene-spot-near-plane",
-    "--classic-scene-spot-far-plane"
+    "--classic-scene-spot-far-plane",
+    "--classic-scene-timeline-fps",
+    "--classic-scene-timeline-cycle-frames"
 )
 foreach ($argument in @($VariantAArguments) + @($VariantBArguments)) {
     if ($argument -in $reservedVariantArguments) {
@@ -1321,13 +1335,145 @@ function Assert-RunResult {
             )
         }
     }
-    if ($Workload -eq "static-hit") {
+    $timelineWorkloads = @(
+        "timeline-point",
+        "timeline-caster",
+        "timeline-camera",
+        "timeline-mixed"
+    )
+    $timelineProperty =
+        $Result.PSObject.Properties["motionTimeline"]
+    if (-not $timelineProperty) {
+        throw "$($Scene.displayName) $Label did not record motionTimeline."
+    }
+    $isTimelineWorkload = $Workload -in $timelineWorkloads
+    $timeline = $timelineProperty.Value
+    if ([bool]$timeline.enabled -ne $isTimelineWorkload) {
+        throw "$($Scene.displayName) $Label timeline enabled state mismatch."
+    }
+    $timelineSamples = @($timeline.samples)
+    if ($isTimelineWorkload) {
+        $expectedProfile = $Workload.Substring("timeline-".Length)
+        $expectedTracks = switch ($Workload) {
+            "timeline-point" { @("point") }
+            "timeline-caster" { @("caster") }
+            "timeline-camera" { @("camera") }
+            "timeline-mixed" { @("point", "caster", "camera") }
+        }
+        if ([int]$timeline.schemaVersion -ne 1 -or
+            [string]$timeline.profile -ne $expectedProfile -or
+            [int]$timeline.fixedFramesPerSecond -ne $TimelineFps -or
+            [int]$timeline.cycleFrames -ne $TimelineCycleFrames -or
+            $timelineSamples.Count -ne $ExpectedSamples -or
+            (@($timeline.tracks) -join ",") -ne
+                ($expectedTracks -join ",")) {
+            throw "$($Scene.displayName) $Label timeline metadata mismatch."
+        }
+        for ($sampleIndex = 0;
+            $sampleIndex -lt $timelineSamples.Count;
+            ++$sampleIndex) {
+            $sample = $timelineSamples[$sampleIndex]
+            $expectedCycleFrame =
+                $sampleIndex % $TimelineCycleFrames
+            $expectedFixedTime =
+                [double]$sampleIndex / [double]$TimelineFps
+            $expectedPhase =
+                [double]$expectedCycleFrame /
+                [double]$TimelineCycleFrames
+            if ([int]$sample.measurementFrame -ne $sampleIndex -or
+                [int]$sample.timelineFrame -ne $sampleIndex -or
+                [int]$sample.cycleFrame -ne $expectedCycleFrame -or
+                [Math]::Abs(
+                    [double]$sample.fixedTimeSeconds -
+                    $expectedFixedTime
+                ) -gt 1e-5 -or
+                [Math]::Abs(
+                    [double]$sample.normalizedPhase -
+                    $expectedPhase
+                ) -gt 1e-5) {
+                throw (
+                    "$($Scene.displayName) $Label timeline sample " +
+                    "$sampleIndex is not frame-deterministic."
+                )
+            }
+            foreach ($vectorName in @(
+                "pointPosition",
+                "casterPosition",
+                "cameraPosition",
+                "cameraTarget"
+            )) {
+                $vector = @($sample.$vectorName)
+                if ($vector.Count -ne 3) {
+                    throw (
+                        "$($Scene.displayName) $Label timeline " +
+                        "$vectorName is not a vec3."
+                    )
+                }
+                foreach ($component in $vector) {
+                    if ([double]::IsNaN([double]$component) -or
+                        [double]::IsInfinity([double]$component)) {
+                        throw (
+                            "$($Scene.displayName) $Label timeline " +
+                            "$vectorName contains a non-finite value."
+                        )
+                    }
+                }
+            }
+            if ([Math]::Abs(
+                    [double]$sample.wallMilliseconds -
+                    [double]$Result.profiler.samples.wallFrame[$sampleIndex]
+                ) -gt 1e-5) {
+                throw (
+                    "$($Scene.displayName) $Label timeline wall sample " +
+                    "$sampleIndex is not aligned with profiler samples."
+                )
+            }
+        }
+        $timelineCounterMap = [ordered]@{
+            "updateCount" = "measuredUpdateCount"
+            "cacheHitCount" = "measuredCacheHitCount"
+            "lightCacheHitCount" = "measuredLightCacheHitCount"
+            "updatedLightCount" = "measuredUpdatedLightCount"
+            "directionalLightUpdateCount" =
+                "measuredDirectionalLightUpdateCount"
+            "pointLightUpdateCount" = "measuredPointLightUpdateCount"
+            "pointShadowSubmissionPassCount" =
+                "measuredPointShadowSubmissionPassCount"
+            "spotLightUpdateCount" = "measuredSpotLightUpdateCount"
+            "casterBoundsRebuildCount" =
+                "measuredCasterBoundsRebuildCount"
+        }
+        foreach ($frameField in $timelineCounterMap.Keys) {
+            $aggregateField = $timelineCounterMap[$frameField]
+            $sum = (
+                $timelineSamples |
+                    ForEach-Object {
+                        [int64]$_.shadow.$frameField
+                    } |
+                    Measure-Object -Sum
+            ).Sum
+            if ([int64]$sum -ne
+                [int64]$Result.shadow.$aggregateField) {
+                throw (
+                    "$($Scene.displayName) $Label timeline $frameField " +
+                    "does not reconcile with $aggregateField."
+                )
+            }
+        }
+    }
+    elseif ([string]$timeline.profile -ne "none" -or
+        $timelineSamples.Count -ne 0) {
+        throw "$($Scene.displayName) $Label emitted unexpected timeline samples."
+    }
+    $shadowStableWorkload =
+        $Workload -in @("static-hit", "timeline-camera")
+    if ($shadowStableWorkload) {
         if ($cacheDisabled) {
             if ([int64]$Result.shadow.measuredUpdateCount -ne
                     $ExpectedSamples -or
                 [int64]$Result.shadow.measuredCacheHitCount -ne 0) {
                 throw (
-                    "$($Scene.displayName) $Label uncached static-update " +
+                    "$($Scene.displayName) $Label uncached stable-shadow " +
                     "invariant failed."
                 )
             }
@@ -1337,7 +1483,7 @@ function Assert-RunResult {
                 [int64]$Result.shadow.measuredCacheHitCount -ne
                 $ExpectedSamples) {
                 throw (
-                    "$($Scene.displayName) $Label static cache " +
+                    "$($Scene.displayName) $Label stable-shadow cache " +
                     "invariant failed."
                 )
             }
@@ -1346,7 +1492,7 @@ function Assert-RunResult {
             if ($updatedLightsProperty -and
                 [int64]$updatedLightsProperty.Value -ne 0) {
                 throw (
-                    "$($Scene.displayName) $Label static light-update " +
+                    "$($Scene.displayName) $Label stable-shadow light-update " +
                     "invariant failed."
                 )
             }
@@ -1397,13 +1543,15 @@ function Assert-RunResult {
     $expectedDirectionalUpdates = 0L
     $expectedPointUpdates = 0L
     $expectedSpotUpdates = 0L
-    if ($Workload -ne "static-hit" -or -not $perLightCacheEnabled) {
+    if (-not $shadowStableWorkload -or -not $perLightCacheEnabled) {
         $updateEveryEnabledLight =
             $Workload -in @(
                 "force-update",
                 "move-caster",
                 "change-caster-material",
-                "toggle-caster"
+                "toggle-caster",
+                "timeline-caster",
+                "timeline-mixed"
             ) -or
             -not $perLightCacheEnabled
         $expectedDirectionalUpdates = if (
@@ -1424,6 +1572,8 @@ function Assert-RunResult {
             ($updateEveryEnabledLight -or
                 $Workload -in @(
                     "move-point",
+                    "timeline-point",
+                    "timeline-mixed",
                     "reload-shadow-point",
                     "resize-point-shadow",
                     "replace-point-shadow-target"
@@ -1474,7 +1624,7 @@ function Assert-RunResult {
         [int]$spotEnabled
     $expectedLightHits = 0L
     if ($perLightCacheEnabled) {
-        if ($Workload -eq "static-hit") {
+        if ($shadowStableWorkload) {
             $expectedLightHits =
                 [int64]$ExpectedSamples * $enabledLightCount
         }
@@ -1741,6 +1891,9 @@ function Invoke-ShadowOptimizationRun {
         "--classic-scene-height", [string]$Height,
         "--classic-scene-warmup-frames", [string]$InternalWarmupFrames,
         "--classic-scene-capture-frame", [string]$captureFrame,
+        "--classic-scene-timeline-fps", [string]$TimelineFps,
+        "--classic-scene-timeline-cycle-frames",
+            [string]$TimelineCycleFrames,
         "--classic-scene-shadow-mode", $Mode,
         "--classic-scene-shadow-sampling", $Sampling,
         "--classic-scene-shadow-lights", $Lights,
@@ -1918,6 +2071,8 @@ $metadata = [ordered]@{
         spotFarPlane = $SpotFarPlane
         spotLight = @($SpotLight)
         spotDirection = @($SpotDirection)
+        timelineFps = $TimelineFps
+        timelineCycleFrames = $TimelineCycleFrames
         sceneIds = $SceneIds
         variantALabel = $VariantALabel
         variantBLabel = $VariantBLabel
