@@ -11,7 +11,8 @@ enum class BenchmarkMotionProfile {
 	Caster,
 	Camera,
 	PointCamera,
-	Mixed
+	Mixed,
+	CacheThreeWay
 };
 
 enum class BenchmarkMotionTrack : std::uint32_t {

@@ -63,7 +63,30 @@ BenchmarkMotionSample BenchmarkMotionTimeline::Sample(int frameIndex) const
 	sample.cameraTarget = m_baseState.cameraTarget;
 	sample.cameraUp = m_baseState.cameraUp;
 
-	const double angle = sample.normalizedPhase * kTwoPi;
+	double localMotionPhase = sample.normalizedPhase;
+	if (m_profile == BenchmarkMotionProfile::CacheThreeWay) {
+		const int segment = (std::min)(
+			2,
+			sample.cycleFrame * 3 /
+				(std::max)(1, m_config.cycleFrames));
+		sample.trackMask =
+			static_cast<std::uint32_t>(BenchmarkMotionTrack::Camera);
+		if (segment == 0) {
+			sample.trackMask |=
+				static_cast<std::uint32_t>(
+					BenchmarkMotionTrack::Point);
+		}
+		else if (segment == 1) {
+			sample.trackMask |=
+				static_cast<std::uint32_t>(
+					BenchmarkMotionTrack::Caster);
+		}
+		localMotionPhase =
+			std::fmod(sample.normalizedPhase * 3.0, 1.0);
+	}
+	const double angle = localMotionPhase * kTwoPi;
+	const double cameraAngle =
+		sample.normalizedPhase * kTwoPi;
 	const float radius = m_config.sceneRadius;
 	if (HasTrack(sample.trackMask, BenchmarkMotionTrack::Point)) {
 		sample.pointPosition += radius * glm::vec3(
@@ -79,13 +102,16 @@ BenchmarkMotionSample BenchmarkMotionTimeline::Sample(int frameIndex) const
 	}
 	if (HasTrack(sample.trackMask, BenchmarkMotionTrack::Camera)) {
 		sample.cameraPosition += radius * glm::vec3(
-			m_config.cameraPositionRadiusRatio * Wave(angle),
-			m_config.cameraPositionRadiusRatio * 0.4f * Wave(angle * 2.0),
-			m_config.cameraPositionRadiusRatio * 0.8f * Orbit(angle));
-		const double targetAngle = angle + kTwoPi / 6.0;
+			m_config.cameraPositionRadiusRatio * Wave(cameraAngle),
+			m_config.cameraPositionRadiusRatio * 0.4f *
+				Wave(cameraAngle * 2.0),
+			m_config.cameraPositionRadiusRatio * 0.8f *
+				Orbit(cameraAngle));
+		const double targetAngle = cameraAngle + kTwoPi / 6.0;
 		sample.cameraTarget += radius * glm::vec3(
 			m_config.cameraTargetRadiusRatio * Wave(targetAngle),
-			m_config.cameraTargetRadiusRatio * 0.5f * Wave(angle * 2.0),
+			m_config.cameraTargetRadiusRatio * 0.5f *
+				Wave(cameraAngle * 2.0),
 			m_config.cameraTargetRadiusRatio * Orbit(targetAngle));
 	}
 
@@ -121,6 +147,9 @@ BenchmarkMotionProfile BenchmarkMotionTimeline::ProfileFromWorkload(
 	if (workload == "timeline-mixed") {
 		return BenchmarkMotionProfile::Mixed;
 	}
+	if (workload == "timeline-cache-3way") {
+		return BenchmarkMotionProfile::CacheThreeWay;
+	}
 	return BenchmarkMotionProfile::None;
 }
 
@@ -138,6 +167,8 @@ const char* BenchmarkMotionTimeline::ProfileName(
 		return "point-camera";
 	case BenchmarkMotionProfile::Mixed:
 		return "mixed";
+	case BenchmarkMotionProfile::CacheThreeWay:
+		return "cache-3way";
 	default:
 		return "none";
 	}
@@ -158,6 +189,11 @@ std::uint32_t BenchmarkMotionTimeline::TrackMask(
 			static_cast<std::uint32_t>(BenchmarkMotionTrack::Point) |
 			static_cast<std::uint32_t>(BenchmarkMotionTrack::Camera);
 	case BenchmarkMotionProfile::Mixed:
+		return
+			static_cast<std::uint32_t>(BenchmarkMotionTrack::Point) |
+			static_cast<std::uint32_t>(BenchmarkMotionTrack::Caster) |
+			static_cast<std::uint32_t>(BenchmarkMotionTrack::Camera);
+	case BenchmarkMotionProfile::CacheThreeWay:
 		return
 			static_cast<std::uint32_t>(BenchmarkMotionTrack::Point) |
 			static_cast<std::uint32_t>(BenchmarkMotionTrack::Caster) |

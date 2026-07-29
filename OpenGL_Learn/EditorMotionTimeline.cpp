@@ -262,6 +262,18 @@ void EditorMotionTimelineController::RecordAfterRender(
 	m_latestTelemetry.pointShadowSubmissionPassCount = CounterDelta(
 		m_previousShadowStats.pointShadowSubmissionPassCount,
 		current.pointShadowSubmissionPassCount);
+	m_latestTelemetry.pointShadowRequiredFaceCount = CounterDelta(
+		m_previousShadowStats.pointShadowRequiredFaceCount,
+		current.pointShadowRequiredFaceCount);
+	m_latestTelemetry.pointShadowRenderedFaceCount = CounterDelta(
+		m_previousShadowStats.pointShadowRenderedFaceCount,
+		current.pointShadowRenderedFaceCount);
+	m_latestTelemetry.pointShadowFaceCacheHitCount = CounterDelta(
+		m_previousShadowStats.pointShadowFaceCacheHitCount,
+		current.pointShadowFaceCacheHitCount);
+	m_latestTelemetry.pointShadowDeferredFaceCount = CounterDelta(
+		m_previousShadowStats.pointShadowDeferredFaceCount,
+		current.pointShadowDeferredFaceCount);
 	m_latestTelemetry.shadowResourceFailureCount = CounterDelta(
 		m_previousShadowStats.shadowResourceFailureCount,
 		current.shadowResourceFailureCount);
@@ -434,10 +446,19 @@ bool EditorMotionTimelineController::PrepareThreeLightTestRig(
 			m_testRigPreviousShadowCacheDisabled;
 		properties.SHADOW_PER_LIGHT_CACHE =
 			m_testRigPreviousPerLightCache;
+		properties.SHADOW_SPATIAL_CASTER_CACHE =
+			m_testRigPreviousSpatialCasterCache;
+		properties.POINT_SHADOW_PER_FACE_CACHE =
+			m_testRigPreviousPointPerFaceCache;
+		properties.POINT_SHADOW_FORCE_ALL_FACES_REQUIRED =
+			m_testRigPreviousForceAllPointFaces;
 		properties.POINT_SHADOW_ADAPTIVE_RENDERING =
 			m_testRigPreviousPointAdaptiveRendering;
 		properties.POINT_SHADOW_SIX_FACE_RENDERING =
 			m_testRigPreviousPointSixFaceRendering;
+		if (ContainsModel(scene, m_testRigMotionCaster)) {
+			scene.modelSource.DeleteModel(m_testRigMotionCaster);
+		}
 		ClearTestRigState();
 	}
 
@@ -486,6 +507,12 @@ bool EditorMotionTimelineController::PrepareThreeLightTestRig(
 		properties.SHADOW_CACHE_DISABLED;
 	m_testRigPreviousPerLightCache =
 		properties.SHADOW_PER_LIGHT_CACHE;
+	m_testRigPreviousSpatialCasterCache =
+		properties.SHADOW_SPATIAL_CASTER_CACHE;
+	m_testRigPreviousPointPerFaceCache =
+		properties.POINT_SHADOW_PER_FACE_CACHE;
+	m_testRigPreviousForceAllPointFaces =
+		properties.POINT_SHADOW_FORCE_ALL_FACES_REQUIRED;
 	m_testRigPreviousPointAdaptiveRendering =
 		properties.POINT_SHADOW_ADAPTIVE_RENDERING;
 	m_testRigPreviousPointSixFaceRendering =
@@ -555,8 +582,56 @@ bool EditorMotionTimelineController::PrepareThreeLightTestRig(
 	spotLight.m_active = true;
 	spotLight.useShadowMap = true;
 
+	m_testRigMotionCasterMaterial =
+		std::make_shared<Material>("pbr");
+	m_testRigMotionCasterMaterial->AddProperty(
+		"albedo",
+		MaterialProperty::CreateColor(
+			glm::vec3(0.86f, 0.22f, 0.12f)));
+	m_testRigMotionCasterMaterial->AddProperty(
+		"metallic",
+		MaterialProperty::CreateFloat(
+			0.0f, 0.0f, 1.0f, 0.01f));
+	m_testRigMotionCasterMaterial->AddProperty(
+		"roughness",
+		MaterialProperty::CreateFloat(
+			0.45f, 0.04f, 1.0f, 0.01f));
+	m_testRigMotionCasterMaterial->AddProperty(
+		"ao",
+		MaterialProperty::CreateFloat(
+			1.0f, 0.0f, 1.0f, 0.01f));
+	m_testRigMotionCasterMaterial->AddProperty(
+		"opacity",
+		MaterialProperty::CreateFloat(1.0f));
+	m_testRigMotionCasterMaterial->AddProperty(
+		"useAlphaCutoff",
+		MaterialProperty::CreateBool(false));
+	m_testRigMotionCaster = std::make_shared<Model>(
+		"models/sphere/sphere.obj",
+		m_testRigMotionCasterMaterial.get());
+	m_testRigMotionCaster->SetName(
+		"Shadow Cache Motion Caster");
+	const float sceneRadius = EstimateSceneRadius(scene);
+	const float casterSourceRadius =
+		(std::max)(
+			0.0001f,
+			m_testRigMotionCaster->GetLocalBoundingRadius());
+	const float casterRadius = sceneRadius * 0.02f;
+	m_testRigMotionCaster->SetScale(
+		casterRadius / casterSourceRadius);
+	m_testRigMotionCaster->SetPosition(
+		pointLight.position +
+			sceneRadius * glm::vec3(0.12f, 0.02f, 0.0f));
+	scene.modelSource.AddModel(m_testRigMotionCaster);
+	m_casterIndex =
+		static_cast<int>(scene.modelSource.GetModels().size()) - 1;
+	m_testRigModelCount = scene.modelSource.GetModels().size();
+
 	properties.SHADOW_CACHE_DISABLED = false;
 	properties.SHADOW_PER_LIGHT_CACHE = true;
+	properties.SHADOW_SPATIAL_CASTER_CACHE = false;
+	properties.POINT_SHADOW_PER_FACE_CACHE = false;
+	properties.POINT_SHADOW_FORCE_ALL_FACES_REQUIRED = false;
 	properties.POINT_SHADOW_ADAPTIVE_RENDERING = true;
 	properties.POINT_SHADOW_SIX_FACE_RENDERING = false;
 	m_testRigPreparedDirectionalLightCount =
@@ -565,7 +640,7 @@ bool EditorMotionTimelineController::PrepareThreeLightTestRig(
 		scene.lightSource.spotLights.size();
 	m_testRigPrepared = true;
 
-	m_profile = BenchmarkMotionProfile::PointCamera;
+	m_profile = BenchmarkMotionProfile::CacheThreeWay;
 	m_pointLightIndex = m_testRigPointLightIndex;
 	scene.InvalidateShadowCache();
 	ResetTelemetry(scene);
@@ -578,10 +653,9 @@ bool EditorMotionTimelineController::PrepareThreeLightTestRig(
 
 	m_testRigStatusText =
 		"Ready: one Directional, one Point, and one Spot shadow are active. "
-		"Point and Camera tracks are enabled; the Caster stays fixed.";
+		"The three-phase Point + Caster + Camera workload is selected.";
 	m_statusText =
-		"Three-light Point + Camera A/B rig captured. Press Play after one "
-		"warm-up render.";
+		"Three-light A/B/C rig captured. Press Play after one warm-up render.";
 	return true;
 }
 
@@ -604,12 +678,21 @@ bool EditorMotionTimelineController::RestoreThreeLightTestRig(
 		m_testRigPreviousShadowCacheDisabled;
 	properties.SHADOW_PER_LIGHT_CACHE =
 		m_testRigPreviousPerLightCache;
+	properties.SHADOW_SPATIAL_CASTER_CACHE =
+		m_testRigPreviousSpatialCasterCache;
+	properties.POINT_SHADOW_PER_FACE_CACHE =
+		m_testRigPreviousPointPerFaceCache;
+	properties.POINT_SHADOW_FORCE_ALL_FACES_REQUIRED =
+		m_testRigPreviousForceAllPointFaces;
 	properties.POINT_SHADOW_ADAPTIVE_RENDERING =
 		m_testRigPreviousPointAdaptiveRendering;
 	properties.POINT_SHADOW_SIX_FACE_RENDERING =
 		m_testRigPreviousPointSixFaceRendering;
 
 	if (!ValidateTestRigScene(scene)) {
+		if (ContainsModel(scene, m_testRigMotionCaster)) {
+			scene.modelSource.DeleteModel(m_testRigMotionCaster);
+		}
 		ClearTestRigState();
 		scene.InvalidateShadowCache();
 		ResetTelemetry(scene);
@@ -680,40 +763,68 @@ bool EditorMotionTimelineController::RestoreThreeLightTestRig(
 					m_testRigOriginalSpotLightCount),
 			scene.lightSource.spotLights.end());
 	}
+	if (ContainsModel(scene, m_testRigMotionCaster)) {
+		scene.modelSource.DeleteModel(m_testRigMotionCaster);
+	}
 
 	ClearTestRigState();
 	scene.InvalidateShadowCache();
 	ResetTelemetry(scene);
 	m_testRigStatusText =
 		"Original lights, shadow flags, render path, and cache mode restored.";
-	m_statusText = "Temporary A/B test rig restored without saving scene data.";
+	m_statusText =
+		"Temporary A/B/C test rig restored without saving scene data.";
 	return true;
 }
 
 void EditorMotionTimelineController::SetShadowComparisonMode(
 	Scene& scene,
-	bool perLightCache)
+	ShadowComparisonMode mode)
 {
 	Pause();
 	auto& properties = SystemProperties::GetInstance();
+	const bool perLightCache =
+		mode != ShadowComparisonMode::GlobalDirty;
+	const bool perFaceCache =
+		mode == ShadowComparisonMode::PerFace;
 	properties.SHADOW_CACHE_DISABLED = !perLightCache;
 	properties.SHADOW_PER_LIGHT_CACHE = perLightCache;
+	properties.SHADOW_SPATIAL_CASTER_CACHE = perFaceCache;
+	properties.POINT_SHADOW_PER_FACE_CACHE = perFaceCache;
+	properties.POINT_SHADOW_FORCE_ALL_FACES_REQUIRED = false;
 	scene.InvalidateShadowCache();
 	ResetTelemetry(scene);
 	if (IsThreeLightTestRigReady(scene)) {
-		m_testRigStatusText = perLightCache
-			? "Mode B selected: Per-Light Dirty Cache. Allow one warm-up "
-				"render, then Play should show 1 update and 2 hits per "
-				"point-light step."
-			: "Mode A selected: cache disabled. Play should show all 3 shadow "
-				"lights updating on every point-light step.";
+		switch (mode) {
+		case ShadowComparisonMode::GlobalDirty:
+			m_testRigStatusText =
+				"Mode A selected: cache disabled. All 3 shadow lights update "
+				"on every frame.";
+			break;
+		case ShadowComparisonMode::PerLight:
+			m_testRigStatusText =
+				"Mode B selected: Per-Light Dirty Cache. Point-light motion "
+				"updates one light but still submits all 6 faces.";
+			break;
+		case ShadowComparisonMode::PerFace:
+			m_testRigStatusText =
+				"Mode C selected: Spatial Per-Light + Point Per-Face Cache. "
+				"Use Cache 3-way phases to inspect six-face light motion, "
+				"partial caster updates, and camera-only reuse.";
+			break;
+		}
 	}
 	else {
-		m_testRigStatusText = perLightCache
-			? "Mode B selected. Prepare the temporary three-light rig before "
-				"using the 1-update / 2-hit expectation."
-			: "Mode A selected. Prepare the temporary three-light rig before "
-				"using the 3-update / 0-hit expectation.";
+		const char* modeName =
+			mode == ShadowComparisonMode::GlobalDirty
+				? "Mode A"
+				: (mode == ShadowComparisonMode::PerLight
+					? "Mode B"
+					: "Mode C");
+		m_testRigStatusText =
+			std::string(modeName) +
+			" selected. Prepare the temporary three-light rig before "
+			"running the comparison.";
 	}
 	m_statusText =
 		"Comparison mode changed and preview paused for a clean warm-up.";
@@ -955,6 +1066,8 @@ void EditorMotionTimelineController::ClearTestRigState()
 	m_testRigDirectionalLightIndex = 0;
 	m_testRigSpotLightIndex = 0;
 	m_testRigSceneAnchor.reset();
+	m_testRigMotionCaster.reset();
+	m_testRigMotionCasterMaterial.reset();
 	m_testRigPointLightFlags.clear();
 	m_testRigDirectionalLightFlags.clear();
 	m_testRigSpotLightFlags.clear();

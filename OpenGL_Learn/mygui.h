@@ -1044,6 +1044,20 @@ public:
 		ImGui::Checkbox(
 			"Per-light dirty cache",
 			&properties.SHADOW_PER_LIGHT_CACHE);
+		ImGui::BeginDisabled(!properties.SHADOW_PER_LIGHT_CACHE);
+		ImGui::Checkbox(
+			"Spatial caster cache",
+			&properties.SHADOW_SPATIAL_CASTER_CACHE);
+		ImGui::Checkbox(
+			"Point per-face cache",
+			&properties.POINT_SHADOW_PER_FACE_CACHE);
+		ImGui::BeginDisabled(
+			!properties.POINT_SHADOW_PER_FACE_CACHE);
+		ImGui::Checkbox(
+			"Force all Point faces (audit)",
+			&properties.POINT_SHADOW_FORCE_ALL_FACES_REQUIRED);
+		ImGui::EndDisabled();
+		ImGui::EndDisabled();
 		ImGui::EndDisabled();
 		const ImVec4 cacheColor =
 			cacheEnabled && properties.SHADOW_PER_LIGHT_CACHE
@@ -1055,7 +1069,9 @@ public:
 			!cacheEnabled
 				? "CACHE BYPASSED"
 				: (properties.SHADOW_PER_LIGHT_CACHE
-					? "PER-LIGHT REVISION CACHE"
+					? (properties.POINT_SHADOW_PER_FACE_CACHE
+						? "PER-LIGHT + POINT FACE CACHE"
+						: "PER-LIGHT REVISION CACHE")
 					: "GLOBAL REVISION CACHE"));
 		ImGui::TextDisabled(
 			"Sampling: stable Vogel disk. Timeline panel shows hit/update decisions.");
@@ -1545,7 +1561,7 @@ public:
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
 
-			ImGui::SeparatorText("Quick A/B Reproduction");
+			ImGui::SeparatorText("Quick A/B/C Reproduction");
 			bool testRigActive =
 				m_motionTimeline.IsThreeLightTestRigActive();
 			bool testRigReady =
@@ -1574,19 +1590,28 @@ public:
 			const float comparisonGap =
 				ImGui::GetStyle().ItemSpacing.x;
 			const float comparisonButtonWidth =
-				(ImGui::GetContentRegionAvail().x - comparisonGap) *
-					0.5f;
+				(ImGui::GetContentRegionAvail().x -
+					comparisonGap * 2.0f) /
+				3.0f;
 			const bool noCacheMode =
 				properties.SHADOW_CACHE_DISABLED;
 			const bool perLightMode =
 				!properties.SHADOW_CACHE_DISABLED &&
-				properties.SHADOW_PER_LIGHT_CACHE;
+				properties.SHADOW_PER_LIGHT_CACHE &&
+				!properties.POINT_SHADOW_PER_FACE_CACHE;
+			const bool perFaceMode =
+				!properties.SHADOW_CACHE_DISABLED &&
+				properties.SHADOW_PER_LIGHT_CACHE &&
+				properties.POINT_SHADOW_PER_FACE_CACHE;
 			DrawSelectionButton(
 				"A  Cache off",
 				noCacheMode,
 				ImVec2(comparisonButtonWidth, 30.0f));
 			if (ImGui::IsItemClicked()) {
-				m_motionTimeline.SetShadowComparisonMode(scene, false);
+				m_motionTimeline.SetShadowComparisonMode(
+					scene,
+					EditorMotionTimelineController::
+						ShadowComparisonMode::GlobalDirty);
 			}
 			ImGui::SameLine();
 			DrawSelectionButton(
@@ -1594,7 +1619,21 @@ public:
 				perLightMode,
 				ImVec2(comparisonButtonWidth, 30.0f));
 			if (ImGui::IsItemClicked()) {
-				m_motionTimeline.SetShadowComparisonMode(scene, true);
+				m_motionTimeline.SetShadowComparisonMode(
+					scene,
+					EditorMotionTimelineController::
+						ShadowComparisonMode::PerLight);
+			}
+			ImGui::SameLine();
+			DrawSelectionButton(
+				"C  Per-face cache",
+				perFaceMode,
+				ImVec2(comparisonButtonWidth, 30.0f));
+			if (ImGui::IsItemClicked()) {
+				m_motionTimeline.SetShadowComparisonMode(
+					scene,
+					EditorMotionTimelineController::
+						ShadowComparisonMode::PerFace);
 			}
 
 			const auto countShadowLights = [](const auto& lights) {
@@ -1625,9 +1664,10 @@ public:
 				static_cast<unsigned long long>(spotShadowCount));
 			if (testRigReady) {
 				ImGui::TextWrapped(
-					"Point + Camera move; Caster stays fixed. After warm-up: "
-					"A expects 3 updates / 0 hits; B expects 1 / 2; "
-					"Point expects 6 submits.");
+					"Select Cache 3-way phases for the formal trajectory: "
+					"Point + Camera, Local Caster + Camera, then Camera-only. "
+					"A redraws globally; B isolates lights; C also reuses "
+					"unchanged Point faces.");
 			}
 			else {
 				ImGui::TextWrapped(
@@ -1649,7 +1689,8 @@ public:
 				"Shadow caster",
 				"Camera control",
 				"Point + camera",
-				"Mixed tracks"
+				"Mixed tracks",
+				"Cache 3-way phases"
 			};
 			int profileIndex =
 				(std::max)(
@@ -1933,7 +1974,9 @@ public:
 				properties.SHADOW_CACHE_DISABLED
 					? "cache disabled"
 					: (properties.SHADOW_PER_LIGHT_CACHE
-						? "per-light cache"
+						? (properties.POINT_SHADOW_PER_FACE_CACHE
+							? "per-light + point per-face cache"
+							: "per-light cache")
 						: "global cache"));
 
 			char updatedLightsValue[32] = {};
@@ -2030,6 +2073,40 @@ public:
 						telemetry.pointShadowSubmissionPassCount));
 				ImGui::EndTable();
 			}
+			if (ImGui::BeginTable(
+				"timeline_point_face_breakdown",
+				4,
+				ImGuiTableFlags_RowBg |
+					ImGuiTableFlags_BordersInnerH |
+					ImGuiTableFlags_SizingStretchSame)) {
+				ImGui::TableSetupColumn("Required");
+				ImGui::TableSetupColumn("Rendered");
+				ImGui::TableSetupColumn("Face hits");
+				ImGui::TableSetupColumn("Deferred");
+				ImGui::TableHeadersRow();
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::Text(
+					"%llu",
+					static_cast<unsigned long long>(
+						telemetry.pointShadowRequiredFaceCount));
+				ImGui::TableSetColumnIndex(1);
+				ImGui::Text(
+					"%llu",
+					static_cast<unsigned long long>(
+						telemetry.pointShadowRenderedFaceCount));
+				ImGui::TableSetColumnIndex(2);
+				ImGui::Text(
+					"%llu",
+					static_cast<unsigned long long>(
+						telemetry.pointShadowFaceCacheHitCount));
+				ImGui::TableSetColumnIndex(3);
+				ImGui::Text(
+					"%llu",
+					static_cast<unsigned long long>(
+						telemetry.pointShadowDeferredFaceCount));
+				ImGui::EndTable();
+			}
 			ImGui::TextDisabled(
 				"Current render: %llu updated light(s), %llu light cache hit(s)",
 				static_cast<unsigned long long>(
@@ -2053,8 +2130,9 @@ public:
 				"%s",
 				m_motionTimeline.GetStatusText().c_str());
 			ImGui::TextDisabled(
-				"Preview is diagnostic only. Use tools/Test-ShadowMotionTimeline.ps1 "
-				"for isolated 1920x1080 A/B measurements.");
+				"Preview is diagnostic only. Use "
+				"tools/Test-PointShadowCache3Way.ps1 for isolated "
+				"1920x1080 A/B/C measurements.");
 			ImGui::EndTable();
 		}
 

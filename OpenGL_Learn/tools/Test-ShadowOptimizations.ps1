@@ -46,7 +46,8 @@ param(
         "timeline-point-camera",
         "timeline-caster",
         "timeline-camera",
-        "timeline-mixed"
+        "timeline-mixed",
+        "timeline-cache-3way"
     )]
     [string]$Workload = "static-hit",
     [ValidateSet("directional", "point", "spot", "all")]
@@ -267,8 +268,9 @@ if ($Workload -in @(
     $Lights -notin @("point", "all")) {
     throw "$Workload requires -Lights point or all."
 }
-if ($Workload -eq "timeline-mixed" -and $Lights -ne "all") {
-    throw "timeline-mixed requires -Lights all."
+if ($Workload -in @("timeline-mixed", "timeline-cache-3way") -and
+    $Lights -ne "all") {
+    throw "$Workload requires -Lights all."
 }
 if ($Workload -in @(
         "reload-shadow-point",
@@ -366,6 +368,7 @@ foreach ($argument in @($VariantAArguments) + @($VariantBArguments)) {
 $controlledShadowEnvironmentNames = @(
     "OPENGL_LEARN_SHADOW_CACHE",
     "OPENGL_LEARN_SHADOW_PER_LIGHT_CACHE",
+    "OPENGL_LEARN_SHADOW_SPATIAL_CASTER_CACHE",
     "OPENGL_LEARN_SHADOW_CASTER_CULLING",
     "OPENGL_LEARN_DIRECTIONAL_SHADOW_FIT",
     "OPENGL_LEARN_DIRECTIONAL_SHADOW_RESOLUTION",
@@ -388,6 +391,8 @@ $controlledShadowEnvironmentNames = @(
     "OPENGL_LEARN_SHADOW_BIAS_CUBE_SLOPE_TEXELS",
     "OPENGL_LEARN_POINT_SHADOW_RENDER_PATH",
     "OPENGL_LEARN_POINT_SHADOW_FACE_CULLING",
+    "OPENGL_LEARN_POINT_SHADOW_PER_FACE_CACHE",
+    "OPENGL_LEARN_POINT_SHADOW_FORCE_ALL_REQUIRED",
     "OPENGL_LEARN_SHADOW_ADAPTIVE_MIN_SAMPLES"
 )
 
@@ -911,6 +916,19 @@ function Assert-RunResult {
         $ExpectedEnvironment.ContainsKey(
             "OPENGL_LEARN_SHADOW_PER_LIGHT_CACHE"
         )
+    $requiresPointFaceSchema18 =
+        $ExpectedEnvironment.ContainsKey(
+            "OPENGL_LEARN_SHADOW_SPATIAL_CASTER_CACHE"
+        ) -or
+        $ExpectedEnvironment.ContainsKey(
+            "OPENGL_LEARN_POINT_SHADOW_PER_FACE_CACHE"
+        )
+    if ($requiresPointFaceSchema18 -and [int]$Result.schemaVersion -lt 18) {
+        throw (
+            "$($Scene.displayName) $Label requires profiler schema 18 " +
+            "for spatial and Point per-face cache telemetry."
+        )
+    }
     if ($requiresPerLightSchema17 -and [int]$Result.schemaVersion -lt 17) {
         throw (
             "$($Scene.displayName) $Label requires profiler schema 17 " +
@@ -1026,6 +1044,8 @@ function Assert-RunResult {
     $booleanEnvironmentProperties = [ordered]@{
         "OPENGL_LEARN_SHADOW_PER_LIGHT_CACHE" =
             "perLightCacheEnabled"
+        "OPENGL_LEARN_SHADOW_SPATIAL_CASTER_CACHE" =
+            "spatialCasterCacheEnabled"
         "OPENGL_LEARN_SHADOW_EXACT_EARLY_OUT" =
             "exactEarlyOutEnabled"
         "OPENGL_LEARN_SHADOW_PREPARED_POINT_INPUTS" =
@@ -1056,6 +1076,10 @@ function Assert-RunResult {
             "casterCullingEnabled"
         "OPENGL_LEARN_POINT_SHADOW_FACE_CULLING" =
             "pointShadowFaceCullingEnabled"
+        "OPENGL_LEARN_POINT_SHADOW_PER_FACE_CACHE" =
+            "pointShadowPerFaceCacheEnabled"
+        "OPENGL_LEARN_POINT_SHADOW_FORCE_ALL_REQUIRED" =
+            "pointShadowForceAllFacesRequired"
     }
     foreach ($environmentName in $booleanEnvironmentProperties.Keys) {
         if (-not $ExpectedEnvironment.ContainsKey($environmentName)) {
@@ -1345,7 +1369,8 @@ function Assert-RunResult {
         "timeline-point-camera",
         "timeline-caster",
         "timeline-camera",
-        "timeline-mixed"
+        "timeline-mixed",
+        "timeline-cache-3way"
     )
     $timelineProperty =
         $Result.PSObject.Properties["motionTimeline"]
@@ -1366,6 +1391,7 @@ function Assert-RunResult {
             "timeline-caster" { @("caster") }
             "timeline-camera" { @("camera") }
             "timeline-mixed" { @("point", "caster", "camera") }
+            "timeline-cache-3way" { @("point", "caster", "camera") }
         }
         if ([int]$timeline.schemaVersion -ne 1 -or
             [string]$timeline.profile -ne $expectedProfile -or
@@ -1446,6 +1472,14 @@ function Assert-RunResult {
             "pointLightUpdateCount" = "measuredPointLightUpdateCount"
             "pointShadowSubmissionPassCount" =
                 "measuredPointShadowSubmissionPassCount"
+            "pointShadowRequiredFaceCount" =
+                "measuredPointShadowRequiredFaceCount"
+            "pointShadowRenderedFaceCount" =
+                "measuredPointShadowRenderedFaceCount"
+            "pointShadowFaceCacheHitCount" =
+                "measuredPointShadowFaceCacheHitCount"
+            "pointShadowDeferredFaceCount" =
+                "measuredPointShadowDeferredFaceCount"
             "spotLightUpdateCount" = "measuredSpotLightUpdateCount"
             "casterBoundsRebuildCount" =
                 "measuredCasterBoundsRebuildCount"
@@ -1474,7 +1508,41 @@ function Assert-RunResult {
     }
     $shadowStableWorkload =
         $Workload -in @("static-hit", "timeline-camera")
-    if ($shadowStableWorkload) {
+    $phasedCacheWorkload =
+        $Workload -eq "timeline-cache-3way"
+    if ($phasedCacheWorkload) {
+        $measuredUpdates =
+            [int64]$Result.shadow.measuredUpdateCount
+        if ($cacheDisabled) {
+            if ($measuredUpdates -ne $ExpectedSamples) {
+                throw (
+                    "$($Scene.displayName) $Label phased no-cache " +
+                    "update invariant failed."
+                )
+            }
+        }
+        elseif ($measuredUpdates -le 0 -or
+            $measuredUpdates -gt $ExpectedSamples) {
+            throw (
+                "$($Scene.displayName) $Label phased cache update " +
+                "range invariant failed."
+            )
+        }
+        if ([bool]$Result.profiler.gpuTimingSupported) {
+            $updateZone =
+                $Result.profiler.summary.gpuZones.PSObject.Properties[
+                    "Shadow Map Update"
+                ]
+            if (-not $updateZone -or
+                [int]$updateZone.Value.count -ne $measuredUpdates) {
+                throw (
+                    "$($Scene.displayName) $Label phased Shadow Map Update " +
+                    "sample count mismatch."
+                )
+            }
+        }
+    }
+    elseif ($shadowStableWorkload) {
         if ($cacheDisabled) {
             if ([int64]$Result.shadow.measuredUpdateCount -ne
                     $ExpectedSamples -or
@@ -1606,12 +1674,13 @@ function Assert-RunResult {
             0L
         }
     }
-    if ([int64]$Result.shadow.measuredDirectionalLightUpdateCount -ne
+    if (-not $phasedCacheWorkload -and
+        ([int64]$Result.shadow.measuredDirectionalLightUpdateCount -ne
             $expectedDirectionalUpdates -or
         [int64]$Result.shadow.measuredPointLightUpdateCount -ne
             $expectedPointUpdates -or
         [int64]$Result.shadow.measuredSpotLightUpdateCount -ne
-            $expectedSpotUpdates) {
+            $expectedSpotUpdates)) {
         throw (
             "$($Scene.displayName) $Label per-light update invariant failed."
         )
@@ -1620,7 +1689,8 @@ function Assert-RunResult {
         $expectedDirectionalUpdates +
         $expectedPointUpdates +
         $expectedSpotUpdates
-    if ([int64]$Result.shadow.measuredUpdatedLightCount -ne
+    if (-not $phasedCacheWorkload -and
+        [int64]$Result.shadow.measuredUpdatedLightCount -ne
         $expectedUpdatedLights) {
         throw (
             "$($Scene.displayName) $Label total light-update invariant failed."
@@ -1642,7 +1712,8 @@ function Assert-RunResult {
                 $expectedUpdatedLights
         }
     }
-    if ([int64]$Result.shadow.measuredLightCacheHitCount -ne
+    if (-not $phasedCacheWorkload -and
+        [int64]$Result.shadow.measuredLightCacheHitCount -ne
         $expectedLightHits) {
         throw (
             "$($Scene.displayName) $Label per-light cache-hit invariant failed."
@@ -1777,10 +1848,19 @@ function Assert-RunResult {
         else {
             0L
         }
+        $perFaceCacheEnabled =
+            [int]$Result.schemaVersion -ge 18 -and
+            [bool]$Result.shadow.pointShadowPerFaceCacheEnabled
+        $minimumSubmissionPasses =
+            $layeredUpdates + $sixFaceUpdates
+        $maximumSubmissionPasses =
+            $layeredUpdates + 6L * $sixFaceUpdates
         if ($layeredUpdates + $sixFaceUpdates + $pointEmptyClears -ne
                 $pointUpdates -or
-            $submissionPasses -ne
-                $layeredUpdates + 6L * $sixFaceUpdates) {
+            $submissionPasses -lt $minimumSubmissionPasses -or
+            $submissionPasses -gt $maximumSubmissionPasses -or
+            (-not $perFaceCacheEnabled -and
+                $submissionPasses -ne $maximumSubmissionPasses)) {
             throw (
                 "$($Scene.displayName) $Label cumulative corrected-point " +
                 "path accounting failed."
@@ -1802,11 +1882,22 @@ function Assert-RunResult {
         else {
             0L
         }
+        $measuredPointUpdates =
+            [int64]$Result.shadow.measuredPointLightUpdateCount
+        $minimumMeasuredSubmissionPasses =
+            $measuredLayeredUpdates + $measuredSixFaceUpdates
+        $maximumMeasuredSubmissionPasses =
+            $measuredLayeredUpdates + 6L * $measuredSixFaceUpdates
         if ($measuredLayeredUpdates + $measuredSixFaceUpdates +
                 $measuredPointEmptyClears -ne
-                $expectedPointUpdates -or
-            $measuredSubmissionPasses -ne
-                $measuredLayeredUpdates + 6L * $measuredSixFaceUpdates) {
+                $measuredPointUpdates -or
+            $measuredSubmissionPasses -lt
+                $minimumMeasuredSubmissionPasses -or
+            $measuredSubmissionPasses -gt
+                $maximumMeasuredSubmissionPasses -or
+            (-not $perFaceCacheEnabled -and
+                $measuredSubmissionPasses -ne
+                    $maximumMeasuredSubmissionPasses)) {
             throw (
                 "$($Scene.displayName) $Label measured corrected-point " +
                 "path accounting failed."
@@ -1815,13 +1906,13 @@ function Assert-RunResult {
         $faceCullingEnabled =
             [bool]$Result.shadow.pointShadowFaceCullingEnabled
         $expectedFaceCullingPasses = if ($faceCullingEnabled) {
-            6L * $sixFaceUpdates
+            $submissionPasses - $layeredUpdates
         }
         else {
             0L
         }
         $expectedMeasuredFaceCullingPasses = if ($faceCullingEnabled) {
-            6L * $measuredSixFaceUpdates
+            $measuredSubmissionPasses - $measuredLayeredUpdates
         }
         else {
             0L
@@ -2244,6 +2335,19 @@ foreach ($scene in $scenes) {
                     [int]$afterEvidence.resolution[1] -and
                 [int64]$beforeEvidence.sampleCountPerFace -eq
                     [int64]$afterEvidence.sampleCountPerFace
+            $requiredFaceMask = 63
+            $afterShadow = $resultsB[$runIndex - 1].shadow
+            $lazyFaceComparison =
+                [int]$resultsB[$runIndex - 1].schemaVersion -ge 18 -and
+                [bool]$afterShadow.pointShadowPerFaceCacheEnabled -and
+                -not [bool]$afterShadow.pointShadowForceAllFacesRequired
+            if ($lazyFaceComparison) {
+                $requiredFaceMask =
+                    [int]$afterShadow.lastPointShadowRequiredFaceMask
+            }
+            $requiredFacesExact =
+                [bool]$beforeEvidence.valid -and
+                [bool]$afterEvidence.valid
             $faceEvidence = @()
             for ($faceIndex = 0; $faceIndex -lt 6; ++$faceIndex) {
                 $beforeFace = $beforeEvidence.faces[$faceIndex]
@@ -2258,6 +2362,12 @@ foreach ($scene in $scenes) {
                     [double]$beforeFace.maxDepth -eq
                         [double]$afterFace.maxDepth
                 $facesExact = $facesExact -and $faceExact
+                $required =
+                    ($requiredFaceMask -band (1 -shl $faceIndex)) -ne 0
+                if ($required) {
+                    $requiredFacesExact =
+                        $requiredFacesExact -and $faceExact
+                }
                 $faceEvidence += [pscustomobject][ordered]@{
                     index = $faceIndex
                     name = [string]$beforeFace.name
@@ -2267,13 +2377,14 @@ foreach ($scene in $scenes) {
                         [int64]$beforeFace.nonFarSampleCount
                     nonFarSamplesB =
                         [int64]$afterFace.nonFarSampleCount
+                    required = $required
                     exact = $faceExact
                 }
             }
-            if (-not $facesExact) {
+            if (-not $requiredFacesExact) {
                 throw (
                     "$($scene.displayName) A$runIndex/B$runIndex " +
-                    "point-shadow cubemap content differs."
+                    "required point-shadow cubemap content differs."
                 )
             }
             $pointShadowCubeComparisons +=
@@ -2284,6 +2395,8 @@ foreach ($scene in $scenes) {
                         [int]$beforeEvidence.resolution[1]
                     )
                     faces = $faceEvidence
+                    requiredFaceMask = $requiredFaceMask
+                    requiredFacesExact = $requiredFacesExact
                     exact = $facesExact
                 }
         }

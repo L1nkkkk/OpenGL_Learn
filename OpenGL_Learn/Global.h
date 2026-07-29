@@ -99,6 +99,11 @@ public:
     // OPENGL_LEARN_SHADOW_PER_LIGHT_CACHE=0 retains the global revision cache
     // as the same-binary control path.
     bool SHADOW_PER_LIGHT_CACHE = true;
+    // Experimental third-stage cache: classify the current shadow-caster
+    // state against each light projection instead of folding the same global
+    // caster revision into every light. Auto-fit projections retain their
+    // conservative global dependency until their fit is made local.
+    bool SHADOW_SPATIAL_CASTER_CACHE = false;
     // Build a per-Mesh shadow submission list and reject casters outside each
     // light's projection. Set OPENGL_LEARN_SHADOW_CASTER_CULLING=0 for the
     // original all-caster submission path in controlled A/B runs.
@@ -175,6 +180,14 @@ public:
     // OPENGL_LEARN_POINT_SHADOW_FACE_CULLING=1 enables a separate frustum test
     // for every cubemap face. It has no effect on the layered path.
     bool POINT_SHADOW_FACE_CULLING = true;
+    // Cache Point shadow content independently per cubemap face. Required
+    // faces are derived conservatively from camera-visible receivers, while
+    // per-face caster signatures preserve unaffected faces across updates.
+    bool POINT_SHADOW_PER_FACE_CACHE = false;
+    // Validation-only demand override. It materializes all six faces while
+    // retaining per-face dirty decisions so complete cubemap convergence can
+    // be compared against the six-face oracle outside performance runs.
+    bool POINT_SHADOW_FORCE_ALL_FACES_REQUIRED = false;
 
     int GetShadowOptimizationFlags() const {
         int flags = 0;

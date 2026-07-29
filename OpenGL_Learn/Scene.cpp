@@ -23,6 +23,26 @@ namespace {
 			}
 			return true;
 		}
+
+		bool IntersectsObb(
+			const glm::vec3& center,
+			const glm::vec3& axisX,
+			const glm::vec3& axisY,
+			const glm::vec3& axisZ) const
+		{
+			for (const glm::vec4& plane : planes) {
+				const glm::vec3 normal(plane);
+				const float projectedRadius =
+					std::abs(glm::dot(normal, axisX)) +
+					std::abs(glm::dot(normal, axisY)) +
+					std::abs(glm::dot(normal, axisZ));
+				if (glm::dot(normal, center) + plane.w <
+					-projectedRadius) {
+					return false;
+				}
+			}
+			return true;
+		}
 	};
 
 	Frustum BuildFrustum(const glm::mat4& viewProjection)
@@ -186,6 +206,7 @@ void Scene::BuildMeshDrawLists()
 	}
 
 	for (auto& model : modelSource.models) {
+		std::uint64_t modelShadowStateRevision = 0;
 		if (syncShadowState) {
 			const auto syncStart = std::chrono::steady_clock::now();
 			hash_combine(
@@ -195,10 +216,12 @@ void Scene::BuildMeshDrawLists()
 				// Refresh before camera culling: an off-camera alpha-tested mesh
 				// can still cast a visible shadow.
 				model->RefreshMaterialDrivenState();
+				modelShadowStateRevision =
+					model->SyncShadowStateRevision(
+						shadowStateSyncEpoch);
 				hash_combine(
 					shadowCasterSignature,
-					model->SyncShadowStateRevision(
-						shadowStateSyncEpoch));
+					modelShadowStateRevision);
 			}
 			shadowStateSyncMilliseconds +=
 				std::chrono::duration<double, std::milli>(
@@ -213,6 +236,8 @@ void Scene::BuildMeshDrawLists()
 			model->GetLocalBoundingRadius() * GetMaximumWorldScale(modelMatrix);
 		if (syncShadowState) {
 			m_shadowCasterBoundsScratch.push_back({
+				model.get(),
+				modelShadowStateRevision,
 				worldBoundsCenter,
 				worldBoundsRadius });
 		}
@@ -229,7 +254,11 @@ void Scene::BuildMeshDrawLists()
 		}
 
 		++visibleModelCount;
-		m_visibleModels.push_back({ model.get(), modelMatrix });
+		m_visibleModels.push_back({
+			model.get(),
+			modelMatrix,
+			worldBoundsCenter,
+			worldBoundsRadius });
 		if (!syncShadowState) {
 			model->RefreshMaterialDrivenState();
 		}
@@ -237,17 +266,59 @@ void Scene::BuildMeshDrawLists()
 		Shader* shader = shaderPtr.get();
 		if (!shader) continue;
 
+		auto appendMeshDrawItem = [&](std::vector<MeshDrawItem>& list,
+			Mesh* mesh) {
+			if (!mesh || !mesh->GetActiveStatus()) {
+				return;
+			}
+			glm::vec3 meshWorldCenter = worldBoundsCenter;
+			float meshWorldRadius = worldBoundsRadius;
+			const glm::vec3 localBoundsMin = mesh->GetBoundsMin();
+			const glm::vec3 localBoundsMax = mesh->GetBoundsMax();
+			const glm::vec3 localBoundsExtent =
+				(localBoundsMax - localBoundsMin) * 0.5f;
+			const glm::vec3 worldBoundsAxisX =
+				glm::vec3(modelMatrix[0]) * localBoundsExtent.x;
+			const glm::vec3 worldBoundsAxisY =
+				glm::vec3(modelMatrix[1]) * localBoundsExtent.y;
+			const glm::vec3 worldBoundsAxisZ =
+				glm::vec3(modelMatrix[2]) * localBoundsExtent.z;
+			TransformBoundsToSphere(
+				modelMatrix,
+				localBoundsMin,
+				localBoundsMax,
+				meshWorldCenter,
+				meshWorldRadius);
+			const bool meshWorldBoundsValid =
+				IsFiniteMatrix(modelMatrix) &&
+				IsFiniteVector(localBoundsMin) &&
+				IsFiniteVector(localBoundsMax) &&
+				localBoundsMin.x <= localBoundsMax.x &&
+				localBoundsMin.y <= localBoundsMax.y &&
+				localBoundsMin.z <= localBoundsMax.z &&
+				IsFiniteVector(meshWorldCenter) &&
+				IsFiniteVector(worldBoundsAxisX) &&
+				IsFiniteVector(worldBoundsAxisY) &&
+				IsFiniteVector(worldBoundsAxisZ) &&
+				std::isfinite(meshWorldRadius) &&
+				meshWorldRadius >= 0.0f;
+			list.push_back({
+				model.get(),
+				mesh,
+				shader,
+				modelMatrix,
+				meshWorldCenter,
+				worldBoundsAxisX,
+				worldBoundsAxisY,
+				worldBoundsAxisZ,
+				meshWorldBoundsValid,
+				meshWorldRadius });
+		};
 		for (const auto& entry : model->GetOpaqueMeshEntries()) {
-			if (!entry.mesh) continue;
-			if (!entry.mesh->GetActiveStatus()) continue;
-			m_opaqueMeshList.push_back({
-				model.get(), entry.mesh, shader, modelMatrix, worldBoundsCenter });
+			appendMeshDrawItem(m_opaqueMeshList, entry.mesh);
 		}
 		for (const auto& entry : model->GetTransparentMeshEntries()) {
-			if (!entry.mesh) continue;
-			if (!entry.mesh->GetActiveStatus()) continue;
-			m_transparentMeshList.push_back({
-				model.get(), entry.mesh, shader, modelMatrix, worldBoundsCenter });
+			appendMeshDrawItem(m_transparentMeshList, entry.mesh);
 		}
 	}
 
@@ -271,17 +342,41 @@ void Scene::BuildMeshDrawLists()
 		m_shadowStats.lastCasterStateSyncCpuMilliseconds = 0.0;
 	}
 
-	std::sort(m_opaqueMeshList.begin(), m_opaqueMeshList.end(),
-		[](const MeshDrawItem& a, const MeshDrawItem& b) {
-			const std::less<Shader*> shaderLess;
-			if (a.shader != b.shader) {
-				return shaderLess(a.shader, b.shader);
+	// Pointer-address sorting changes across independent processes.  That can
+	// reorder coplanar opaque draws and produce a handful of non-repeatable
+	// edge pixels even when every render input is identical.  Preserve the
+	// batching benefit while deriving group order from deterministic scene
+	// traversal instead.
+	std::unordered_map<Shader*, std::size_t> shaderSortOrder;
+	std::unordered_map<Material*, std::size_t> materialSortOrder;
+	for (const MeshDrawItem& item : m_opaqueMeshList) {
+		if (shaderSortOrder.find(item.shader) == shaderSortOrder.end()) {
+			shaderSortOrder.emplace(item.shader, shaderSortOrder.size());
+		}
+		Material* material =
+			item.mesh ? item.mesh->material_ptr : nullptr;
+		if (materialSortOrder.find(material) == materialSortOrder.end()) {
+			materialSortOrder.emplace(material, materialSortOrder.size());
+		}
+	}
+	std::stable_sort(m_opaqueMeshList.begin(), m_opaqueMeshList.end(),
+		[&shaderSortOrder, &materialSortOrder](
+			const MeshDrawItem& a,
+			const MeshDrawItem& b) {
+			const std::size_t aShaderOrder =
+				shaderSortOrder.at(a.shader);
+			const std::size_t bShaderOrder =
+				shaderSortOrder.at(b.shader);
+			if (aShaderOrder != bShaderOrder) {
+				return aShaderOrder < bShaderOrder;
 			}
 
-			const std::less<Material*> materialLess;
-			Material* aMaterial = a.mesh ? a.mesh->material_ptr : nullptr;
-			Material* bMaterial = b.mesh ? b.mesh->material_ptr : nullptr;
-			return materialLess(aMaterial, bMaterial);
+			Material* aMaterial =
+				a.mesh ? a.mesh->material_ptr : nullptr;
+			Material* bMaterial =
+				b.mesh ? b.mesh->material_ptr : nullptr;
+			return materialSortOrder.at(aMaterial) <
+				materialSortOrder.at(bMaterial);
 		});
 
 	if (camera_ptr) {
@@ -1950,14 +2045,18 @@ void Scene::RefreshShadowCasterStateFallback() {
 			continue;
 		}
 		model->RefreshMaterialDrivenState();
+		const std::uint64_t modelShadowStateRevision =
+			model->SyncShadowStateRevision(shadowStateSyncEpoch);
 		hash_combine(
 			signature,
-			model->SyncShadowStateRevision(shadowStateSyncEpoch));
+			modelShadowStateRevision);
 		if (!model->GetAcitveStatus()) {
 			continue;
 		}
 		const glm::mat4 modelMatrix = model->getModelMatrix();
 		m_shadowCasterBoundsScratch.push_back({
+			model.get(),
+			modelShadowStateRevision,
 			glm::vec3(
 				modelMatrix * glm::vec4(model->GetLoacalCenter(), 1.0f)),
 			model->GetLocalBoundingRadius() *
@@ -1987,6 +2086,8 @@ std::size_t Scene::BuildShadowRevisionSignature(
 	hash_combine(signature, properties.POINT_SHADOW_ADAPTIVE_RENDERING);
 	hash_combine(signature, properties.POINT_SHADOW_SIX_FACE_RENDERING);
 	hash_combine(signature, properties.POINT_SHADOW_FACE_CULLING);
+	hash_combine(signature, properties.SHADOW_SPATIAL_CASTER_CACHE);
+	hash_combine(signature, properties.POINT_SHADOW_PER_FACE_CACHE);
 	hash_combine(
 		signature,
 		properties.DIRECTIONAL_SHADOW_LIGHT_AABB_FIT);
@@ -2064,8 +2165,17 @@ std::size_t Scene::BuildDirectionalShadowRevisionSignature(
 	const DirectionLight& light,
 	std::uint64_t shadowShaderRevision) const {
 	std::size_t signature = 0;
-	hash_combine(signature, m_shadowCasterStateSignature);
-	hash_combine(signature, m_shadowCasterRevision);
+	if (properties.SHADOW_SPATIAL_CASTER_CACHE &&
+		!light.autoFitShadow) {
+		hash_combine(
+			signature,
+			BuildSpatialShadowCasterSignature(
+				light.GetLightSpaceMatrix()));
+	}
+	else {
+		hash_combine(signature, m_shadowCasterStateSignature);
+		hash_combine(signature, m_shadowCasterRevision);
+	}
 	hash_combine(signature, shadowShaderRevision);
 	hash_combine(
 		signature,
@@ -2097,12 +2207,41 @@ std::size_t Scene::BuildPointShadowRevisionSignature(
 	const PointLight& light,
 	std::uint64_t pointShadowShaderRevision) const {
 	std::size_t signature = 0;
-	hash_combine(signature, m_shadowCasterStateSignature);
-	hash_combine(signature, m_shadowCasterRevision);
+	if (properties.SHADOW_SPATIAL_CASTER_CACHE &&
+		!light.autoFitShadow) {
+		std::size_t casterSignature = 0;
+		std::uint64_t acceptedCasterCount = 0;
+		const float safeFar = (std::max)(0.0f, light.far);
+		for (const ShadowCasterBoundItem& item :
+			m_shadowCasterBoundsScratch) {
+			const float range = safeFar + item.radius;
+			const glm::vec3 offset = item.center - light.position;
+			if (glm::dot(offset, offset) > range * range) {
+				continue;
+			}
+			hash_combine(
+				casterSignature,
+				reinterpret_cast<std::uintptr_t>(item.model));
+			hash_combine(casterSignature, item.revision);
+			hash_combine(casterSignature, item.center.x);
+			hash_combine(casterSignature, item.center.y);
+			hash_combine(casterSignature, item.center.z);
+			hash_combine(casterSignature, item.radius);
+			++acceptedCasterCount;
+		}
+		hash_combine(casterSignature, acceptedCasterCount);
+		hash_combine(signature, casterSignature);
+	}
+	else {
+		hash_combine(signature, m_shadowCasterStateSignature);
+		hash_combine(signature, m_shadowCasterRevision);
+	}
 	hash_combine(signature, pointShadowShaderRevision);
 	hash_combine(signature, properties.POINT_SHADOW_ADAPTIVE_RENDERING);
 	hash_combine(signature, properties.POINT_SHADOW_SIX_FACE_RENDERING);
 	hash_combine(signature, properties.POINT_SHADOW_FACE_CULLING);
+	hash_combine(signature, properties.SHADOW_SPATIAL_CASTER_CACHE);
+	hash_combine(signature, properties.POINT_SHADOW_PER_FACE_CACHE);
 	hash_combine(signature, light.shadowResolution);
 	hash_combine(signature, light.autoFitShadow);
 	hash_combine(signature, light.position.x);
@@ -2117,8 +2256,17 @@ std::size_t Scene::BuildSpotShadowRevisionSignature(
 	const SpotLight& light,
 	std::uint64_t shadowShaderRevision) const {
 	std::size_t signature = 0;
-	hash_combine(signature, m_shadowCasterStateSignature);
-	hash_combine(signature, m_shadowCasterRevision);
+	if (properties.SHADOW_SPATIAL_CASTER_CACHE &&
+		!light.autoFitShadow) {
+		hash_combine(
+			signature,
+			BuildSpatialShadowCasterSignature(
+				light.GetLightSpaceMatrix()));
+	}
+	else {
+		hash_combine(signature, m_shadowCasterStateSignature);
+		hash_combine(signature, m_shadowCasterRevision);
+	}
 	hash_combine(signature, shadowShaderRevision);
 	hash_combine(
 		signature,
@@ -2137,6 +2285,225 @@ std::size_t Scene::BuildSpotShadowRevisionSignature(
 	return signature;
 }
 
+std::size_t Scene::BuildSpatialShadowCasterSignature(
+	const glm::mat4& lightViewProjection) const {
+	if (!m_shadowCasterStateReliable ||
+		!IsFiniteMatrix(lightViewProjection)) {
+		std::size_t fallback = 0;
+		hash_combine(fallback, m_shadowCasterStateSignature);
+		hash_combine(fallback, m_shadowCasterRevision);
+		return fallback;
+	}
+
+	const Frustum lightFrustum = BuildFrustum(lightViewProjection);
+	std::size_t signature = 0;
+	std::uint64_t acceptedCasterCount = 0;
+	for (const ShadowCasterBoundItem& item :
+		m_shadowCasterBoundsScratch) {
+		if (!lightFrustum.IntersectsSphere(
+				item.center,
+				item.radius)) {
+			continue;
+		}
+		hash_combine(
+			signature,
+			reinterpret_cast<std::uintptr_t>(item.model));
+		hash_combine(signature, item.revision);
+		hash_combine(signature, item.center.x);
+		hash_combine(signature, item.center.y);
+		hash_combine(signature, item.center.z);
+		hash_combine(signature, item.radius);
+		++acceptedCasterCount;
+	}
+	hash_combine(signature, acceptedCasterCount);
+	return signature;
+}
+
+std::array<std::size_t, 6>
+Scene::BuildPointShadowFaceRevisionSignatures(
+	const PointLight& light,
+	std::uint64_t pointShadowShaderRevision,
+	const std::array<glm::mat4, 6>& lightSpaceMatrices) const {
+	std::array<std::size_t, 6> signatures{};
+	for (std::size_t face = 0; face < signatures.size(); ++face) {
+		std::size_t signature = 0;
+		hash_combine(
+			signature,
+			BuildSpatialShadowCasterSignature(
+				lightSpaceMatrices[face]));
+		hash_combine(signature, pointShadowShaderRevision);
+		hash_combine(
+			signature,
+			properties.POINT_SHADOW_ADAPTIVE_RENDERING);
+		hash_combine(
+			signature,
+			properties.POINT_SHADOW_SIX_FACE_RENDERING);
+		hash_combine(
+			signature,
+			properties.POINT_SHADOW_FACE_CULLING);
+		hash_combine(
+			signature,
+			properties.POINT_SHADOW_PER_FACE_CACHE);
+		hash_combine(signature, light.shadowResolution);
+		hash_combine(signature, light.autoFitShadow);
+		hash_combine(signature, light.position.x);
+		hash_combine(signature, light.position.y);
+		hash_combine(signature, light.position.z);
+		hash_combine(signature, light.near);
+		hash_combine(signature, light.far);
+		hash_combine(signature, face);
+		signatures[face] = signature;
+	}
+	return signatures;
+}
+
+std::uint8_t Scene::ComputePointShadowRequiredFaceMask(
+	const PointLight& light) const {
+	if (properties.POINT_SHADOW_FORCE_ALL_FACES_REQUIRED) {
+		return 0x3fu;
+	}
+	if (!camera_ptr) {
+		return 0x3fu;
+	}
+	if (m_opaqueMeshList.empty() &&
+		m_transparentMeshList.empty()) {
+		return 0u;
+	}
+
+	float filterRadiusTexels = 0.0f;
+	if (properties.SHADOW_TYPE == ShadowProperty::PCF) {
+		filterRadiusTexels = 2.0f;
+	}
+	else if (properties.SHADOW_TYPE == ShadowProperty::PCSS) {
+		filterRadiusTexels = 16.0f;
+	}
+	const float safeResolution = static_cast<float>(
+		(std::max)(1, light.shadowResolution));
+	const float angularPaddingRadians =
+		std::atan(2.0f * filterRadiusTexels / safeResolution);
+	const float fieldOfViewDegrees =
+		90.25f +
+		glm::degrees(2.0f * angularPaddingRadians);
+	const float safeNear = 0.001f;
+	const float safeFar = (std::max)(
+		safeNear + 0.001f,
+		light.far);
+	const glm::mat4 projection = glm::perspective(
+		glm::radians(fieldOfViewDegrees),
+		1.0f,
+		safeNear,
+		safeFar);
+	const std::array<glm::vec3, 6> directions = {
+		glm::vec3(1.0f, 0.0f, 0.0f),
+		glm::vec3(-1.0f, 0.0f, 0.0f),
+		glm::vec3(0.0f, 1.0f, 0.0f),
+		glm::vec3(0.0f, -1.0f, 0.0f),
+		glm::vec3(0.0f, 0.0f, 1.0f),
+		glm::vec3(0.0f, 0.0f, -1.0f)
+	};
+	const std::array<glm::vec3, 6> upVectors = {
+		glm::vec3(0.0f, -1.0f, 0.0f),
+		glm::vec3(0.0f, -1.0f, 0.0f),
+		glm::vec3(0.0f, 0.0f, 1.0f),
+		glm::vec3(0.0f, 0.0f, -1.0f),
+		glm::vec3(0.0f, -1.0f, 0.0f),
+		glm::vec3(0.0f, -1.0f, 0.0f)
+	};
+	std::array<Frustum, 6> faceFrusta{};
+	for (std::size_t face = 0; face < faceFrusta.size(); ++face) {
+		faceFrusta[face] = BuildFrustum(
+			projection *
+			glm::lookAt(
+				light.position,
+				light.position + directions[face],
+				upVectors[face]));
+	}
+
+	std::uint8_t requiredMask = 0;
+	const float aspectRatio =
+		static_cast<float>(properties.SCREEN_WIDTH) /
+		static_cast<float>(
+			(std::max)(1, properties.SCREEN_HEIGHT));
+	const Frustum cameraFrustum = BuildFrustum(
+		camera_ptr->GetProjectionMatrix(aspectRatio) *
+		camera_ptr->GetViewMatrix());
+	bool invalidReceiverBounds = false;
+	auto classifyReceivers = [&](const std::vector<MeshDrawItem>& receivers) {
+		for (const MeshDrawItem& receiver : receivers) {
+			if (!receiver.model ||
+				!receiver.mesh ||
+				!IsFiniteVector(receiver.worldBoundsCenter) ||
+				!std::isfinite(receiver.worldBoundsRadius) ||
+				receiver.worldBoundsRadius < 0.0f) {
+				invalidReceiverBounds = true;
+				return;
+			}
+			const bool cameraVisible =
+				receiver.worldBoundsValid
+					? cameraFrustum.IntersectsObb(
+						receiver.worldBoundsCenter,
+						receiver.worldBoundsAxisX,
+						receiver.worldBoundsAxisY,
+						receiver.worldBoundsAxisZ)
+					: cameraFrustum.IntersectsSphere(
+						receiver.worldBoundsCenter,
+						receiver.worldBoundsRadius);
+			if (!cameraVisible) {
+				continue;
+			}
+			const glm::vec3 lightOffset =
+				receiver.worldBoundsCenter - light.position;
+			const float maximumDistance =
+				safeFar + receiver.worldBoundsRadius;
+			if (glm::dot(lightOffset, lightOffset) >
+				maximumDistance * maximumDistance) {
+				continue;
+			}
+			for (std::size_t face = 0;
+				face < faceFrusta.size();
+				++face) {
+				const std::uint8_t faceBit =
+					static_cast<std::uint8_t>(1u << face);
+				if ((requiredMask & faceBit) != 0) {
+					continue;
+				}
+				const bool faceVisible =
+					receiver.worldBoundsValid
+						? faceFrusta[face].IntersectsObb(
+							receiver.worldBoundsCenter,
+							receiver.worldBoundsAxisX,
+							receiver.worldBoundsAxisY,
+							receiver.worldBoundsAxisZ)
+						: faceFrusta[face].IntersectsSphere(
+							receiver.worldBoundsCenter,
+							receiver.worldBoundsRadius);
+				if (faceVisible) {
+					requiredMask = static_cast<std::uint8_t>(
+						requiredMask | faceBit);
+				}
+			}
+			if (requiredMask == 0x3fu) {
+				return;
+			}
+		}
+	};
+	classifyReceivers(m_opaqueMeshList);
+	if (!invalidReceiverBounds && requiredMask != 0x3fu) {
+		classifyReceivers(m_transparentMeshList);
+	}
+	if (invalidReceiverBounds) {
+		return 0x3fu;
+	}
+	return requiredMask;
+}
+
+bool Scene::IsPointShadowPerFaceCacheEnabled() const {
+	return properties.SHADOW_PER_LIGHT_CACHE &&
+		properties.POINT_SHADOW_PER_FACE_CACHE &&
+		(properties.POINT_SHADOW_ADAPTIVE_RENDERING ||
+			properties.POINT_SHADOW_SIX_FACE_RENDERING);
+}
+
 std::size_t Scene::BuildShadowCacheSignature() const {
 	std::size_t signature = 0;
 	hash_combine(
@@ -2148,6 +2515,8 @@ std::size_t Scene::BuildShadowCacheSignature() const {
 	hash_combine(signature, properties.POINT_SHADOW_ADAPTIVE_RENDERING);
 	hash_combine(signature, properties.POINT_SHADOW_SIX_FACE_RENDERING);
 	hash_combine(signature, properties.POINT_SHADOW_FACE_CULLING);
+	hash_combine(signature, properties.SHADOW_SPATIAL_CASTER_CACHE);
+	hash_combine(signature, properties.POINT_SHADOW_PER_FACE_CACHE);
 	hash_combine(
 		signature,
 		properties.SHADOW_SPOT_CASTER_DEPTH_FIT);
@@ -2290,6 +2659,7 @@ void Scene::InvalidatePerLightShadowCaches() {
 	}
 	for (auto& light : lightSource.pointLights) {
 		light.shadowCache.Invalidate();
+		light.shadowFaceCache.Invalidate();
 	}
 	for (auto& light : lightSource.spotLights) {
 		light.shadowCache.Invalidate();
@@ -2324,6 +2694,11 @@ void Scene::DisableEnabledShadowContent() {
 	disable(lightSource.directionLights);
 	disable(lightSource.pointLights);
 	disable(lightSource.spotLights);
+	for (auto& light : lightSource.pointLights) {
+		if (light.m_active && light.useShadowMap) {
+			light.shadowFaceCache.Invalidate();
+		}
+	}
 }
 
 bool Scene::CommitEnabledShadowContent() {
@@ -2756,6 +3131,21 @@ void Scene::RenderShadowMapUpdate(
 			pointShadowShader->setVec3("lightPos", light.position);
 
 			if (useSixFacePointShadow) {
+				std::uint8_t faceUpdateMask = 0x3fu;
+				if (selection &&
+					index < selection->pointUpdateFaceMask.size()) {
+					faceUpdateMask =
+						selection->pointUpdateFaceMask[index];
+				}
+				if (faceUpdateMask == 0) {
+					continue;
+				}
+				std::uint64_t faceUpdateCount = 0;
+				for (std::uint8_t mask = faceUpdateMask;
+					mask != 0;
+					mask = static_cast<std::uint8_t>(mask >> 1u)) {
+					faceUpdateCount += mask & 1u;
+				}
 				std::array<unsigned int, 6> faceFramebuffers{};
 				bool faceTargetsReady = true;
 				for (int face = 0; face < 6; ++face) {
@@ -2770,12 +3160,17 @@ void Scene::RenderShadowMapUpdate(
 					continue;
 				}
 
-				// The layered attachment clears every cubemap face in one
-				// operation. The six cached face FBOs then select a single
-				// layer without reattaching the texture every frame.
-				GLState::BindFramebuffer(
-					GL_FRAMEBUFFER, shadowFBO->framebufferID);
-				glClear(GL_DEPTH_BUFFER_BIT);
+				const bool partialFaceUpdate =
+					faceUpdateMask != 0x3fu;
+				if (!partialFaceUpdate) {
+					// A complete rebuild can clear every layer once. Partial
+					// updates must preserve cached faces and clear only the
+					// selected face FBO immediately before drawing it.
+					GLState::BindFramebuffer(
+						GL_FRAMEBUFFER,
+						shadowFBO->framebufferID);
+					glClear(GL_DEPTH_BUFFER_BIT);
+				}
 
 				const bool useFaceCulling =
 					properties.SHADOW_CASTER_CULLING &&
@@ -2784,9 +3179,17 @@ void Scene::RenderShadowMapUpdate(
 					BuildShadowCasterDrawList();
 				}
 				for (int face = 0; face < 6; ++face) {
+					const std::uint8_t faceBit =
+						static_cast<std::uint8_t>(1u << face);
+					if ((faceUpdateMask & faceBit) == 0) {
+						continue;
+					}
 					GLState::BindFramebuffer(
 						GL_FRAMEBUFFER,
 						faceFramebuffers[static_cast<std::size_t>(face)]);
+					if (partialFaceUpdate) {
+						glClear(GL_DEPTH_BUFFER_BIT);
+					}
 					pointShadowShader->setMat4(
 						"shadowMatrix",
 						lightSpaceMatrices[face]);
@@ -2803,15 +3206,29 @@ void Scene::RenderShadowMapUpdate(
 				}
 				if (!useFaceCulling &&
 					properties.SHADOW_CASTER_CULLING) {
-					m_pendingUnculledRenderedLightCount += 6u;
-					m_pendingUnculledTrianglePassMultiplier += 6u;
+					m_pendingUnculledRenderedLightCount +=
+						faceUpdateCount;
+					m_pendingUnculledTrianglePassMultiplier +=
+						faceUpdateCount;
 				}
-				m_pendingShadowDrawPassMultiplier += 6u;
+				m_pendingShadowDrawPassMultiplier +=
+					faceUpdateCount;
 				++m_shadowStats.pointShadowSixFaceUpdateCount;
-				m_shadowStats.pointShadowSubmissionPassCount += 6u;
-				if (useFaceCulling) {
-					m_shadowStats.pointShadowFaceCullingPassCount += 6u;
+				m_shadowStats.pointShadowSubmissionPassCount +=
+					faceUpdateCount;
+				m_shadowStats.pointShadowRenderedFaceCount +=
+					faceUpdateCount;
+				if (partialFaceUpdate) {
+					++m_shadowStats.pointShadowPartialUpdateCount;
 				}
+				else {
+					++m_shadowStats.pointShadowFullUpdateCount;
+				}
+				if (useFaceCulling) {
+					m_shadowStats.pointShadowFaceCullingPassCount +=
+						faceUpdateCount;
+				}
+				trianglePassMultiplier += faceUpdateCount;
 			}
 			else {
 				GLState::BindFramebuffer(
@@ -2847,9 +3264,10 @@ void Scene::RenderShadowMapUpdate(
 				++m_pendingShadowDrawPassMultiplier;
 				++m_shadowStats.pointShadowLayeredUpdateCount;
 				++m_shadowStats.pointShadowSubmissionPassCount;
+				m_shadowStats.pointShadowRenderedFaceCount += 6u;
+				trianglePassMultiplier += 6u;
 			}
 			++renderedLightCount;
-			trianglePassMultiplier += 6u;
 			++m_shadowStats.pointLightUpdateCount;
 			if (selection) {
 				selection->point[index] = 2;
@@ -2888,9 +3306,18 @@ void Scene::DrawShadowMapPerLight() {
 		lightSource.pointLights.size(), 0);
 	selection.spotSignature.assign(
 		lightSource.spotLights.size(), 0);
+	selection.pointRequiredFaceMask.assign(
+		lightSource.pointLights.size(), 0x3fu);
+	selection.pointUpdateFaceMask.assign(
+		lightSource.pointLights.size(), 0x3fu);
+	selection.pointFaceSignatures.resize(
+		lightSource.pointLights.size());
 
 	std::uint64_t enabledLightCount = 0;
 	std::uint64_t lightCacheHitCount = 0;
+	bool clearOnly = false;
+	const bool usePointFaceCache =
+		IsPointShadowPerFaceCacheEnabled();
 	{
 		PERF_CPU_SCOPE("Shadow Cache Check");
 		ShadowCacheCheckTelemetry telemetry{ m_shadowStats, false };
@@ -2919,6 +3346,9 @@ void Scene::DrawShadowMapPerLight() {
 			if (releaseIfDisabled(light)) {
 				++enabledLightCount;
 			}
+			else {
+				light.shadowFaceCache.Invalidate();
+			}
 		}
 		for (auto& light : lightSource.spotLights) {
 			if (releaseIfDisabled(light)) {
@@ -2945,7 +3375,7 @@ void Scene::DrawShadowMapPerLight() {
 			++m_shadowStats.conservativeShadowFallbackCount;
 			return;
 		}
-		const bool clearOnly = !m_shadowCasterBoundsValid;
+		clearOnly = !m_shadowCasterBoundsValid;
 
 		const std::uint64_t shadowShaderRevision =
 			shadowShaderReady ? shadowShader->GetRevision() : 0u;
@@ -2992,7 +3422,106 @@ void Scene::DrawShadowMapPerLight() {
 			FBO* target = light.EnsureShadowFBO();
 			if ((!clearOnly && !pointShadowShaderReady) || !target) {
 				light.shadowCache.Invalidate();
+				light.shadowFaceCache.Invalidate();
 				++m_shadowStats.shadowResourceFailureCount;
+				continue;
+			}
+			if (!clearOnly && usePointFaceCache) {
+				light.shadowFaceCache.SynchronizeTarget(target);
+				if (!light.shadowFaceCache.MatchesTarget(target)) {
+					light.shadowCache.Invalidate();
+					++m_shadowStats.shadowResourceFailureCount;
+					continue;
+				}
+
+				light.FitShadowToBounds(
+					m_cachedShadowCasterCenter,
+					m_cachedShadowCasterRadius);
+				const auto& lightSpaceMatrices =
+					light.GetLightSpaceMatrices();
+
+				const auto signatureStart =
+					std::chrono::steady_clock::now();
+				const auto faceSignatures =
+					BuildPointShadowFaceRevisionSignatures(
+						light,
+						pointShadowShaderRevision,
+						lightSpaceMatrices);
+				const double signatureMilliseconds =
+					std::chrono::duration<double, std::milli>(
+						std::chrono::steady_clock::now() -
+						signatureStart).count();
+				++m_shadowStats.pointShadowFaceSignatureBuildCount;
+				m_shadowStats.lastPointShadowFaceSignatureCpuMilliseconds =
+					signatureMilliseconds;
+				m_shadowStats.totalPointShadowFaceSignatureCpuMilliseconds +=
+					signatureMilliseconds;
+
+				const auto demandStart =
+					std::chrono::steady_clock::now();
+				const std::uint8_t requiredMask =
+					ComputePointShadowRequiredFaceMask(light);
+				const double demandMilliseconds =
+					std::chrono::duration<double, std::milli>(
+						std::chrono::steady_clock::now() -
+						demandStart).count();
+				++m_shadowStats.pointShadowFaceDemandCheckCount;
+				m_shadowStats.lastPointShadowFaceDemandCpuMilliseconds =
+					demandMilliseconds;
+				m_shadowStats.totalPointShadowFaceDemandCpuMilliseconds +=
+					demandMilliseconds;
+
+				const std::uint8_t staleMask =
+					light.shadowFaceCache.BuildMissMask(
+						0x3fu,
+						faceSignatures,
+						target);
+				std::uint8_t updateMask =
+					static_cast<std::uint8_t>(
+						requiredMask & staleMask);
+				if (requiredMask != 0 &&
+					!light.shadowCache.IsSampleable(target)) {
+					updateMask = requiredMask;
+				}
+				const std::uint8_t hitMask =
+					static_cast<std::uint8_t>(
+						requiredMask & ~updateMask);
+				const std::uint8_t deferredMask =
+					static_cast<std::uint8_t>(
+						staleMask & ~requiredMask);
+				const auto countFaces = [](std::uint8_t mask) {
+					std::uint64_t count = 0;
+					for (; mask != 0; mask =
+						static_cast<std::uint8_t>(mask >> 1u)) {
+						count += mask & 1u;
+					}
+					return count;
+				};
+				m_shadowStats.pointShadowRequiredFaceCount +=
+					countFaces(requiredMask);
+				m_shadowStats.pointShadowFaceCacheHitCount +=
+					countFaces(hitMask);
+				m_shadowStats.pointShadowDeferredFaceCount +=
+					countFaces(deferredMask);
+				m_shadowStats.lastPointShadowRequiredFaceMask =
+					requiredMask;
+				m_shadowStats.lastPointShadowUpdateFaceMask =
+					updateMask;
+				if (requiredMask == 0) {
+					++m_shadowStats.pointShadowZeroRequiredCount;
+				}
+
+				selection.pointRequiredFaceMask[index] =
+					requiredMask;
+				selection.pointUpdateFaceMask[index] =
+					updateMask;
+				selection.pointFaceSignatures[index] =
+					faceSignatures;
+				if (updateMask == 0) {
+					++lightCacheHitCount;
+					continue;
+				}
+				selection.point[index] = 1;
 				continue;
 			}
 			const std::size_t currentSignature =
@@ -3102,12 +3631,25 @@ void Scene::DrawShadowMapPerLight() {
 		++index) {
 		if (selection.point[index] == 2) {
 			auto& light = lightSource.pointLights[index];
-			light.shadowCache.Commit(
-				selection.pointSignature[index],
-				light.shadowFBO);
+			if (usePointFaceCache && !clearOnly) {
+				const std::uint8_t renderedMask =
+					selection.pointUpdateFaceMask[index];
+				light.shadowFaceCache.Commit(
+					renderedMask,
+					selection.pointFaceSignatures[index],
+					light.shadowFBO);
+				light.shadowCache.CommitContent(light.shadowFBO);
+			}
+			else {
+				light.shadowCache.Commit(
+					selection.pointSignature[index],
+					light.shadowFBO);
+				light.shadowFaceCache.Invalidate();
+			}
 		}
 		else if (selection.point[index] == 1) {
-			lightSource.pointLights[index].shadowCache.Invalidate();
+			auto& light = lightSource.pointLights[index];
+			light.shadowCache.Invalidate();
 		}
 	}
 	for (std::size_t index = 0;
@@ -3146,6 +3688,20 @@ void Scene::DrawShadowMapRevision() {
 	}
 	SynchronizeShadowCacheGranularity(
 		properties.SHADOW_PER_LIGHT_CACHE);
+	const bool spatialCastersEnabled =
+		properties.SHADOW_PER_LIGHT_CACHE &&
+		properties.SHADOW_SPATIAL_CASTER_CACHE;
+	const bool pointFacesEnabled =
+		IsPointShadowPerFaceCacheEnabled();
+	if (!m_shadowCacheFeatureStateInitialized ||
+		m_shadowCacheUsedSpatialCasters != spatialCastersEnabled ||
+		m_shadowCacheUsedPointFaces != pointFacesEnabled) {
+		m_shadowCacheFeatureStateInitialized = true;
+		m_shadowCacheUsedSpatialCasters = spatialCastersEnabled;
+		m_shadowCacheUsedPointFaces = pointFacesEnabled;
+		m_shadowCacheValid = false;
+		InvalidatePerLightShadowCaches();
+	}
 	if (properties.SHADOW_PER_LIGHT_CACHE) {
 		DrawShadowMapPerLight();
 		return;
@@ -3207,6 +3763,9 @@ void Scene::DrawShadowMapRevisionGlobal(bool forceUpdate) {
 			if (releaseIfDisabled(light)) {
 				++enabledLightCount;
 				hasPointShadow = true;
+			}
+			else {
+				light.shadowFaceCache.Invalidate();
 			}
 		}
 		for (auto& light : lightSource.spotLights) {
@@ -3449,6 +4008,9 @@ void Scene::DrawShadowMap() {
 				hasPointShadow = true;
 				++enabledLightCount;
 			}
+			else {
+				light.shadowFaceCache.Invalidate();
+			}
 		}
 		for (auto& light : lightSource.spotLights) {
 			if (releaseIfDisabled(light)) {
@@ -3690,6 +4252,9 @@ void Scene::ClearContent()
     m_shadowCacheUsedLegacySignature = false;
     m_shadowCacheGranularityInitialized = false;
     m_shadowCacheUsedPerLight = false;
+    m_shadowCacheFeatureStateInitialized = false;
+    m_shadowCacheUsedSpatialCasters = false;
+    m_shadowCacheUsedPointFaces = false;
     m_shadowCasterStateInitialized = false;
     m_shadowCasterStatePrepared = false;
     m_shadowCasterStateReliable = true;
@@ -3710,6 +4275,7 @@ void Scene::ClearContent()
     m_pendingShadowCasterTriangleCount = 0;
     m_pendingUnculledRenderedLightCount = 0;
     m_pendingUnculledTrianglePassMultiplier = 0;
+    m_pendingShadowDrawPassMultiplier = 0;
     m_shadowStats = {};
     framebufferManager.TrimUnusedFBOs();
 }

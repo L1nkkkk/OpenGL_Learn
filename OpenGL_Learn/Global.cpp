@@ -86,6 +86,17 @@ SystemProperties::SystemProperties()
         std::free(perLightCache);
         parseEnvironmentFlag(value, SHADOW_PER_LIGHT_CACHE);
     }
+    char* spatialCasterCache = nullptr;
+    std::size_t spatialCasterCacheLength = 0;
+    if (_dupenv_s(
+            &spatialCasterCache,
+            &spatialCasterCacheLength,
+            "OPENGL_LEARN_SHADOW_SPATIAL_CASTER_CACHE") == 0 &&
+        spatialCasterCache != nullptr) {
+        const std::string value(spatialCasterCache);
+        std::free(spatialCasterCache);
+        parseEnvironmentFlag(value, SHADOW_SPATIAL_CASTER_CACHE);
+    }
     char* casterCulling = nullptr;
     std::size_t casterCullingLength = 0;
     if (_dupenv_s(
@@ -235,6 +246,12 @@ SystemProperties::SystemProperties()
     readEnvironmentFlag(
         "OPENGL_LEARN_POINT_SHADOW_FACE_CULLING",
         POINT_SHADOW_FACE_CULLING);
+    readEnvironmentFlag(
+        "OPENGL_LEARN_POINT_SHADOW_PER_FACE_CACHE",
+        POINT_SHADOW_PER_FACE_CACHE);
+    readEnvironmentFlag(
+        "OPENGL_LEARN_POINT_SHADOW_FORCE_ALL_REQUIRED",
+        POINT_SHADOW_FORCE_ALL_FACES_REQUIRED);
     char* adaptiveMinSamples = nullptr;
     std::size_t adaptiveMinSamplesLength = 0;
     if (_dupenv_s(
@@ -268,6 +285,12 @@ SystemProperties::SystemProperties()
     if (perLightCache != nullptr) {
         const std::string value(perLightCache);
         parseEnvironmentFlag(value, SHADOW_PER_LIGHT_CACHE);
+    }
+    const char* spatialCasterCache =
+        std::getenv("OPENGL_LEARN_SHADOW_SPATIAL_CASTER_CACHE");
+    if (spatialCasterCache != nullptr) {
+        const std::string value(spatialCasterCache);
+        parseEnvironmentFlag(value, SHADOW_SPATIAL_CASTER_CACHE);
     }
     const char* casterCulling =
         std::getenv("OPENGL_LEARN_SHADOW_CASTER_CULLING");
@@ -386,6 +409,12 @@ SystemProperties::SystemProperties()
     readEnvironmentFlag(
         "OPENGL_LEARN_POINT_SHADOW_FACE_CULLING",
         POINT_SHADOW_FACE_CULLING);
+    readEnvironmentFlag(
+        "OPENGL_LEARN_POINT_SHADOW_PER_FACE_CACHE",
+        POINT_SHADOW_PER_FACE_CACHE);
+    readEnvironmentFlag(
+        "OPENGL_LEARN_POINT_SHADOW_FORCE_ALL_REQUIRED",
+        POINT_SHADOW_FORCE_ALL_FACES_REQUIRED);
     const char* adaptiveMinSamples =
         std::getenv("OPENGL_LEARN_SHADOW_ADAPTIVE_MIN_SAMPLES");
     if (adaptiveMinSamples != nullptr) {

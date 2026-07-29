@@ -85,6 +85,93 @@ struct ShadowMapCacheState {
 	}
 };
 
+struct PointShadowFaceCacheState {
+	std::uint8_t validMask = 0;
+	std::array<std::size_t, 6> signatures{};
+	unsigned int framebufferID = 0;
+	unsigned int textureID = 0;
+	int width = 0;
+	int height = 0;
+	std::uint64_t resourceGeneration = 0;
+
+	void Invalidate() {
+		validMask = 0;
+		signatures.fill(0);
+		framebufferID = 0;
+		textureID = 0;
+		width = 0;
+		height = 0;
+		resourceGeneration = 0;
+	}
+
+	bool MatchesTarget(const FBO* target) const {
+		return ShadowMapCacheState::IsTargetReady(target) &&
+			framebufferID == target->framebufferID &&
+			textureID == target->textureIDs.front() &&
+			width == target->width &&
+			height == target->height &&
+			resourceGeneration == target->GetResourceGeneration();
+	}
+
+	void SynchronizeTarget(const FBO* target) {
+		if (MatchesTarget(target)) {
+			return;
+		}
+		Invalidate();
+		if (!ShadowMapCacheState::IsTargetReady(target)) {
+			return;
+		}
+		framebufferID = target->framebufferID;
+		textureID = target->textureIDs.front();
+		width = target->width;
+		height = target->height;
+		resourceGeneration = target->GetResourceGeneration();
+	}
+
+	std::uint8_t BuildMissMask(
+		std::uint8_t requiredMask,
+		const std::array<std::size_t, 6>& currentSignatures,
+		const FBO* target) const {
+		if (!MatchesTarget(target)) {
+			return requiredMask;
+		}
+		std::uint8_t missMask = 0;
+		for (std::size_t face = 0; face < signatures.size(); ++face) {
+			const std::uint8_t faceBit =
+				static_cast<std::uint8_t>(1u << face);
+			if ((requiredMask & faceBit) == 0) {
+				continue;
+			}
+			if ((validMask & faceBit) == 0 ||
+				signatures[face] != currentSignatures[face]) {
+				missMask = static_cast<std::uint8_t>(
+					missMask | faceBit);
+			}
+		}
+		return missMask;
+	}
+
+	void Commit(
+		std::uint8_t renderedMask,
+		const std::array<std::size_t, 6>& currentSignatures,
+		const FBO* target) {
+		SynchronizeTarget(target);
+		if (!MatchesTarget(target)) {
+			return;
+		}
+		for (std::size_t face = 0; face < signatures.size(); ++face) {
+			const std::uint8_t faceBit =
+				static_cast<std::uint8_t>(1u << face);
+			if ((renderedMask & faceBit) == 0) {
+				continue;
+			}
+			signatures[face] = currentSignatures[face];
+			validMask = static_cast<std::uint8_t>(
+				validMask | faceBit);
+		}
+	}
+};
+
 class PointLight : public Model{
 public:
 	glm::vec3 ambient;
@@ -98,6 +185,7 @@ public:
 	bool useShadowMap = false;
 	FBO* shadowFBO = nullptr;
 	ShadowMapCacheState shadowCache;
+	PointShadowFaceCacheState shadowFaceCache;
 	bool autoFitShadow = true;
 	int shadowResolution = 1024;
 

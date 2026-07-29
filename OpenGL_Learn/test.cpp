@@ -92,6 +92,12 @@ struct BenchmarkTimelineFrameTelemetry {
 	std::uint64_t directionalLightUpdateCount = 0;
 	std::uint64_t pointLightUpdateCount = 0;
 	std::uint64_t pointShadowSubmissionPassCount = 0;
+	std::uint64_t pointShadowRequiredFaceCount = 0;
+	std::uint64_t pointShadowRenderedFaceCount = 0;
+	std::uint64_t pointShadowFaceCacheHitCount = 0;
+	std::uint64_t pointShadowDeferredFaceCount = 0;
+	std::uint8_t pointShadowRequiredFaceMask = 0;
+	std::uint8_t pointShadowUpdateFaceMask = 0;
 	std::uint64_t spotLightUpdateCount = 0;
 	std::uint64_t casterBoundsRebuildCount = 0;
 };
@@ -447,7 +453,8 @@ bool ParseClassicSceneTestOptions(
 		options.shadowWorkload != "timeline-point-camera" &&
 		options.shadowWorkload != "timeline-caster" &&
 		options.shadowWorkload != "timeline-camera" &&
-		options.shadowWorkload != "timeline-mixed") {
+		options.shadowWorkload != "timeline-mixed" &&
+		options.shadowWorkload != "timeline-cache-3way") {
 		errorMessage =
 			"--classic-scene-shadow-workload must be static-hit, force-update, "
 			"move-directional, move-point, move-spot, move-caster, "
@@ -455,7 +462,7 @@ bool ParseClassicSceneTestOptions(
 			"reload-shadow-point, resize-point-shadow, "
 			"replace-point-shadow-target, toggle-caster, timeline-point, "
 			"timeline-point-camera, timeline-caster, timeline-camera, "
-			"or timeline-mixed";
+			"timeline-mixed, or timeline-cache-3way";
 		return false;
 	}
 	if (options.shadowVariant.empty()) {
@@ -515,9 +522,11 @@ bool ParseClassicSceneTestOptions(
 			"point-motion workloads require point or all shadow lights";
 		return false;
 	}
-	if (options.shadowWorkload == "timeline-mixed" &&
+	if ((options.shadowWorkload == "timeline-mixed" ||
+			options.shadowWorkload == "timeline-cache-3way") &&
 		options.shadowLights != "all") {
-		errorMessage = "timeline-mixed requires all shadow lights";
+		errorMessage =
+			"mixed timeline workloads require all shadow lights";
 		return false;
 	}
 	if ((options.shadowWorkload == "reload-shadow-point" ||
@@ -848,6 +857,20 @@ void WriteJsonBenchmarkMotionTimeline(
 			<< frame.pointLightUpdateCount << ",\n"
 			<< "          \"pointShadowSubmissionPassCount\": "
 			<< frame.pointShadowSubmissionPassCount << ",\n"
+			<< "          \"pointShadowRequiredFaceCount\": "
+			<< frame.pointShadowRequiredFaceCount << ",\n"
+			<< "          \"pointShadowRenderedFaceCount\": "
+			<< frame.pointShadowRenderedFaceCount << ",\n"
+			<< "          \"pointShadowFaceCacheHitCount\": "
+			<< frame.pointShadowFaceCacheHitCount << ",\n"
+			<< "          \"pointShadowDeferredFaceCount\": "
+			<< frame.pointShadowDeferredFaceCount << ",\n"
+			<< "          \"pointShadowRequiredFaceMask\": "
+			<< static_cast<unsigned int>(
+				frame.pointShadowRequiredFaceMask) << ",\n"
+			<< "          \"pointShadowUpdateFaceMask\": "
+			<< static_cast<unsigned int>(
+				frame.pointShadowUpdateFaceMask) << ",\n"
 			<< "          \"spotLightUpdateCount\": "
 			<< frame.spotLightUpdateCount << ",\n"
 			<< "          \"casterBoundsRebuildCount\": "
@@ -1165,6 +1188,43 @@ bool WriteClassicSceneResult(
 	const std::uint64_t measuredPointShadowFaceCullingPassCount = CounterDelta(
 		measurementStartShadowStats.pointShadowFaceCullingPassCount,
 		shadowStats.pointShadowFaceCullingPassCount);
+	const std::uint64_t measuredPointShadowRequiredFaceCount = CounterDelta(
+		measurementStartShadowStats.pointShadowRequiredFaceCount,
+		shadowStats.pointShadowRequiredFaceCount);
+	const std::uint64_t measuredPointShadowRenderedFaceCount = CounterDelta(
+		measurementStartShadowStats.pointShadowRenderedFaceCount,
+		shadowStats.pointShadowRenderedFaceCount);
+	const std::uint64_t measuredPointShadowFaceCacheHitCount = CounterDelta(
+		measurementStartShadowStats.pointShadowFaceCacheHitCount,
+		shadowStats.pointShadowFaceCacheHitCount);
+	const std::uint64_t measuredPointShadowDeferredFaceCount = CounterDelta(
+		measurementStartShadowStats.pointShadowDeferredFaceCount,
+		shadowStats.pointShadowDeferredFaceCount);
+	const std::uint64_t measuredPointShadowPartialUpdateCount = CounterDelta(
+		measurementStartShadowStats.pointShadowPartialUpdateCount,
+		shadowStats.pointShadowPartialUpdateCount);
+	const std::uint64_t measuredPointShadowFullUpdateCount = CounterDelta(
+		measurementStartShadowStats.pointShadowFullUpdateCount,
+		shadowStats.pointShadowFullUpdateCount);
+	const std::uint64_t measuredPointShadowZeroRequiredCount = CounterDelta(
+		measurementStartShadowStats.pointShadowZeroRequiredCount,
+		shadowStats.pointShadowZeroRequiredCount);
+	const std::uint64_t measuredPointShadowFaceDemandCheckCount = CounterDelta(
+		measurementStartShadowStats.pointShadowFaceDemandCheckCount,
+		shadowStats.pointShadowFaceDemandCheckCount);
+	const std::uint64_t measuredPointShadowFaceSignatureBuildCount =
+		CounterDelta(
+			measurementStartShadowStats.pointShadowFaceSignatureBuildCount,
+			shadowStats.pointShadowFaceSignatureBuildCount);
+	const double measuredPointShadowFaceDemandCpuMilliseconds = CounterDelta(
+		measurementStartShadowStats
+			.totalPointShadowFaceDemandCpuMilliseconds,
+		shadowStats.totalPointShadowFaceDemandCpuMilliseconds);
+	const double measuredPointShadowFaceSignatureCpuMilliseconds =
+		CounterDelta(
+			measurementStartShadowStats
+				.totalPointShadowFaceSignatureCpuMilliseconds,
+			shadowStats.totalPointShadowFaceSignatureCpuMilliseconds);
 	const std::uint64_t measuredSpotLightUpdateCount = CounterDelta(
 		measurementStartShadowStats.spotLightUpdateCount,
 		shadowStats.spotLightUpdateCount);
@@ -1230,7 +1290,7 @@ bool WriteClassicSceneResult(
 		measurementStartShadowStats.totalDirectionalFitCpuMilliseconds,
 		shadowStats.totalDirectionalFitCpuMilliseconds);
 	output << "{\n"
-		<< "  \"schemaVersion\": 17,\n"
+		<< "  \"schemaVersion\": 18,\n"
 		<< "  \"success\": " << (success ? "true" : "false") << ",\n"
 		<< "  \"scene\": \"" << EscapeJsonString(options.sceneName) << "\",\n"
 		<< "  \"modelPath\": \"" << EscapeJsonString(options.modelPath) << "\",\n"
@@ -1291,6 +1351,10 @@ bool WriteClassicSceneResult(
 		<< "    \"perLightCacheEnabled\": "
 		<< (properties.SHADOW_PER_LIGHT_CACHE ? "true" : "false")
 		<< ",\n"
+		<< "    \"spatialCasterCacheEnabled\": "
+		<< (properties.SHADOW_SPATIAL_CASTER_CACHE
+			? "true"
+			: "false") << ",\n"
 		<< "    \"directionalLight\": ["
 		<< options.directionalLightDirection.x << ", "
 		<< options.directionalLightDirection.y << ", "
@@ -1410,6 +1474,14 @@ bool WriteClassicSceneResult(
 				: "layered")) << "\",\n"
 		<< "    \"pointShadowFaceCullingEnabled\": "
 		<< (properties.POINT_SHADOW_FACE_CULLING
+			? "true"
+			: "false") << ",\n"
+		<< "    \"pointShadowPerFaceCacheEnabled\": "
+		<< (properties.POINT_SHADOW_PER_FACE_CACHE
+			? "true"
+			: "false") << ",\n"
+		<< "    \"pointShadowForceAllFacesRequired\": "
+		<< (properties.POINT_SHADOW_FORCE_ALL_FACES_REQUIRED
 			? "true"
 			: "false") << ",\n"
 		<< "    \"updateCount\": " << shadowStats.updateCount << ",\n"
@@ -1553,6 +1625,54 @@ bool WriteClassicSceneResult(
 		<< shadowStats.pointShadowFaceCullingPassCount << ",\n"
 		<< "    \"measuredPointShadowFaceCullingPassCount\": "
 		<< measuredPointShadowFaceCullingPassCount << ",\n"
+		<< "    \"pointShadowRequiredFaceCount\": "
+		<< shadowStats.pointShadowRequiredFaceCount << ",\n"
+		<< "    \"measuredPointShadowRequiredFaceCount\": "
+		<< measuredPointShadowRequiredFaceCount << ",\n"
+		<< "    \"pointShadowRenderedFaceCount\": "
+		<< shadowStats.pointShadowRenderedFaceCount << ",\n"
+		<< "    \"measuredPointShadowRenderedFaceCount\": "
+		<< measuredPointShadowRenderedFaceCount << ",\n"
+		<< "    \"pointShadowFaceCacheHitCount\": "
+		<< shadowStats.pointShadowFaceCacheHitCount << ",\n"
+		<< "    \"measuredPointShadowFaceCacheHitCount\": "
+		<< measuredPointShadowFaceCacheHitCount << ",\n"
+		<< "    \"pointShadowDeferredFaceCount\": "
+		<< shadowStats.pointShadowDeferredFaceCount << ",\n"
+		<< "    \"measuredPointShadowDeferredFaceCount\": "
+		<< measuredPointShadowDeferredFaceCount << ",\n"
+		<< "    \"measuredPointShadowPartialUpdateCount\": "
+		<< measuredPointShadowPartialUpdateCount << ",\n"
+		<< "    \"measuredPointShadowFullUpdateCount\": "
+		<< measuredPointShadowFullUpdateCount << ",\n"
+		<< "    \"measuredPointShadowZeroRequiredCount\": "
+		<< measuredPointShadowZeroRequiredCount << ",\n"
+		<< "    \"measuredPointShadowFaceDemandCheckCount\": "
+		<< measuredPointShadowFaceDemandCheckCount << ",\n"
+		<< "    \"measuredPointShadowFaceSignatureBuildCount\": "
+		<< measuredPointShadowFaceSignatureBuildCount << ",\n"
+		<< "    \"measuredPointShadowFaceDemandCpuMilliseconds\": "
+		<< measuredPointShadowFaceDemandCpuMilliseconds << ",\n"
+		<< "    \"measuredAveragePointShadowFaceDemandCpuMilliseconds\": "
+		<< (measuredPointShadowFaceDemandCheckCount > 0
+			? measuredPointShadowFaceDemandCpuMilliseconds /
+				static_cast<double>(
+					measuredPointShadowFaceDemandCheckCount)
+			: 0.0) << ",\n"
+		<< "    \"measuredPointShadowFaceSignatureCpuMilliseconds\": "
+		<< measuredPointShadowFaceSignatureCpuMilliseconds << ",\n"
+		<< "    \"measuredAveragePointShadowFaceSignatureCpuMilliseconds\": "
+		<< (measuredPointShadowFaceSignatureBuildCount > 0
+			? measuredPointShadowFaceSignatureCpuMilliseconds /
+				static_cast<double>(
+					measuredPointShadowFaceSignatureBuildCount)
+			: 0.0) << ",\n"
+		<< "    \"lastPointShadowRequiredFaceMask\": "
+		<< static_cast<unsigned int>(
+			shadowStats.lastPointShadowRequiredFaceMask) << ",\n"
+		<< "    \"lastPointShadowUpdateFaceMask\": "
+		<< static_cast<unsigned int>(
+			shadowStats.lastPointShadowUpdateFaceMask) << ",\n"
 		<< "    \"spotLightUpdateCount\": "
 		<< shadowStats.spotLightUpdateCount << ",\n"
 		<< "    \"measuredSpotLightUpdateCount\": "
@@ -2086,6 +2206,8 @@ int main(int argc, char** argv) {
 	float classicSceneAppliedScale = 1.0f;
 	std::shared_ptr<Material> classicSceneOverrideMaterial;
 	std::shared_ptr<Model> classicSceneModel;
+	std::shared_ptr<Material> classicSceneMotionCasterMaterial;
+	std::shared_ptr<Model> classicSceneMotionCaster;
 	const bool useBuiltInMaterialScene =
 		pbrSmokeTest || benchmarkPhongMaterialScene || benchmarkPbrMaterialScene;
 	if (classicSceneOptions.enabled) {
@@ -2266,6 +2388,53 @@ int main(int argc, char** argv) {
 				-classicSceneSourceCenter * classicSceneAppliedScale);
 		}
 		scene.modelSource.AddModel(classicSceneModel);
+		if (classicSceneOptions.shadowWorkload ==
+			"timeline-cache-3way") {
+			classicSceneMotionCasterMaterial =
+				std::make_shared<Material>("pbr");
+			classicSceneMotionCasterMaterial->AddProperty(
+				"albedo",
+				MaterialProperty::CreateColor(
+					glm::vec3(0.86f, 0.22f, 0.12f)));
+			classicSceneMotionCasterMaterial->AddProperty(
+				"metallic",
+				MaterialProperty::CreateFloat(
+					0.0f, 0.0f, 1.0f, 0.01f));
+			classicSceneMotionCasterMaterial->AddProperty(
+				"roughness",
+				MaterialProperty::CreateFloat(
+					0.45f, 0.04f, 1.0f, 0.01f));
+			classicSceneMotionCasterMaterial->AddProperty(
+				"ao",
+				MaterialProperty::CreateFloat(
+					1.0f, 0.0f, 1.0f, 0.01f));
+			classicSceneMotionCasterMaterial->AddProperty(
+				"opacity",
+				MaterialProperty::CreateFloat(1.0f));
+			classicSceneMotionCasterMaterial->AddProperty(
+				"useAlphaCutoff",
+				MaterialProperty::CreateBool(false));
+			classicSceneMotionCaster =
+				std::make_shared<Model>(
+					"models/sphere/sphere.obj",
+					classicSceneMotionCasterMaterial.get());
+			classicSceneMotionCaster->SetName(
+				"Shadow Cache Motion Caster");
+			const float casterSourceRadius =
+				(std::max)(
+					0.0001f,
+					classicSceneMotionCaster
+						->GetLocalBoundingRadius());
+			const float casterRadius =
+				classicSceneOptions.normalizedRadius * 0.02f;
+			classicSceneMotionCaster->SetScale(
+				casterRadius / casterSourceRadius);
+			classicSceneMotionCaster->SetPosition(
+				classicSceneOptions.pointLightPosition +
+				classicSceneOptions.normalizedRadius *
+				glm::vec3(0.12f, 0.02f, 0.0f));
+			scene.modelSource.AddModel(classicSceneMotionCaster);
+		}
 
 		camera.cameraPos = classicSceneOptions.cameraPosition;
 		camera.cameraFront = glm::normalize(
@@ -2505,7 +2674,11 @@ int main(int argc, char** argv) {
 	Scene::ShadowSystemStats classicSceneMeasurementStartShadowStats;
 	Scene::ShadowSystemStats classicScenePreviousFrameShadowStats;
 	const glm::vec3 classicSceneBaseModelPosition =
-		classicSceneModel ? classicSceneModel->position : glm::vec3(0.0f);
+		classicSceneMotionCaster
+			? classicSceneMotionCaster->position
+			: (classicSceneModel
+				? classicSceneModel->position
+				: glm::vec3(0.0f));
 	const glm::vec3 classicSceneBaseDirection =
 		scene.lightSource.directionLights.empty()
 			? glm::vec3(-0.45f, -1.0f, -0.25f)
@@ -2581,8 +2754,13 @@ int main(int argc, char** argv) {
 			if (BenchmarkMotionTimeline::HasTrack(
 				trackMask,
 				BenchmarkMotionTrack::Caster) &&
-				classicSceneModel) {
-				classicSceneModel->SetPosition(
+				(classicSceneMotionCaster ||
+					classicSceneModel)) {
+				auto& motionCaster =
+					classicSceneMotionCaster
+						? classicSceneMotionCaster
+						: classicSceneModel;
+				motionCaster->SetPosition(
 					classicSceneCurrentMotionSample.casterPosition);
 			}
 			if (BenchmarkMotionTimeline::HasTrack(
@@ -3283,6 +3461,36 @@ int main(int argc, char** argv) {
 								.pointShadowSubmissionPassCount,
 							currentShadowStats
 								.pointShadowSubmissionPassCount);
+					frameTelemetry.pointShadowRequiredFaceCount =
+						CounterDelta(
+							classicScenePreviousFrameShadowStats
+								.pointShadowRequiredFaceCount,
+							currentShadowStats
+								.pointShadowRequiredFaceCount);
+					frameTelemetry.pointShadowRenderedFaceCount =
+						CounterDelta(
+							classicScenePreviousFrameShadowStats
+								.pointShadowRenderedFaceCount,
+							currentShadowStats
+								.pointShadowRenderedFaceCount);
+					frameTelemetry.pointShadowFaceCacheHitCount =
+						CounterDelta(
+							classicScenePreviousFrameShadowStats
+								.pointShadowFaceCacheHitCount,
+							currentShadowStats
+								.pointShadowFaceCacheHitCount);
+					frameTelemetry.pointShadowDeferredFaceCount =
+						CounterDelta(
+							classicScenePreviousFrameShadowStats
+								.pointShadowDeferredFaceCount,
+							currentShadowStats
+								.pointShadowDeferredFaceCount);
+					frameTelemetry.pointShadowRequiredFaceMask =
+						currentShadowStats
+							.lastPointShadowRequiredFaceMask;
+					frameTelemetry.pointShadowUpdateFaceMask =
+						currentShadowStats
+							.lastPointShadowUpdateFaceMask;
 					frameTelemetry.spotLightUpdateCount = CounterDelta(
 						classicScenePreviousFrameShadowStats
 							.spotLightUpdateCount,
@@ -3454,6 +3662,8 @@ int main(int argc, char** argv) {
 	}
 	scene.SetSelectedModelForMaterials(nullptr);
 	scene.modelSource.models.clear();
+	classicSceneMotionCaster.reset();
+	classicSceneMotionCasterMaterial.reset();
 	classicSceneModel.reset();
 	classicSceneOverrideMaterial.reset();
 	scene.lightSource.pointLights.clear();

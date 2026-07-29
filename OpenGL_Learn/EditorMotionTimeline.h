@@ -22,6 +22,10 @@ struct EditorMotionFrameTelemetry {
 	std::uint64_t pointShadowLayeredUpdateCount = 0;
 	std::uint64_t pointShadowSixFaceUpdateCount = 0;
 	std::uint64_t pointShadowSubmissionPassCount = 0;
+	std::uint64_t pointShadowRequiredFaceCount = 0;
+	std::uint64_t pointShadowRenderedFaceCount = 0;
+	std::uint64_t pointShadowFaceCacheHitCount = 0;
+	std::uint64_t pointShadowDeferredFaceCount = 0;
 	std::uint64_t shadowResourceFailureCount = 0;
 	std::uint64_t conservativeShadowFallbackCount = 0;
 	double shadowUpdateCpuMilliseconds = 0.0;
@@ -30,6 +34,11 @@ struct EditorMotionFrameTelemetry {
 class EditorMotionTimelineController final {
 public:
 	static constexpr std::size_t kHistoryLength = 240;
+	enum class ShadowComparisonMode {
+		GlobalDirty,
+		PerLight,
+		PerFace
+	};
 
 	bool CaptureBaseState(Scene& scene, Camera& camera);
 	void Play(Scene& scene, Camera& camera);
@@ -69,7 +78,9 @@ public:
 	void UseEstimatedSceneRadius(Scene& scene, Camera& camera);
 	bool PrepareThreeLightTestRig(Scene& scene, Camera& camera);
 	bool RestoreThreeLightTestRig(Scene& scene, Camera& camera);
-	void SetShadowComparisonMode(Scene& scene, bool perLightCache);
+	void SetShadowComparisonMode(
+		Scene& scene,
+		ShadowComparisonMode mode);
 
 	bool IsCaptured() const { return m_captured; }
 	bool IsPlaying() const { return m_playing; }
@@ -170,6 +181,9 @@ private:
 	bool m_testRigAddedSpotLight = false;
 	bool m_testRigPreviousShadowCacheDisabled = false;
 	bool m_testRigPreviousPerLightCache = true;
+	bool m_testRigPreviousSpatialCasterCache = false;
+	bool m_testRigPreviousPointPerFaceCache = false;
+	bool m_testRigPreviousForceAllPointFaces = false;
 	bool m_testRigPreviousPointAdaptiveRendering = true;
 	bool m_testRigPreviousPointSixFaceRendering = false;
 	std::size_t m_testRigModelCount = 0;
@@ -182,9 +196,11 @@ private:
 	int m_testRigDirectionalLightIndex = 0;
 	int m_testRigSpotLightIndex = 0;
 	std::weak_ptr<Model> m_testRigSceneAnchor;
+	std::shared_ptr<Material> m_testRigMotionCasterMaterial;
+	std::shared_ptr<Model> m_testRigMotionCaster;
 	std::vector<ShadowLightFlags> m_testRigPointLightFlags;
 	std::vector<ShadowLightFlags> m_testRigDirectionalLightFlags;
 	std::vector<ShadowLightFlags> m_testRigSpotLightFlags;
 	std::string m_testRigStatusText =
-		"Prepare a temporary three-light rig for a reproducible A/B preview.";
+		"Prepare a temporary three-light rig for a reproducible A/B/C preview.";
 };

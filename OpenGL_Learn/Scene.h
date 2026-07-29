@@ -155,6 +155,15 @@ public:
 		std::uint64_t pointShadowSixFaceUpdateCount = 0;
 		std::uint64_t pointShadowSubmissionPassCount = 0;
 		std::uint64_t pointShadowFaceCullingPassCount = 0;
+		std::uint64_t pointShadowRequiredFaceCount = 0;
+		std::uint64_t pointShadowRenderedFaceCount = 0;
+		std::uint64_t pointShadowFaceCacheHitCount = 0;
+		std::uint64_t pointShadowDeferredFaceCount = 0;
+		std::uint64_t pointShadowPartialUpdateCount = 0;
+		std::uint64_t pointShadowFullUpdateCount = 0;
+		std::uint64_t pointShadowZeroRequiredCount = 0;
+		std::uint64_t pointShadowFaceDemandCheckCount = 0;
+		std::uint64_t pointShadowFaceSignatureBuildCount = 0;
 		std::uint64_t spotLightUpdateCount = 0;
 		std::uint64_t emptyShadowClearCount = 0;
 		std::uint64_t shadowResourceFailureCount = 0;
@@ -173,6 +182,10 @@ public:
 		double totalCacheCheckCpuMilliseconds = 0.0;
 		double lastCasterStateSyncCpuMilliseconds = 0.0;
 		double totalCasterStateSyncCpuMilliseconds = 0.0;
+		double lastPointShadowFaceDemandCpuMilliseconds = 0.0;
+		double totalPointShadowFaceDemandCpuMilliseconds = 0.0;
+		double lastPointShadowFaceSignatureCpuMilliseconds = 0.0;
+		double totalPointShadowFaceSignatureCpuMilliseconds = 0.0;
 		double totalDirectionalFitCpuMilliseconds = 0.0;
 		double totalSpotFitCpuMilliseconds = 0.0;
 		float lastDirectionalFitRawWidth = 0.0f;
@@ -204,6 +217,8 @@ public:
 		bool lastSpotFitRawNearClipped = false;
 		bool lastSpotFitProjectionAware = false;
 		bool lastCacheCheckUsedLegacySignature = false;
+		std::uint8_t lastPointShadowRequiredFaceMask = 0;
+		std::uint8_t lastPointShadowUpdateFaceMask = 0;
 	};
 
 	struct MeshDrawItem {
@@ -212,11 +227,18 @@ public:
 		Shader* shader = nullptr;
 		glm::mat4 modelMatrix = glm::mat4(1.0f);
 		glm::vec3 worldBoundsCenter = glm::vec3(0.0f);
+		glm::vec3 worldBoundsAxisX = glm::vec3(0.0f);
+		glm::vec3 worldBoundsAxisY = glm::vec3(0.0f);
+		glm::vec3 worldBoundsAxisZ = glm::vec3(0.0f);
+		bool worldBoundsValid = false;
+		float worldBoundsRadius = 0.0f;
 	};
 
 	struct ModelFrameItem {
 		Model* model = nullptr;
 		glm::mat4 modelMatrix = glm::mat4(1.0f);
+		glm::vec3 worldBoundsCenter = glm::vec3(0.0f);
+		float worldBoundsRadius = 0.0f;
 	};
 
 	LightSource lightSource;
@@ -304,6 +326,8 @@ public:
 
 private:
 	struct ShadowCasterBoundItem {
+		const Model* model = nullptr;
+		std::uint64_t revision = 0;
 		glm::vec3 center = glm::vec3(0.0f);
 		float radius = 0.0f;
 	};
@@ -327,6 +351,10 @@ private:
 		std::vector<std::size_t> directionSignature;
 		std::vector<std::size_t> pointSignature;
 		std::vector<std::size_t> spotSignature;
+		std::vector<std::uint8_t> pointRequiredFaceMask;
+		std::vector<std::uint8_t> pointUpdateFaceMask;
+		std::vector<std::array<std::size_t, 6>>
+			pointFaceSignatures;
 	};
 
 	struct ShadowSamplerBindingState {
@@ -352,6 +380,16 @@ private:
 	std::size_t BuildSpotShadowRevisionSignature(
 		const SpotLight& light,
 		std::uint64_t shadowShaderRevision) const;
+	std::size_t BuildSpatialShadowCasterSignature(
+		const glm::mat4& lightViewProjection) const;
+	std::array<std::size_t, 6>
+		BuildPointShadowFaceRevisionSignatures(
+			const PointLight& light,
+			std::uint64_t pointShadowShaderRevision,
+			const std::array<glm::mat4, 6>& lightSpaceMatrices) const;
+	std::uint8_t ComputePointShadowRequiredFaceMask(
+		const PointLight& light) const;
+	bool IsPointShadowPerFaceCacheEnabled() const;
 	void CommitShadowCasterState(
 		std::size_t signature,
 		const std::vector<ShadowCasterBoundItem>& bounds);
@@ -402,6 +440,9 @@ private:
 	bool m_shadowCacheDisabledLastFrame = false;
 	bool m_shadowCacheGranularityInitialized = false;
 	bool m_shadowCacheUsedPerLight = false;
+	bool m_shadowCacheFeatureStateInitialized = false;
+	bool m_shadowCacheUsedSpatialCasters = false;
+	bool m_shadowCacheUsedPointFaces = false;
 	bool m_shadowCasterStateInitialized = false;
 	bool m_shadowCasterStatePrepared = false;
 	bool m_shadowCasterStateReliable = true;
