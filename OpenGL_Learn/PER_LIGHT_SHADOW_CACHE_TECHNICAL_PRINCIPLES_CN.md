@@ -1,43 +1,77 @@
-# Per-Light 阴影缓存与增量更新：技术原理、推导过程与工程权衡
+# 阴影缓存 A→B→C：从 Per-Light 到 Point Per-Face 的增量更新原理
 
 状态：实现与正式实验均已完成
-日期：2026-07-28
-适用代码：当前工作区的 Revision Shadow Cache / Per-Light Cache 路径
+日期：2026-07-30
+适用代码：当前工作区的 No-cache / Per-Light Revision Cache / Point Per-Face Cache 三档路径
 
 相关材料：
 
-- [正式 1080p A/B 实验报告](PER_LIGHT_SHADOW_CACHE_BENCHMARK_CN.md)
-- [确定性连续运动时间轴与逐帧遥测](SHADOW_MOTION_TIMELINE_CN.md)
-- [自动生成的详细数据、图表与截图报告](docs/benchmark-images/shadow-optimizations/per-light-cache-no-cache-vs-per-light-1080p-six-face-final/report.md)
-- [正式实验原始汇总](benchmark-results/shadow-optimizations/per-light-cache-no-cache-vs-per-light-1080p-six-face-final/summary.json)
+- [当前 1080p A/B/C 三档实验报告](POINT_SHADOW_CACHE_3WAY_REPORT_CN.md)
+- [当前三档数据、图表与截图汇总](docs/benchmark-images/shadow-optimizations/point-shadow-cache-3way-1080p-a298e37/point-shadow-cache-3way-summary-cn.json)
+- [Point Shadow 关键失效规则与 SceneTopologyRevision 正确性审计](POINT_SHADOW_CACHE_CORRECTNESS_AUDIT_CN.md)
+- [正确性审计数据、图表与截图汇总](docs/benchmark-images/shadow-optimizations/point-shadow-cache-correctness-1080p-a298e37/point-shadow-cache-correctness-summary-cn.json)
+- [阶段 B 的 1080p A/B 实验报告](PER_LIGHT_SHADOW_CACHE_BENCHMARK_CN.md)
+- [阶段 B 的确定性连续运动时间轴与逐帧遥测](SHADOW_MOTION_TIMELINE_CN.md)
 - [完整失效矩阵](benchmark-results/shadow-optimizations/per-light-cache-invalidation-matrix.json)
 
 ---
 
 ## 1. 一句话概括
 
-这项优化的本质不是“少画两张 Shadow Map”，而是把阴影系统从：
+这项优化不是一次孤立的“少画两张 Shadow Map”，而是把阴影缓存粒度连续下沉了两次：
 
-> 每帧无条件重新生成全部启用灯的 Shadow Map
+```text
+A：无缓存，每帧全量重绘
+    ↓ 按灯光拆分依赖
+B：Per-Light Revision Cache
+    ↓ 按 Cubemap Face 拆分 Point 的依赖与需求
+C：Spatial Per-Light + Point Per-Face Cache
+```
 
-改造成：
+三档的精确定义是：
 
-> 每盏灯独立维护“逻辑依赖版本 + GPU 目标身份 + 已发布内容状态”，只重新计算真正失效的中间结果。
+| 档位 | 缓存粒度 | 每帧行为 |
+|---|---|---|
+| A 全局重绘 | 无缓存控制路径 | Directional、Point、Spot 全部重绘；Point 固定提交六面 |
+| B Per-Light | 每盏灯一个 Revision Cache Entry | 只更新失效灯；Point 一旦失效仍固定提交六面 |
+| C Per-Light + Per-Face | 可证明局部性时使用空间 Caster Signature；Point 再维护六个 Face Entry | Point 只提交当前需要且已经失效的 Face |
 
-在 Directional、Point、Spot 三盏阴影灯同时存在、每帧只移动 Point Light 的情况下：
+C 的核心公式是：
 
-- 无缓存控制路径：不检查历史结果，三盏灯每帧全部重绘；
-- Per-Light Revision Cache：Directional 与 Spot 命中，只有 Point 的六面 Cubemap 重绘；
-- 更新灯数稳定从 `3 → 1`；
-- Sponza / San Miguel 的 Shadow GPU Median 分别下降 `21.57% / 46.06%`；
-- 固定 60 Hz 的 Point + Camera 连续轨迹复验中，两场景分别下降 `21.46% / 45.76%`；Caster 保持静止，Point 每帧仍提交六面；
-- 点阴影六面内容、主画面与 renderer-owned 资源都通过了独立正确性门槛。
+```text
+StaleMask    = FaceSignatureMissMask
+RequiredMask = 当前可见 Receiver 可能采样的 Face
+UpdateMask   = StaleMask ∩ RequiredMask
+HitMask      = RequiredMask - UpdateMask
+DeferredMask = StaleMask - RequiredMask
+```
 
-正式实验的 A 就是无缓存、每帧全量更新的控制路径，B 是当前 Per-Light Cache。两者来自同一可执行文件，使用相同的 Shader、FBO、分辨率、Caster Culling 和 Six-face 点阴影，只切换缓存策略。它复现了最初的更新行为，又避免直接运行旧提交时把其他渲染差异混入结果。
+这意味着 C 不是粗暴地“每帧只画某几个固定方向”，而是：
+
+1. 先判断每个 Face 的历史内容是否仍对应当前 Light、Caster、Shader、配置与 Render Target；
+2. 再判断当前相机可见 Receiver 是否可能采样该 Face；
+3. 只重建 `required & stale`；
+4. 没有当前需求的陈旧 Face 保持无效，未来第一次进入 Required Mask 时先重建再使用；
+5. 任何边界信息不可靠时退化到六面需求，不能以漏影换性能。
+
+当前正式实验使用同一 Release 可执行文件、相同 Shader/FBO/分辨率/轨迹，A、B、C 每档各运行三个独立进程，每轮测量 1800 帧：
+
+| 场景 | GPU Frame A/B/C | A→C | Point Shadow A/B/C | B→C | Point Face A/B/C |
+|---|---:|---:|---:|---:|---:|
+| Crytek Sponza | `1.596 / 1.467 / 1.208 ms` | **-24.32%** | `0.591 / 0.590 / 0.501 ms` | **-15.16%** | `6.00 / 4.00 / 3.10` |
+| San Miguel 2.1 | `7.873 / 5.649 / 5.260 ms` | **-33.19%** | `2.715 / 2.678 / 2.004 ms` | **-25.15%** | `6.00 / 4.00 / 2.94` |
+
+这组数据必须按两个台阶解释：
+
+- A→B 的收益来自不再重绘未变化的 Directional 与 Spot；
+- B→C 的收益来自局部 Caster 运动和相机静止/移动阶段对 Point Face 的复用；
+- Point Light 自身移动会进入六个 Face Signature，因此通常仍使六面全部陈旧；如果 Receiver 又需要六面，C 会正确退化成完整六面更新。
+
+因此当前可辩护的结论是“局部 Caster 变化下的 Point Per-Face 增量更新”，不是“所有点光源更新都只画两三个面”。
 
 真正困难的部分是回答下面这个问题：
 
-> 在当前建模并支持的依赖域中，怎样既不漏掉会改变阴影结果的失效条件，又不因为过度保守重新退化成全局重绘？
+> 怎样把缓存粒度从 Scene 下沉到 Light，再从 Point Light 下沉到 Cubemap Face，同时保证陈旧面不会被当前可见 Receiver 采样，并在证明不了局部性时自动退回安全路径？
 
 本文围绕这个问题展开。
 
@@ -96,31 +130,42 @@ Frame Begin
 - 玩家手电、火球或局部 Point Light 在移动；
 - 大部分 Caster 静态，少量对象动态。
 
-因此，缓存不能只回答“上一帧画过没有”，还必须回答“上一帧的哪一份结果仍然对应当前输入”。这就是为什么最终直接以 Per-Light Entry 建模。
+因此，缓存不能只回答“上一帧画过没有”，还必须连续回答三个问题：
+
+```text
+哪一盏灯的结果仍然有效？
+    → 这盏 Point Light 的哪一个 Face 仍然有效？
+        → 当前画面真正可能采样哪些 Face？
+```
+
+B 用 Per-Light Entry 回答第一个问题；C 用 Point Face Entry 和 Receiver Demand 回答后两个问题。
 
 ### 2.4 这是系统固有问题，还是第一版没考虑到
 
 最初“每帧全部重绘”确实说明当时没有考虑跨帧复用，但这不等于只加一个布尔值就能安全解决。真正固有且困难的问题是：引入缓存以后，必须完整建模所有失效来源，否则性能提升会换来陈旧阴影。
 
-项目中间曾有过 Global Revision Cache：它能安全解决静态复用，但局部灯光变化仍会把整组阴影失效。它是有价值的过渡设计，不过本次正式 A/B 按你的要求不再使用它作为基线。
+项目中间曾有过 Global Revision Cache：它能安全解决静态复用，但局部灯光变化仍会把整组阴影失效。它是有价值的过渡设计，不过当前正式三档实验不把它列为独立档位：A 直接复现无缓存全量调度，B 是 Per-Light，C 是 Per-Light + Per-Face。
 
 完整演进是：
 
 ```text
-最初：无缓存，每帧全部重绘
+A：无缓存，每帧全部重绘
     → 识别 Shadow Map 是可复用的派生数据
     → 中间：Global Revision Cache，先解决静态复用
     → 发现局部变化仍被放大
-    → 最终：Per-Light Revision Cache
+    → B：Per-Light Revision Cache
+    → 发现 Point Miss 仍把一个变化放大成六个 Face Pass
+    → 验证 Caster 与 Receiver 在 Cubemap Face 上的空间局部性
+    → C：Spatial Per-Light + Point Per-Face Cache
 ```
 
-所以问题既包含“初始实现没有考虑缓存”，也包含缓存系统天然困难的失效建模。当前方案的价值在于没有停留在“有缓存”这一层，而是把缓存做成了可验证的逐灯增量协议。
+所以问题既包含“初始实现没有考虑缓存”，也包含缓存系统天然困难的失效建模。A→B 解决灯光级放大，B→C 解决 Point Cubemap 内部的 Face 级放大；每次下沉都增加了新的正确性义务。
 
 ---
 
 ## 3. 方案是怎样推导出来的
 
-这里不把思路描述成一次灵光乍现，而是从无缓存路径的工作量证据出发，还原怎样一步步推导出 Per-Light Cache。
+这里不把思路描述成一次灵光乍现，而是从无缓存路径的工作量证据出发，还原怎样先推导出 Per-Light Cache，再从 B 的剩余瓶颈推导出 Point Per-Face Cache。
 
 ### 3.1 先证明浪费发生在哪里
 
@@ -225,6 +270,51 @@ Key 失配
 
 这就是 `valid` 和 `contentSampleable` 分离的来源，也是整个实现最关键的安全设计之一。这里说的是“事务式发布语义”，不是带 GPU Fence、回滚日志或逐 Draw 错误检查的严格 GPU 事务。
 
+### 3.5 B 为什么仍然浪费：Point Light 在灯内还是一个原子 Entry
+
+B 已经把更新数从三盏灯缩到真正失效的灯，但 Point Cache Entry 仍把整个 Cubemap 当作一个不可拆分结果：
+
+```text
+Point Key Miss
+    → 清空整个 Cubemap
+        → +X / -X / +Y / -Y / +Z / -Z 全部提交
+            → 整灯 Commit
+```
+
+这对 Point Light 自身移动是合理的：六个 Face 的 View Matrix 都以灯的位置为原点，灯一移动，六面投影关系都会改变。
+
+但对局部 Caster 变化并不总是合理。一个位于 `+X` 方向的小物体移动，通常只改变覆盖它的一个或少数 Face；把 `-X`、`±Y`、`±Z` 一起重建，是把一个空间局部事件再次放大。
+
+因此 B 的剩余问题不是“能否把六次 Draw Call 神奇地合成一次”，而是：
+
+> 六个 Face 中，哪些内容真的失效；失效后哪些内容又是当前画面马上需要的？
+
+### 3.6 从 B 推导 C：把“有效性”和“当前需求”分开
+
+只做 Face Dirty 仍不够。假设一个背向相机的 Face 已经失效：
+
+- 立即重建它，正确但可能浪费；
+- 永远不重建它，未来相机转过去会采样陈旧内容；
+- 当前延迟，未来第一次需要时先重建，才同时满足性能与正确性。
+
+由此得到两个互相独立的集合：
+
+```text
+StaleMask：
+    哪些 Face 的已缓存内容不再对应当前输入。
+
+RequiredMask：
+    当前相机可见 Receiver 可能从哪些 Face 采样阴影。
+```
+
+真正的本帧更新集合是二者交集：
+
+```text
+UpdateMask = StaleMask & RequiredMask
+```
+
+这就是 C 的关键思想。它不是把相机可见性当作缓存有效性，也不是因为某个面当前不可见就把它错误标成 Valid；它只允许非需求面保持“陈旧但未发布为当前版本”，以后按需物化。
+
 ---
 
 ## 4. 核心抽象：逐灯依赖函数
@@ -286,38 +376,93 @@ Hit_i =
     AND cache_i.MatchesTarget(R_i)
 ```
 
+C 继续把 Point Light `p` 拆成六个 Face：
+
+```text
+S_p,f(t) = F(
+    C_f(t),
+    L_p(t),
+    H_p(t),
+    P_p(t),
+    FaceIndex_f
+)
+
+K_p,f = Hash(
+    SpatialCasterSignature_f,
+    PointLightState,
+    PointShaderRevision,
+    PointRenderPolicy,
+    FaceIndex_f
+)
+
+FaceHit_p,f =
+    TargetMatches(R_p)
+    AND validMask[f]
+    AND cachedSignature[f] == K_p,f
+```
+
+其中 `C_f(t)` 不是全场 Caster Revision，而是与该 Cubemap Face 光锥相交的 Caster 子集及其版本。六个 Face 仍共享同一张 Depth Cubemap 和同一代 Render Target，但逻辑有效性独立。
+
+把六个 Face Hit 组合成位掩码：
+
+```text
+AllFaceMask  = 0b11_1111
+StaleMask    = AllFaceMask & ~FaceHitMask
+RequiredMask = ReceiverDemand(camera, visibleReceivers, pointLight)
+UpdateMask   = StaleMask & RequiredMask
+```
+
+`RequiredMask` 只控制本帧物化，不会修改 `validMask`。因此：
+
+- 已有效但当前不需要的 Face 保留缓存；
+- 已失效且当前不需要的 Face 保持失效；
+- 已失效且当前需要的 Face 必须先更新；
+- 冷启动或目标换代时，当前需要的 Face 必须重新生成。
+
 注意：物理 Render Target 没有简单地混入逻辑 Hash，而是通过 `MatchesTarget` 单独验证。这样能明确区分：
 
 - 逻辑输入是否相同；
 - 缓存内容是否仍位于同一个、同一代的 GPU 资源中。
 
-### 4.1 优化前后依赖传播
+### 4.1 A→B→C 的依赖传播
 
 ```mermaid
-flowchart LR
-    subgraph A["优化前：无缓存、每帧全量更新"]
-        A0["Frame Begin"] --> A2["Directional 重绘"]
-        A0 --> A3["Point 六面重绘"]
-        A0 --> A4["Spot 重绘"]
-        A2 --> A5["完成本帧阴影"]
-        A3 --> A5
-        A4 --> A5
+flowchart TB
+    subgraph A["A：无缓存"]
+        A0["Frame Begin"] --> A1["Directional + Point 六面 + Spot"]
     end
 
-    subgraph B["优化后：Per-Light Revision Cache"]
+    subgraph B["B：Per-Light"]
         B0["Point Transform 变化"] --> B1["Point Key 失配"]
         B2["Directional Key 相同"] --> B3["Cache Hit"]
         B4["Spot Key 相同"] --> B5["Cache Hit"]
         B1 --> B6["只重绘 Point 六面"]
         B6 --> B7["只 Commit Point Cache"]
     end
+
+    subgraph C["C：Per-Light + Point Per-Face"]
+        C0["局部 Caster 变化"] --> C1["生成六个 Face Signature"]
+        C2["可见 Receiver"] --> C3["生成 Required Mask"]
+        C1 --> C4["Stale Mask"]
+        C3 --> C5["Update = Required & Stale"]
+        C4 --> C5
+        C5 --> C6["只 Clear/Draw 选中 Face"]
+        C6 --> C7["只 Commit renderedMask"]
+    end
+
+    A -->|"按灯拆分"| B
+    B -->|"按 Face 拆分"| C
 ```
 
-这个图揭示了优化真正改变的东西：不是每个 Pass 的内部算法，而是在执行前增加可靠的依赖判断，把“每帧全部执行”收缩为“只执行失效 Entry”。
+这个图揭示了两次优化改变的都是失效传播边界：
+
+- A→B：把“帧”缩成“灯”；
+- B→C：把“Point Light”继续缩成“Cubemap Face”；
+- 实际 Shadow Shader、分辨率和最终采样算法没有为了性能而降级。
 
 ---
 
-## 5. `ShadowMapCacheState`：逻辑状态与物理目标的组合
+## 5. 两层 Cache State：逻辑状态与物理目标的组合
 
 逐灯缓存记录位于 [Light.h](Light.h) 的 `ShadowMapCacheState`。
 
@@ -333,7 +478,38 @@ flowchart LR
 | `width / height` | 提交时的目标尺寸 |
 | `resourceGeneration` | FBO 本次物理实例的单调代际 |
 
-### 5.1 为什么 `valid` 不能等于 `contentSampleable`
+Point Light 在 C 档额外持有 [Light.h](Light.h) 的 `PointShadowFaceCacheState`：
+
+| 字段 | 含义 |
+|---|---|
+| `validMask` | 六个 bit 分别表示六个 Face 是否存在已提交 Signature |
+| `signatures[6]` | 每个 Face 上次成功绘制时的逻辑依赖摘要 |
+| `framebufferID / textureID` | 六面共同所属的 Cubemap 目标 |
+| `width / height` | 提交时的 Cubemap 尺寸 |
+| `resourceGeneration` | 物理目标代际，防止 GL ID 复用误命中 |
+
+这里没有把 Dirty 状态保存成另一个容易失同步的布尔数组，而是每帧派生：
+
+```text
+FaceDirty[f] =
+    target changed
+    OR validMask[f] == 0
+    OR signatures[f] != currentSignatures[f]
+```
+
+`SynchronizeTarget` 一旦发现 Cubemap 身份、尺寸或代际变化，会清空整个 `validMask`。这是必要的，因为六个逻辑 Face 虽然独立，物理上仍共享一张 Cubemap；目标换代后没有任何旧 Face 还能成立。
+
+### 5.1 为什么同时保留整灯状态和逐面状态
+
+C 没有删除 `ShadowMapCacheState`：
+
+- `PointShadowFaceCacheState` 回答每个 Face 的逻辑版本是否匹配；
+- `ShadowMapCacheState::contentSampleable` 回答当前 Cubemap 目标是否已经存在允许 Lighting Pass 读取的已发布内容；
+- Lighting Pass 仍按 Point Light 绑定一张 Cubemap，不需要改成六次独立纹理绑定。
+
+逐面更新成功后，系统只对 `renderedMask` 提交 Face Signature，同时用 `CommitContent` 发布目标身份；没有被绘制的陈旧 Face 仍保持 Valid Bit 缺失或 Signature 不匹配。正确性依赖 Required Mask 保守覆盖当前可见 Receiver 可能访问的所有方向。
+
+### 5.2 为什么 `valid` 不能等于 `contentSampleable`
 
 二者看起来相似，但含义不同：
 
@@ -355,7 +531,7 @@ contentSampleable：
 
 把两个状态分开，可以避免用一个布尔值表达多个不同阶段。
 
-### 5.2 为什么还需要 `resourceGeneration`
+### 5.3 为什么还需要 `resourceGeneration`
 
 只比较 OpenGL ID 并不安全。
 
@@ -383,7 +559,7 @@ FBO 完整
 
 ---
 
-## 6. Caster Revision：怎样知道场景内容变了
+## 6. Caster Revision 与空间签名：怎样知道哪里变了
 
 光源只是 Shadow Map 的一部分输入。Caster 的增删、移动、Mesh 启用状态和 Alpha Test 材质也会改变深度结果。
 
@@ -431,27 +607,116 @@ Material Shadow State
                 → 每盏灯的 Shadow Key
 ```
 
-当前 Scene Caster Revision 仍是场景级的。任何 Caster 变化都会使所有灯的 Key 变化，这是有意保留的保守边界：
+在 B 档，Scene Caster Revision 是场景级的。任何 Caster 变化都会使所有灯的 Key 变化，这是阶段 B 有意保留的保守边界：
 
 - Light 变化可以安全地局部失效；
 - Caster 变化是否只影响某盏灯，需要额外维护 Light-Caster Overlap Graph；
 - 在没有这个图之前，全灯失效比漏掉阴影变化更安全。
 
+C 档开始在现有 Bounds Scratch List 上计算空间子集 Signature，但仍保留 Scene Revision 作为无法可靠分类时的回退。这里不是推翻 B，而是在能够证明投影相交关系的范围内继续细化。
+
 这体现了优化中的一个原则：
 
 > 对已经能够准确证明局部性的输入做增量更新；对尚不能可靠证明局部性的输入保持保守。
+
+### 6.4 SceneTopologyRevision：把 Model 容器变化纳入依赖
+
+只同步现有 Model 的 Transform、Mesh 和 Material Revision 还不够。Model 可能被新增、删除、替换或整体 Clear；若只观察指针、模型数量或聚合内容，容器可能经历 `A → B → A` 后回到相同表象，但缓存依赖已经跨过一次完整的拓扑变化。
+
+因此 `ModelSource` 维护单调递增的 `SceneTopologyRevision`：
+
+| 操作 | Revision 规则 |
+|---|---|
+| `AddModel` | 成功加入后推进一次 |
+| `DeleteModel` | 实际删除后推进一次 |
+| `ReplaceModel` | 一次替换只推进一次，不拆成 Delete + Add 两次 |
+| `ClearModels` | 作为显式拓扑屏障推进一次，即使容器已经为空 |
+
+Revision 从 1 开始，回绕时跳过 0。`Scene` 在 `PrepareRenderData` 与 `DrawShadowMap` 前同步观察值；一旦发现变化，就统一失效：
+
+- Global、Per-Light 与 Point Per-Face Cache；
+- Shadow Caster 聚合状态与 Bounds/Draw List；
+- 已提交的空间 Signature 和 Face Valid 状态。
+
+`SceneTopologyRevision` 同时进入 Global、Per-Light、Spatial Caster 和 Per-Face Signature。这样正确性不依赖容器槽位、对象地址或 Model 数量是否“看起来没变”。
+
+正式 ABA Smoke 在同一槽位替换了名称、几何、材质、变换都相同的 Model，模型数量保持 `2 → 2`；结果是 Revision `3 → 4`、缓存失效一次、Point 阴影更新一次。这个用例只做一次，目标是证明拓扑版本能关闭同槽位替换漏洞，而不是把 ABA 扩散成新的性能 workload。
+
+### 6.5 C 档怎样生成空间 Caster Signature
+
+每个 `ShadowCasterBoundItem` 保存：
+
+```text
+Model Identity
+Caster Revision
+World Bounds Center / Radius
+```
+
+`BuildSpatialShadowCasterSignature(lightViewProjection)` 先构造该投影的 Frustum，再扫描 Bounds：
+
+```text
+for each caster:
+    if caster sphere intersects light frustum:
+        hash(model identity)
+        hash(caster revision)
+        hash(center, radius)
+
+hash(accepted caster count)
+```
+
+Directional 与 Spot 在关闭 Auto Fit 时可直接使用各自 Light Frustum 的空间 Signature。Point 的整灯空间 Signature 使用光源位置、Far Range 与 Caster Sphere 做球形范围筛选；Point Per-Face Signature 则分别使用六个 Face Frustum。
+
+加入 `model identity` 和 `accepted caster count` 的原因是：
+
+- 两个 Caster 即使版本值相同，也不能被视为同一个输入；
+- Caster 进入或离开投影时，即使其自身 Revision 没变，子集成员关系也已经改变；
+- Bounds 也进入 Hash，避免同一版本记录与空间位置不一致。
+
+### 6.6 仍然扫描 Caster，收益在哪里
+
+当前空间 Signature 是 `O(N_caster × projection)` 的 CPU 扫描，不是免费操作。但它把便宜的 Bounds 相交和 Hash，换成了可能昂贵得多的 GPU 工作：
+
+```text
+CPU：Sphere/Frustum 测试 + Hash
+    替代
+GPU/Driver：FBO 切换 + Clear + Mesh Draw + Triangle Rasterization
+```
+
+正式 C 档中：
+
+- Sponza 的总缓存检查约 `0.0071 ms/帧`，其中需求分析 `0.0035 ms`、Face Signature `0.0016 ms`；
+- San Miguel 的总缓存检查约 `0.0472 ms/帧`，其中需求分析 `0.0427 ms`、Face Signature `0.0019 ms`；
+- 同时 Point Shadow 更新样本中位数相比 B 分别减少 `0.089 ms` 和 `0.674 ms`，每帧摊销分别减少 `0.105 ms` 和 `0.579 ms`。
+
+需求分析与 Face Signature 是总缓存检查的子项，不能与总数再次相加。
+
+因此当前两个场景中，扫描成本小于被删除的渲染成本，优化是正收益。它并不意味着线性扫描适合无限规模场景；当 Caster 数量继续扩大时，应使用 BVH、Octree、Grid 或 Light-Caster Overlap Set 把查询从全量扫描改成空间查询。
+
+### 6.7 为什么 Auto Fit 仍保留全局依赖
+
+Auto Fit 会用全体相关 Caster Bounds 改写投影范围。若先用“当前投影”过滤 Caster，再用过滤结果修改投影，会产生循环依赖：
+
+```text
+投影决定相关 Caster
+    相关 Caster 又决定投影
+```
+
+当前实现没有假装这个问题已经解决。Directional、Spot 以及整灯 Point 的 Auto-fit Signature 仍保留全局 Caster 依赖；只有 Point Face 在完成 Fit、得到最终六个矩阵以后再构建逐面空间 Signature。
+
+这也是为什么正式 A/B/C 中 B 与 C 的“更新阴影灯数”相同：C 的主要新增收益来自 Point 内部 Face 数下降，而不是把 Auto-fit 下的所有灯都完全局部化。
 
 ---
 
 ## 7. 每盏灯的 Signature 包含什么
 
-三个灯型共享 Caster Revision，但各自只加入与自身 Shadow Output 有关的状态。
+三个灯型都依赖 Caster 状态，但 B 使用共享 Scene Revision，C 在可证明投影局部性时替换为空间子集 Signature；其余字段仍只加入与自身 Shadow Output 有关的状态。
 
 ### 7.1 Directional
 
 `BuildDirectionalShadowRevisionSignature` 包含：
 
-- Scene Caster Signature / Revision；
+- B 或 Auto Fit：Scene Caster Signature / Revision；
+- C 且关闭 Auto Fit：Directional Light Frustum 内的空间 Caster Signature；
 - 2D Shadow Shader Revision；
 - Direction；
 - Shadow Center；
@@ -465,7 +730,8 @@ Material Shadow State
 
 `BuildPointShadowRevisionSignature` 包含：
 
-- Scene Caster Signature / Revision；
+- B：Scene Caster Signature / Revision；
+- C 且关闭 Auto Fit：Point Range 内的空间 Caster Signature；
 - 当前 Point Shadow Shader Revision；
 - Position；
 - Near / Far；
@@ -474,11 +740,38 @@ Material Shadow State
 - Adaptive / Six-face 路径配置；
 - Face Culling 配置。
 
-### 7.3 Spot
+### 7.3 Point Per-Face
+
+`BuildPointShadowFaceRevisionSignatures` 为六个 Face 分别组合：
+
+- 该 Face Frustum 内的空间 Caster Signature；
+- Point Shadow Shader Revision；
+- Adaptive / Six-face / Face Culling / Per-Face 策略；
+- Shadow Resolution；
+- Auto Fit 状态；
+- Point Position；
+- Near / Far；
+- Face Index。
+
+Face Index 必须进入 Signature。即使两个方向当前恰好包含相同 Caster，它们的投影方向和纹理 Layer 语义也不同，不能因为 Hash 输入集合相似而交换缓存记录。
+
+Point Position 也必须进入六个 Face。它解释了一个非常重要的边界：
+
+```text
+Point Light 移动
+    → 六个 View Matrix 的原点同时改变
+        → 六个 Face Signature 全部变化
+            → 当前 Required 的 Face 全部需要更新
+```
+
+所以 C 主要优化“局部 Caster 变化”和“未变化内容复用”，不是通过忽略 Point Light 移动来制造低 Face 数。
+
+### 7.4 Spot
 
 `BuildSpotShadowRevisionSignature` 包含：
 
-- Scene Caster Signature / Revision；
+- B 或 Auto Fit：Scene Caster Signature / Revision；
+- C 且关闭 Auto Fit：Spot Light Frustum 内的空间 Caster Signature；
 - 2D Shadow Shader Revision；
 - Position / Direction；
 - Outer Cone；
@@ -487,7 +780,7 @@ Material Shadow State
 - Shadow Resolution；
 - Spot Caster Depth Fit 配置。
 
-### 7.4 为什么 Auto Fit 后要重新计算 Signature
+### 7.5 为什么 Auto Fit 后要重新计算 Signature
 
 这是一个很容易遗漏的细节。
 
@@ -512,7 +805,7 @@ Cache Miss 后，系统可能根据最新 Caster Bounds 修改：
 
 ---
 
-## 8. 每帧算法：Check、Select、Render、Commit
+## 8. 每帧算法：Check、Demand、Select、Render、Commit
 
 核心路径在 [Scene.cpp](Scene.cpp) 的 `DrawShadowMapPerLight`。
 
@@ -550,7 +843,34 @@ Cache Miss 后，系统可能根据最新 Caster Bounds 修改：
 - 释放 Shadow FBO；
 - 触发 FBO Pool 的未使用资源回收。
 
-### 8.3 阶段三：只渲染 Selection
+### 8.3 C 档的 Point Face Check 与 Demand
+
+Point Light 进入 C 路径后，不再只构造一个整灯 Signature，而是执行：
+
+1. `SynchronizeTarget`：目标换代则六面全部失效；
+2. 先完成 Point Auto Fit 并取得最终六个 Light Space Matrix；
+3. 为六个 Face 构造当前 Signature；
+4. 构造 `RequiredMask`；
+5. 对六个 Face 计算 `StaleMask`；
+6. 得到 `UpdateMask = RequiredMask & StaleMask`；
+7. `UpdateMask == 0` 时整盏 Point 不进入 Render Selection。
+
+同时记录：
+
+```text
+HitMask      = RequiredMask & ~UpdateMask
+DeferredMask = StaleMask & ~RequiredMask
+```
+
+若当前有需求，但 Cubemap 目标还没有任何可采样内容，系统强制 `UpdateMask = RequiredMask`。这覆盖冷启动、目标重建和从其他策略切回 C 的第一帧。
+
+`ShadowLightUpdateSelection` 因而不只保存“哪盏灯 Pending”，还保存：
+
+- `pointRequiredFaceMask`；
+- `pointUpdateFaceMask`；
+- `pointFaceSignatures[6]`。
+
+### 8.4 阶段四：只渲染 Selection
 
 Selection 中的状态实际上形成了一个小型“事务式发布”标记：
 
@@ -562,13 +882,36 @@ Selection 中的状态实际上形成了一个小型“事务式发布”标记�
 
 `RenderShadowMapUpdate` 只遍历状态非 0 的灯。前置资源门槛通过且对应 CPU 提交路径走到末尾后，才把状态从 `1` 改为 `2`。
 
-### 8.4 阶段四：只 Commit Completed 项
+Point C 路径还会遍历 `pointUpdateFaceMask`：
+
+```text
+UpdateMask == 0x3f：
+    绑定整张 Cubemap FBO
+    一次 Clear 全部 Layer
+    绘制六个 Face
+
+UpdateMask != 0x3f：
+    不允许 Clear 整张 Cubemap
+    对每个选中 Face：
+        绑定该 Face FBO
+        只 Clear 这个 Face
+        设置对应 shadowMatrix
+        只提交这个 Face 的 Caster
+```
+
+这个“局部 Clear”是 C 能成立的物理前提。若部分更新前仍对 Cubemap 做整体 Clear，未失效 Face 的缓存内容会被清掉，而逻辑 Valid Bit 还保持有效，形成严重的假命中。
+
+### 8.5 阶段五：只 Commit Completed 项
 
 渲染结束后：
 
 ```text
-state == 2
+state == 2 且是 Directional/Spot/B 档 Point
     → Commit(finalSignature, currentTarget)
+
+state == 2 且是 C 档 Point
+    → FaceCache.Commit(renderedMask, faceSignatures, currentTarget)
+    → ShadowCache.CommitContent(currentTarget)
 
 state == 1
     → 保持 Invalid
@@ -586,7 +929,9 @@ state == 1
 
 不会出现“Key 已更新，但纹理仍是旧内容或已知半成品”的状态。需要再次强调：这里的“提交”是 CPU 侧缓存状态协议，不代表实现了 GPU Fence、逐次 `glGetError` 或可回滚的真正 GPU 事务。
 
-### 8.5 伪代码
+Face Commit 只更新 `renderedMask` 覆盖的 Signature 和 Valid Bit。Deferred Face 不会因为同一张 Cubemap 的其他面成功更新而被顺便标成有效。
+
+### 8.6 统一伪代码
 
 ```cpp
 syncCasterState();
@@ -600,7 +945,32 @@ for (Light& light : enabledShadowLights) {
         continue;
     }
 
-    Key current = BuildPerLightKey(light, casterRevision, shaderRevision);
+    if (isPoint(light) && perFaceCacheEnabled) {
+        light.faceCache.SynchronizeTarget(target);
+        FitProjectionIfNeeded(light, casterBounds);
+
+        FaceKeys keys = BuildPointFaceKeys(light, spatialCasters);
+        FaceMask required = BuildRequiredFaceMask(camera, receivers, light);
+        FaceMask stale = light.faceCache.BuildMissMask(AllFaces, keys, target);
+        FaceMask update = required & stale;
+
+        if (required != 0 && !light.shadowCache.IsSampleable(target)) {
+            update = required;
+        }
+        if (update == 0) {
+            ++lightCacheHits;
+            continue;
+        }
+
+        selection[light] = Pending;
+        selection.requiredMask[light] = required;
+        selection.updateMask[light] = update;
+        selection.faceKeys[light] = keys;
+        continue;
+    }
+
+    Key current = BuildPerLightKey(
+        light, casterRevision, shaderRevision);
 
     if (light.shadowCache.IsCacheHit(current, target)) {
         ++lightCacheHits;
@@ -618,49 +988,65 @@ RenderOnlySelectedLights(selection);
 
 for (Light& light : selectedLights) {
     if (selection[light] == SubmissionCompletedOrClearIssued) {
-        light.shadowCache.Commit(finalKey[light], light.shadowFBO);
+        if (isPoint(light) && perFaceCacheEnabled) {
+            light.faceCache.Commit(
+                selection.updateMask[light],
+                selection.faceKeys[light],
+                light.shadowFBO);
+            light.shadowCache.CommitContent(light.shadowFBO);
+        } else {
+            light.shadowCache.Commit(finalKey[light], light.shadowFBO);
+        }
     } else {
         light.shadowCache.Invalidate();
     }
 }
 ```
 
-### 8.6 状态机
+### 8.7 分层状态机
 
 ```mermaid
-stateDiagram-v2
-    [*] --> Invalid
-    Invalid --> Selected: "Key 或 Target 不匹配"
-    Selected --> Rendering: "进入更新列表"
-    Rendering --> ValidSampleable: "提交路径完成或 Clear 已发出后 Commit"
-    Rendering --> Invalid: "Shader / FBO / Face 失败"
-    ValidSampleable --> ValidSampleable: "Key 与 Target 均匹配，Cache Hit"
-    ValidSampleable --> Invalid: "依赖变化、目标重建或策略切换"
-    Invalid --> Invalid: "失败时保持 fail-closed"
+flowchart LR
+    I["Face Invalid / Stale"] -->|"当前不 Required"| D["Deferred，保持无效"]
+    D -->|"以后变为 Required"| S["Selected"]
+    I -->|"当前 Required"| S
+    S --> R["Clear + Render 选中 Face"]
+    R -->|"提交完成"| V["Face Valid"]
+    R -->|"Shader/FBO/提交失败"| I
+    V -->|"Signature + Target 匹配"| H["Face Hit"]
+    H --> V
+    V -->|"依赖或目标变化"| I
 ```
+
+整灯层仍保留原有 Pending/Completed 发布门槛；Face 层在其内部只提交实际完成的 Mask。两层状态机共同保证“计划更新”不会被误当成“已经更新”。
 
 ---
 
 ## 9. 完整失效规则
 
-| 变化来源 | 怎样被观察 | 影响范围 | 处理 |
-|---|---|---|---|
-| Directional Transform / Projection | Directional Signature | 对应 Directional | 只更新该灯 |
-| Point Position / Near / Far | Point Signature | 对应 Point | 只更新该灯的六面 |
-| Spot Position / Direction / Cone | Spot Signature | 对应 Spot | 只更新该灯 |
-| Shadow Resolution | Signature + Target Size | 对应灯 | 重建目标并更新 |
-| FBO / Texture 被替换 | ID、尺寸、Generation | 对应灯 | Target Miss |
-| Shader 热重载 | Shader Revision | 使用该 Shader 的灯 | 2D 影响 Directional/Spot，Point Shader 只影响 Point |
-| Caster 增删或 Active 变化 | Scene Caster Revision | 当前保守影响全部灯 | 全部更新 |
-| Caster Transform | Model / Scene Revision | 当前保守影响全部灯 | 全部更新 |
-| Alpha/Opacity/Shadow Texture 变化 | Material → Mesh → Model Revision | 当前保守影响全部灯 | 全部更新 |
-| Roughness/Metallic 等 | 不进入 Shadow Signature | 无 | 不误失效 |
-| Point Render Policy 变化 | Point Signature | Point Lights | 更新 Point |
-| Cache Granularity 切换 | 显式策略同步 | 全部灯 | 清空两种策略的旧状态 |
-| 灯被禁用 | Active / useShadowMap | 对应灯 | 失效并释放 FBO |
-| 无 Caster | Bounds 为空 | 所有选中灯 | Clear Depth 后提交 |
-| Caster State 不可靠 | Reliability Gate | 所有启用灯 | 禁止采样并保守降级 |
-| Shader / FBO / Face 不完整 | Readiness Gate | 对应灯 | 不 Commit，不允许采样 |
+| 变化来源 | 观察方式 | A 全局重绘 | B Per-Light | C Per-Face |
+|---|---|---|---|---|
+| Directional Transform / Projection | Directional Signature | 三灯仍全画 | 只更新 Directional | 同 B |
+| Spot Position / Direction / Cone | Spot Signature | 三灯仍全画 | 只更新 Spot | 同 B |
+| Point Position | Point / Face Signature | 三灯全画，Point 六面 | 只更新 Point，但六面全画 | 六面 Signature 都变；只立即绘制 Required，其他面保持 Stale |
+| Point Near / Far | Point / Face Signature | 全画 | Point 六面 | 当前 Required 的陈旧 Face 更新 |
+| Shadow Resolution | Signature + Target Size | 全画 | 对应灯重建 | Point Target 换代使六个 Face Valid Bit 全失效 |
+| FBO / Texture Replacement | ID、尺寸、Generation | 本帧重画 | 对应灯 Target Miss | Point Target Miss 使六面全部 Stale |
+| 2D Shader 热重载 | Shader Revision | 全画 | Directional + Spot | 同 B |
+| Point Shader 热重载 | Face Shader Revision | 全画 | Point 六面 | 六个 Face Stale，按 Required 物化；审计模式六面全重建 |
+| Caster 增删 / Active / Transform | Model Revision + Spatial Signature | 全画 | Scene Revision 保守使三灯失效 | 可证明空间无关的灯/Face 命中；Auto-fit 灯仍保守 |
+| Model Add / Delete / Replace / Clear | `SceneTopologyRevision` | 全画 | 拓扑变化统一失效 | 整灯、空间与六面状态统一失效；同槽位替换也不能命中旧缓存 |
+| Alpha/Opacity/Shadow Texture | Material → Mesh → Model Revision | 全画 | Scene Revision 保守扇出 | 只影响包含该 Caster 的空间 Signature；Auto-fit 例外 |
+| Roughness/Metallic 等 | 不进入 Shadow Signature | 仍因 A 每帧全画 | 不失效 | 不失效 |
+| Camera Transform | Receiver Demand | A 仍每帧全画 | Shadow Cache 不失效 | 只改变 Required；新需求且 Stale 的 Face 先重建 |
+| Point Render Policy | Point / Face Signature | 全画 | Point 六面 | 六面 Stale，按 Required 重建 |
+| Cache 策略切换 | Feature State 同步 | N/A | 清空跨策略状态 | 清空整灯与逐面状态，冷启动 |
+| 灯被禁用 | Active / useShadowMap | 不再绘制 | 失效并释放 FBO | 同时清空 Point Face Cache |
+| 无 Caster | Bounds 为空 | Clear | Clear 后 Commit | Clear 正确空内容，不保留旧阴影 |
+| Receiver Bounds 非法 | Reliability Gate | 不影响 A | 不适用 | `RequiredMask = 0x3f`，保守六面需求 |
+| Caster State 不可靠 | Reliability Gate | 尝试当前帧路径 | 禁止旧内容采样 | 禁止旧内容采样并记录保守回退 |
+| Shader/FBO/Face 不完整 | Readiness Gate | 不发布 | 对应灯不 Commit | Point 不发布新内容；旧 Face 不伪装成新版本 |
+| Force-all 审计 | 显式配置 | 六面 | 六面 | 强制 `RequiredMask = 0x3f`，验证最终六面收敛 |
 
 ### 9.1 为什么没有 Caster 时也不能直接跳过
 
@@ -681,19 +1067,21 @@ stateDiagram-v2
 
 这也是为什么“没有 Draw Call”不等于“没有更新”。
 
-### 9.2 为什么切换 No-cache / Global / Per-Light 策略必须整体失效
+### 9.2 为什么切换 No-cache / Global / Per-Light / Per-Face 策略必须整体失效
 
-三种策略的有效性语义不同。若运行时切换策略却沿用旧状态，可能出现：
+不同策略的有效性语义不同。若运行时切换策略却沿用旧状态，可能出现：
 
 - No-cache 控制路径留下的内容被错误当作某个已提交 Signature；
 - Global Key 有效，但某个 Per-Light Signature 从未提交；
 - Per-Light 内容有效，但 Global Cache 误认为整组内容在同一事务中完成。
+- 整灯 Point 内容可采样，但六个 Face Signature 从未建立；
+- 某些 Face Valid，但关闭 C 时整灯 Signature 仍是旧版本。
 
-进入 `OPENGL_LEARN_SHADOW_CACHE=none` 时会清除 Global 与 Per-Light 有效性，并强制每帧更新；返回缓存策略时再次冷启动。`SynchronizeShadowCacheGranularity` 继续负责 Global / Per-Light 之间的状态隔离，避免跨策略污染。
+进入 `OPENGL_LEARN_SHADOW_CACHE=none` 时会清除 Global、Per-Light 与 Per-Face 有效性，并强制每帧更新；返回缓存策略时再次冷启动。`SynchronizeShadowCacheGranularity` 负责 Global / Per-Light 隔离，Feature State 同步负责 Spatial Caster 与 Point Per-Face 开关变化；任何粒度切换都从冷缓存开始，避免跨策略污染。
 
 ---
 
-## 10. 点光源六面阴影：一次正确性反转
+## 10. 点光源六面阴影：从完整重建到安全部分更新
 
 Point Shadow 是这项工作的高风险部分，因为一次“Point 更新”实际包含六个视方向：
 
@@ -725,9 +1113,9 @@ Geometry Shader Layered Rendering 理论上可以：
 
 因此当前 Adaptive 策略 fail-closed 到经过直接验证的 Six-face 路径；显式 Layered 只保留为诊断覆盖。
 
-### 10.3 Six-face 的整体发布完整性
+### 10.3 A/B 的 Six-face 整体发布完整性
 
-在真正开始更新 Point Shadow 之前，系统先获取并验证六个 Face FBO：
+A/B 在真正开始更新 Point Shadow 之前，先获取并验证六个 Face FBO：
 
 ```text
 6 / 6 Face FBO 全部完整
@@ -739,14 +1127,92 @@ Geometry Shader Layered Rendering 理论上可以：
     → 整个 Point 更新不 Commit
 ```
 
-正式实验进一步在性能采样之后读取六个 Face，记录：
+阶段 B 的正式实验进一步在性能采样之后读取六个 Face，记录：
 
 - 基于深度位模式计算的 64 位内容 Hash；
 - 非 Far Depth 样本数；
 - Min / Max Depth；
 - Face Validity。
 
-正式运行中，每次 Point 更新都核算为 6 次 Six-face Submission；12 次正式调用读回的 72 个 Face 全部有效；在此基础上，36 个 A/B 配对 Face 哈希又全部一致。这三层证据联合支持：Per-Light 优化没有通过漏掉某个 Cubemap Face 获得收益，而且 A/B 的最终点阴影内容一致。
+阶段 B 正式运行中，每次 Point 更新都核算为 6 次 Six-face Submission；12 次正式调用读回的 72 个 Face 全部有效；在此基础上，36 个 A/B 配对 Face Hash 又全部一致。这三层证据支持：A→B 没有通过漏 Face 获得收益。
+
+### 10.4 C 的部分更新为什么必须逐面 Clear
+
+C 仍然使用经过验证的 Six-face Shader 路径，但允许一次 Point Update 的 `UpdateMask` 少于六个 bit。
+
+完整重建可以：
+
+```text
+Bind Cubemap FBO
+    → glClear(GL_DEPTH_BUFFER_BIT)
+        → 绘制 6 Face
+```
+
+部分更新必须改成：
+
+```text
+for each selected face:
+    Bind face-specific FBO
+    Clear only this face
+    Draw only this face
+```
+
+未选中的 Face 既不能被 Clear，也不能修改其 Valid/Signature。这样才真正保留 Cubemap 内其他 Face 的历史内容。
+
+所有六个 Face FBO 仍在更新前一起验证。任一 Face Target 无法取得时，本次 Point 不进入成功发布，避免资源状态不完整时继续局部写入。
+
+### 10.5 Required Mask 怎样计算
+
+`ComputePointShadowRequiredFaceMask` 的目标不是预测“相机朝向哪个 Face”，而是保守覆盖当前可见 Receiver 可能产生的点阴影采样方向。
+
+流程是：
+
+1. 用当前 Camera View-Projection 构造相机 Frustum；
+2. 遍历 Opaque 与 Transparent Receiver Draw List；
+3. 用 OBB 优先、Sphere 回退判断 Receiver 是否在相机视锥内；
+4. 排除完全超出 Point `far + receiverRadius` 的 Receiver；
+5. 用 Receiver OBB/Sphere 与六个 Point Face Frustum 求交；
+6. 相交的 Face Bit 写入 `RequiredMask`。
+
+每个 Face 使用略大于 90° 的 FOV。扩张量根据滤波半径和 Shadow Resolution 计算：
+
+```text
+angularPadding = atan(2 * filterRadiusTexels / resolution)
+faceFov        = 90.25° + 2 * angularPadding
+```
+
+这样可以覆盖 Cubemap 边界附近的 PCF/PCSS 采样足迹，减少 Receiver 位于 Face Seam 时因过紧分类而漏掉相邻 Face。
+
+以下情况直接保守返回六面：
+
+- 显式开启 `POINT_SHADOW_FORCE_ALL_FACES_REQUIRED`；
+- 没有 Camera；
+- Receiver Bounds 非法或不可验证。
+
+没有 Receiver 时允许返回零需求；当前可见 Receiver 已覆盖六面时提前结束扫描。
+
+### 10.6 Deferred Face 为什么不会被永久遗忘
+
+假设 `-Z` Face 因 Caster 移动变成 Stale，但当前相机没有任何可见 Receiver 会采样 `-Z`：
+
+```text
+StaleMask    包含 -Z
+RequiredMask 不包含 -Z
+UpdateMask   不包含 -Z
+DeferredMask 包含 -Z
+```
+
+这一帧不更新 `-Z`，但它的旧 Signature 不会被覆盖。以后相机转向该区域：
+
+```text
+-Z 进入 RequiredMask
+    → 旧 Signature 仍不匹配
+        → -Z 进入 UpdateMask
+            → 先 Clear/Draw/Commit
+                → Lighting Pass 再消费本帧发布的 Cubemap
+```
+
+为了验证延迟策略最终能够收敛，正式测试另跑 PCSS Force-all 审计，把 `RequiredMask` 强制为 `0x3f`。A/B 与 C 的六面深度 Hash 在 Sponza、San Miguel 中全部一致。
 
 ---
 
@@ -785,13 +1251,30 @@ Update Path：创建、写入、验证、发布
 Sampling Path：只读取已发布内容
 ```
 
+C 档需要再加一条约束：
+
+> Sampling Shader 绑定的仍是一张普通 Depth Cubemap，它不会在 Shader 内查询 CPU 的 `validMask`；因此 CPU 的 Required Mask 必须在 Lighting Pass 之前覆盖所有当前可见 Receiver 可能访问的 Face。
+
+也就是说，Face Validity 不是靠 Shader 采样时临时兜底，而是靠更新调度保证：
+
+```text
+当前会被采样的 Face
+    → 必须在 RequiredMask
+        → 若 Stale，必须在本帧先更新
+        → 若未更新，说明 Signature 与 Target 已命中
+```
+
+如果 Camera、Receiver Bounds 或分类依据不可用，Required Mask 退化为 `0x3f`。这个保守回退是延迟物化能够安全存在的前提。
+
 ---
 
 ## 12. 静态场景和动态场景分别怎样走
 
 ### 12.1 静态场景
 
-无缓存 A 不检查这些条件，静态场景仍每帧更新三盏灯。Per-Light B 的冷缓存或失效后首帧需要构建 Shadow Map；完成一次成功构建并预热后，如果所有输入继续不变：
+无缓存 A 不检查这些条件，静态场景仍每帧更新三盏灯。
+
+Per-Light B 的冷缓存或失效后首帧需要构建完整 Shadow Map；完成一次成功构建并预热后，如果所有输入继续不变：
 
 ```text
 Caster Revision 相同
@@ -809,15 +1292,28 @@ Spot Hit
 Shadow Pass 更新数 = 0
 ```
 
+C 冷启动时会构建 Directional、Spot 和当前 Required 的 Point Face。预热后：
+
+```text
+Directional Hit
+Spot Hit
+Point Required Face 全部 Hit
+UpdateMask = 0
+```
+
+没有当前需求的 Point Face 可以继续保持未物化；只要相机和可见 Receiver 不需要它们，就不会产生渲染工作。
+
 失效矩阵的 `static-hit` 在 4 个测量帧内得到：
 
 ```text
 A 更新 12，B 更新 0，B Per-Light Hit 12
 ```
 
+这是阶段 B 的基础门禁；当前三档长轨迹又覆盖了 C 的逐面命中。
+
 ### 12.2 只有一盏灯移动
 
-只移动 Point：
+只移动 Point 时：
 
 ```text
 Directional Key 相同 → Hit
@@ -832,11 +1328,20 @@ Spot Key 相同        → Hit
 Per-Light B 总更新 1，Hit 2 / frame
 ```
 
-移动 Directional 或 Spot 时也得到相同的局部关系。
+C 仍然只更新 Point，但 Point Position 出现在六个 Face Signature 中，因此六面都变成 Stale：
+
+```text
+StaleMask  = 0x3f
+UpdateMask = RequiredMask
+```
+
+如果 Required Mask 是六面，C 与 B 一样提交六面；如果当前 Receiver 只可能采样五面，剩下一面延迟。不能把这一段包装成 C 的稳定主收益。
+
+移动 Directional 或 Spot 时，B/C 都得到相同的灯光级局部关系。
 
 ### 12.3 Caster 变化
 
-Caster Revision 被三盏灯共同依赖，因此：
+B 的 Scene Caster Revision 被三盏灯共同依赖，因此：
 
 ```text
 Directional Miss
@@ -844,91 +1349,175 @@ Point Miss
 Spot Miss
 ```
 
-这不是优化失败，而是当前依赖模型的正确保守行为。要继续局部化，必须能够证明该 Caster 不在某盏灯的影响域中。
+C 会为非 Auto-fit 投影构造空间 Caster Signature，并为 Point 构造六个 Face Signature。局部 Caster 只会改变覆盖它的 Face：
+
+```text
+Point Face +X：Signature Miss
+Point Face -X：Signature Hit
+Point Face ±Y：视 Bounds 是否跨界
+Point Face ±Z：视 Bounds 是否跨界
+```
+
+当前正式配置中的 Directional/Spot/整灯 Point 使用 Auto Fit，所以灯光级 Caster 依赖仍会保守；C 的主要收益体现在 Point 内部只更新约 2～3 个受影响 Face，而不是声称三盏灯都已经拥有完全局部的 Caster 图。
+
+### 12.4 只有相机移动
+
+在当前非 CSM 阴影路径中，Camera 不进入 B 的 Shadow Content Key：
+
+```text
+A：仍然每帧全画
+B：三盏灯全部 Hit
+C：Light/Caster Signature 不变，只重新计算 RequiredMask
+```
+
+C 若发现所有新需求 Face 都已有效，`UpdateMask = 0`；若相机第一次暴露一个此前 Deferred 的 Stale Face，只更新该 Face。这是按需物化，而不是 Camera 使全部 Shadow Map 失效。
+
+### 12.5 正式三阶段轨迹为什么这样设计
+
+统一 1800 帧周期分成三个各 600 帧的阶段：
+
+1. `Point + Camera`：验证 A→B 的灯光级局部性，也暴露 Point 移动通常六面 Stale 的边界；
+2. `Local Caster + Camera`：验证 B→C 的逐面空间局部性；
+3. `Camera-only`：验证有效 Face 复用和 Deferred Face 的按需物化。
+
+局部 Caster 是独立的小球，而不是移动整座 Sponza/San Miguel。否则所有场景 Bounds 都变化，实验会天然把六面同时污染，无法测量 Per-Face Cache 真正想解决的工作负载。
 
 ---
 
 ## 13. 性能为什么会提升
 
-设三个 Pass 的成本为：
+设三个灯光 Pass 的成本为：
 
 ```text
 C_D = Directional Shadow 成本
-C_P = Point Six-face Shadow 成本
 C_S = Spot Shadow 成本
-O   = Cache Check / Selection / Commit 开销
+C_P,f = Point Face f 的成本
+C_P,6 = Σ(f=0..5) C_P,f
+O_B   = Per-Light Check / Select / Commit 开销
+O_C   = Spatial Signature + Receiver Demand + Face Commit 开销
 ```
 
-只移动 Point 时：
+A 每帧的近似成本是：
 
 ```text
-No-cache:
-T_A ≈ C_D + C_P + C_S + O_uncached
-
-Per-Light:
-T_B ≈ C_P + O_per-light
+T_A ≈ C_D + C_P,6 + C_S
 ```
 
-理论节省：
+B 在只有 Point 失效时：
 
 ```text
-ΔT ≈ C_D + C_S - (O_per-light - O_uncached)
+T_B ≈ C_P,6 + O_B
 ```
 
-这也解释了两个场景的收益不同：
-
-- Sponza 中 Point 六面本身占比较高，移除 Directional/Spot 后 Shadow GPU Median 降低 21.57%；
-- San Miguel 几何更密集，两个多余 Pass 和对应 Caster Submission 更昂贵，Shadow GPU Median 降低 46.06%。
-
-### 13.1 工作量计数形成因果证据
-
-| 场景 | Caster Draw/帧 | Triangle-Pass/帧 | Submission CPU/帧 |
-|---|---:|---:|---:|
-| Sponza | 1,371.5 → 585.5（-57.31%） | 1,045,662 → 521,128（-50.16%） | 0.3169 → 0.1826 ms（-42.38%） |
-| San Miguel | 4,911 → 2,207（-55.06%） | 22,089,143 → 11,774,415（-46.70%） | 2.5508 → 1.2774 ms（-49.92%） |
-
-这些计数与 `3 → 1` 的更新数及耗时下降方向一致，强力支持主要收益来自移除两盏无关灯的 Caster Submission 和 Depth Rendering，而不只是运行波动。
-
-### 13.2 子区域成本几乎闭合了收益归因
-
-如果优化收益真的来自“跳过不相关的 Directional 与 Spot”，那么：
+C 对某一帧：
 
 ```text
-实测 Shadow GPU 节省
-    ≈ 被移除的 Directional 成本
-      + 被移除的 Spot 成本
-      + Point A/B 的小幅成本变化
+U = RequiredFaces ∩ StaleFaces
+T_C ≈ Σ(f ∈ U) C_P,f + O_C
 ```
 
-正式数据给出了接近闭合的结果：
+所以两层收益来源不同：
 
-| 场景 | 去掉 Directional | 去掉 Spot | Point A → B | 按子区域预测的总节省 | 实测 Shadow GPU 节省 |
-|---|---:|---:|---:|---:|---:|
-| Sponza | 0.0969 ms | 0.0792 ms | 0.6006 → 0.6046 ms | 0.1722 ms | 0.1727 ms |
-| San Miguel | 1.1215 ms | 1.0887 ms | 2.6314 → 2.6312 ms | 2.2104 ms | 2.2112 ms |
+```text
+A→B：
+    删除未失效灯光的 Pass。
 
-Sponza 的 Point 子区域甚至上升约 0.65%，整段 Shadow GPU 仍然下降。结合固定的分辨率与渲染配置、每次 Point 更新的六面 Submission 核算、72 个有效 Face 读回以及 36 个 A/B 配对 Hash，这强力支持收益来自被缓存命中的两盏灯，而不是降低 Point Shadow 质量或少画 Cubemap Face。
+B→C：
+    在已经选中的 Point Light 内，
+    删除未需求或未失效 Face 的 Pass。
+```
 
-### 13.3 正式结果
+### 13.1 为什么统一轨迹里 B 平均是四个 Point Face
 
-| 场景 | 指标 | Median | P95 | P99 |
+1800 帧轨迹的三个阶段等长，每段 600 帧：
+
+```text
+Point + Camera       → Point 更新
+Local Caster + Camera→ Point 更新
+Camera-only          → Point 不更新
+```
+
+所以 B 的 Point 更新频率约为 `2/3 次/帧`，每次固定六面：
+
+```text
+2/3 × 6 = 4.00 Face/帧
+```
+
+C 保持同样的 Point 更新事件，只减少每次事件内部的 Face 数。这使 A/B/C 的工作量关系可以直接核算，不会把“不更新整盏 Point”和“Point 内少更新 Face”混在一起。
+
+### 13.2 当前正式 A/B/C 结果
+
+实验条件：
+
+- `1920×1080`；
+- Release、PBR Forward、Hard Shadow 性能隔离；
+- A/B/C 每档三个独立进程；
+- 每轮外部预热 300 帧、内部预热 300 帧、测量 1800 帧；
+- 交错顺序固定为 `A-B-B-A-A-B`，VSync 请求值为 Off（swap interval 0）；
+- Sponza 与 San Miguel 使用同一确定性三阶段轨迹；
+- Point 使用相同 Six-face Shader、FBO、分辨率与逐面 Caster Culling；
+- 被测 Commit 为 `a298e37e953310364376b631e85840ee2ef353ff`，全部元数据 `gitDirty=false`；
+- Release 可执行文件 SHA-256 为 `a0a07672d367fcc74a9a6ec16b6003f821fee69bc062a95fe5fc49514949dd38`。
+
+| 场景 | 指标 | A | B | C | A→B | B→C | A→C |
+|---|---|---:|---:|---:|---:|---:|---:|
+| Sponza | GPU Frame Median | 1.596 ms | 1.467 ms | 1.208 ms | -8.06% | **-17.68%** | **-24.32%** |
+| Sponza | Shadow Update GPU Median | 0.765 ms | 0.755 ms | 0.524 ms | -1.26% | **-30.67%** | **-31.55%** |
+| Sponza | Point Shadow GPU Median | 0.591 ms | 0.590 ms | 0.501 ms | -0.12% | **-15.16%** | **-15.27%** |
+| San Miguel | GPU Frame Median | 7.873 ms | 5.649 ms | 5.260 ms | **-28.25%** | **-6.88%** | **-33.19%** |
+| San Miguel | Shadow Update GPU Median | 5.014 ms | 4.148 ms | 2.689 ms | -17.26% | **-35.18%** | **-46.37%** |
+| San Miguel | Point Shadow GPU Median | 2.715 ms | 2.678 ms | 2.004 ms | -1.38% | **-25.15%** | **-26.18%** |
+
+工作量进一步闭合了因果关系：
+
+| 场景 | 指标 | A | B | C |
 |---|---|---:|---:|---:|
-| Sponza | Shadow GPU | **-21.57%** | -27.92% | -27.70% |
-| Sponza | Shadow CPU | **-41.99%** | -39.99% | -35.92% |
-| Sponza | GPU Frame | **-5.90%** | -7.77% | -5.64% |
-| Sponza | Wall Frame | **-10.05%** | -10.81% | -10.48% |
-| San Miguel | Shadow GPU | **-46.06%** | -41.80% | -38.07% |
-| San Miguel | Shadow CPU | **-50.22%** | -47.34% | -49.26% |
-| San Miguel | GPU Frame | **-27.83%** | -23.18% | -23.65% |
-| San Miguel | Wall Frame | **-19.67%** | -17.23% | -17.03% |
+| Sponza | 更新阴影灯/帧 | 3.00 | 1.33 | 1.33 |
+| Sponza | Point Face/帧 | 6.00 | 4.00 | **3.10** |
+| Sponza | Face Hit/帧 | 0.00 | 0.00 | **2.90** |
+| Sponza | Caster Draw/帧 | 1376.50 | 653.84 | **534.36** |
+| Sponza | Triangle-Pass/帧 | 1,046,303.19 | 520,261.52 | **408,839.77** |
+| San Miguel | 更新阴影灯/帧 | 3.00 | 1.33 | 1.33 |
+| San Miguel | Point Face/帧 | 6.00 | 4.00 | **2.94** |
+| San Miguel | Face Hit/帧 | 0.00 | 0.00 | **2.90** |
+| San Miguel | Caster Draw/帧 | 4917.49 | 2369.16 | **1884.81** |
+| San Miguel | Triangle-Pass/帧 | 22,288,885.35 | 11,365,055.68 | **8,751,856.85** |
 
-两个场景、三轮配对中的 18 个 Shadow GPU 统计量全部为负。GPU Frame 和 Wall Frame 的改善幅度小于 Shadow Pass 本身也符合 Amdahl 定律：本次只优化了帧中的阴影更新部分，主渲染、后处理和其他 CPU 工作仍然存在。
+`更新阴影灯/帧` 在 B/C 相同，而 Point Face、Draw 和 Triangle 继续下降，证明 B→C 的收益确实发生在 Point Light 内部，而不是偷偷改变轨迹或少触发一次整灯更新。
 
-![每帧更新灯数 3 → 1](docs/benchmark-images/shadow-optimizations/per-light-cache-no-cache-vs-per-light-1080p-six-face-final/updated-lights-per-frame.png)
+### 13.3 三阶段怎样揭示收益与退化边界
 
-![Sponza Median / P95 / P99](docs/benchmark-images/shadow-optimizations/per-light-cache-no-cache-vs-per-light-1080p-six-face-final/performance-sponza.png)
+| 场景 / 阶段 | B Point GPU 摊销 (ms/帧) | C Point GPU 摊销 (ms/帧) | C Rendered Face | C Hit Face | 解释 |
+|---|---:|---:|---:|---:|---|
+| Sponza / Point+Camera | 0.607 | 0.610 | 6.00 | 0.00 | Point 自身移动，C 正确退化到六面 |
+| Sponza / Local Caster+Camera | 0.605 | 0.288 | 3.29 | 2.71 | 逐面空间 Signature 产生主要收益 |
+| Sponza / Camera-only | 0.000 | 0.000 | 0.00 | 6.00 | 阴影内容复用，只重算需求 |
+| San Miguel / Point+Camera | 2.627 | 2.621 | 5.53 | 0.00 | 当前 Receiver 需要约 5～6 面，几乎无 B→C 收益 |
+| San Miguel / Local Caster+Camera | 2.706 | 0.977 | 3.29 | 2.71 | 局部变化把六面更新压到约三面 |
+| San Miguel / Camera-only | 0.000 | 0.000 | 0.00 | 6.00 | 六个 Required Face 全部命中 |
 
-![San Miguel Median / P95 / P99](docs/benchmark-images/shadow-optimizations/per-light-cache-no-cache-vs-per-light-1080p-six-face-final/performance-san-miguel.png)
+这张表解释了为什么不能只报告整段平均值：C 不是让 Point Light 移动本身变便宜，而是在局部 Caster 与静态阴影内容复用时删除 Face 工作。Point+Camera 阶段就是明确的退化边界。
+
+![三阶段收益与退化边界](docs/benchmark-images/shadow-optimizations/point-shadow-cache-3way-1080p-a298e37/three-phase-comparison.png)
+
+### 13.4 C 的 CPU 代价
+
+| 场景 | Required Face/帧 | Rendered Face/帧 | Cache Check | Demand | Face Signature |
+|---|---:|---:|---:|---:|---:|
+| Sponza | 6.000 | 3.097 | 0.0071 ms | 0.0035 ms | 0.0016 ms |
+| San Miguel | 5.844 | 2.941 | 0.0472 ms | 0.0427 ms | 0.0019 ms |
+
+Demand 和 Face Signature 是 Cache Check 的内部子项，表中三列不能相加。
+
+Sponza 几乎总需要六面，San Miguel 通常需要五面左右。这证明仅靠 Camera Demand 并不会自动产生大收益；C 的有效部分是“需求面中仍有约 2.94 面命中缓存”，尤其来自局部 Caster 和 Camera-only 阶段。
+
+CPU 扫描成本已经显式计入数据，没有被隐藏。当前场景中它小于 GPU 与 Draw Submission 的节省；更大规模场景仍需要空间索引。
+
+![A/B/C 三档性能](docs/benchmark-images/shadow-optimizations/point-shadow-cache-3way-1080p-a298e37/three-way-performance.png)
+
+![A/B/C 工作量](docs/benchmark-images/shadow-optimizations/point-shadow-cache-3way-1080p-a298e37/three-way-work.png)
+
+![Point Face 更新分布](docs/benchmark-images/shadow-optimizations/point-shadow-cache-3way-1080p-a298e37/point-face-update-histogram.png)
 
 ---
 
@@ -941,18 +1530,26 @@ Sponza 的 Point 子区域甚至上升约 0.65%，整段 Shadow GPU 仍然下降
 它没有：
 
 - 降低 Point Cubemap 分辨率；
-- 减少六个 Face；
+- 删除 Cubemap 的任何方向；
 - 降低 PCF/PCSS 样本；
 - 延迟几帧更新；
 - 缩短灯光范围来少画物体。
 
-它只删除“根据依赖关系可以证明是重复的工作”。
+它只删除“根据依赖关系可以证明是重复的工作”。C 仍保留完整六面 Cubemap，只是允许某一帧不重画内容仍有效或当前没有需求的 Face。
 
 因此性能收益不需要用画质、响应延迟或时间稳定性交换。
 
 ### 14.2 利用了已有的物理独立性，只修正逻辑耦合
 
-每盏灯本来就有独立 Shadow Map，所以最有效的改变不是重构全部 Render Pass，而是把 Scene 级缓存拆成 Light 级记录，再用 Selection 复用原渲染函数。
+每盏灯本来就有独立 Shadow Map，所以 A→B 不需要重构全部 Render Pass，只需把 Scene 级缓存拆成 Light 级记录。
+
+Point Cubemap 本来又有六个可独立绑定的 Face FBO，所以 B→C 继续复用同一张纹理，只增加逐面 Signature、Mask 和局部 Clear。物理资源层次与逻辑缓存层次正好对齐：
+
+```text
+Scene
+    → Light
+        → Point Cubemap Face
+```
 
 这使改动集中在：
 
@@ -996,22 +1593,34 @@ Selection 的 `0 / 1 / 2` 状态让系统可以区分：
 未完成的计算不能对消费者可见。
 ```
 
-### 14.5 只在能证明局部性时局部化
+### 14.5 把“陈旧”和“暂时不需要”建模成两个正交维度
 
-Light Transform 的影响域天然属于单灯，所以逐灯失效。
+一个 Face 可以同时处于：
 
-Caster 变化目前还没有可靠的 Light-Caster 依赖图，所以继续全灯失效。
+- Valid + Required：直接命中；
+- Valid + Not Required：保留历史内容；
+- Stale + Required：本帧必须更新；
+- Stale + Not Required：延迟物化。
 
-这个边界既获得了常见局部灯光变化的主要收益，又没有为了“看起来更增量”而冒险漏掉阴影。
+如果只用一个 Dirty Bool，很难表达第四种状态；如果把 Not Required 直接当成 Valid，又会在相机转向时产生陈旧采样。两个 Mask 的交集恰好表达了这个二维状态空间。
 
-### 14.6 正确性证据和性能证据相互约束
+### 14.6 只在能证明局部性时局部化
+
+Light Transform 的影响域天然属于单灯，所以 B 逐灯失效。
+
+局部 Caster 与 Point Face 的相交关系可以由 Bounds 和 Face Frustum 保守证明，所以 C 逐面失效。
+
+Auto Fit 的投影依赖还不能完全局部闭合，所以继续使用全局 Caster 依赖；非法 Receiver Bounds 则直接要求六面。这个边界获得了已经证明的局部收益，又没有为了“看起来更增量”而冒险漏影。
+
+### 14.7 正确性证据和性能证据相互约束
 
 这项优化没有只看 GPU 时间：
 
 - 更新计数证明少画的是哪两盏灯；
 - Draw/Triangle 计数证明工作量真的减少；
-- 六面 Submission 核算、逐面有效性与 A/B Hash 联合证明路径完整且内容一致；
-- 主画面差异证明最终输出在预设容差内；
+- 六面/部分 Face Submission 核算证明实际工作量与 Mask 闭合；
+- Force-all 六面 Hash 证明 Deferred Face 最终能收敛到完整基准；
+- 主画面 A/B、B/C 与重复运行均通过严格 0 像素差门禁；
 - Renderer-owned Bytes 证明没有用额外资源换时间；
 - Failure/Fallback/Empty Clear Telemetry 证明测试没有悄悄走异常路径。
 
@@ -1025,7 +1634,7 @@ Caster 变化目前还没有可靠的 Light-Caster 依赖图，所以继续全�
                 → 画面和资源仍满足门槛
 ```
 
-### 14.7 同一二进制 A/B 避免了构建差异
+### 14.8 同一二进制 A/B/C 避免了构建差异
 
 无缓存行为被保留为运行时控制路径：
 
@@ -1040,7 +1649,15 @@ OPENGL_LEARN_SHADOW_CACHE=revision
 OPENGL_LEARN_SHADOW_PER_LIGHT_CACHE=1
 ```
 
-A/B 使用同一个可执行文件。无缓存 A 仍保留当前 Shader、FBO、安全门控、Caster Culling 和 Six-face 点阴影，只强制所有灯每帧进入更新路径。这既复现最初的调度行为，又避免旧二进制中的其他功能差异污染结论。
+C 在 B 基础上增加：
+
+```text
+OPENGL_LEARN_SHADOW_SPATIAL_CASTER_CACHE=1
+OPENGL_LEARN_POINT_SHADOW_PER_FACE_CACHE=1
+OPENGL_LEARN_POINT_SHADOW_FORCE_ALL_REQUIRED=0
+```
+
+A/B/C 使用同一个可执行文件。三档保留相同 Shader、FBO、安全门控、Caster Culling、分辨率和运动轨迹，只切换缓存策略。这既复现最初调度行为，也避免旧二进制或其他画质配置污染结论。
 
 ---
 
@@ -1050,7 +1667,7 @@ A/B 使用同一个可执行文件。无缓存 A 仍保留当前 Shader、FBO、
 
 优点是控制流直接，不存在错误复用。
 
-缺点是完全放弃跨帧时间复用：静态场景和局部动态场景都会重复提交同一批 Caster。这正是正式 A/B 的 A。
+缺点是完全放弃跨帧时间复用：静态场景和局部动态场景都会重复提交同一批 Caster。这正是当前正式 A/B/C 的 A。
 
 ### 15.2 停留在 Global Cache
 
@@ -1090,13 +1707,47 @@ Atlas 能改善资源绑定和碎片管理，但不自动解决失效粒度。�
 
 Layered 路径在逐面证据中不完整。接受它会把错误工作量当作优化。最终选择 Six-face，是正确性优先于漂亮数字。
 
+### 15.8 只根据相机方向少画 Face
+
+“相机朝前，所以只画 Point 的前方 Face”是不充分的。可见 Receiver 可能分布在多个 Cubemap 方向，滤波还会跨越 Face Seam；只用 Camera Forward 会漏掉边缘和侧面的阴影采样。
+
+C 因此基于可见 Receiver Bounds 与六个 Face Frustum 求交，并加入滤波角度 Padding。Camera 只决定哪些 Receiver 候选当前相关，不直接替代 Receiver 分类。
+
+### 15.9 只有 Required Mask，没有 Face Signature
+
+如果只画当前 Required Face，却不记录每面的输入版本，会出现：
+
+```text
+Face 当前不需要 → 跳过
+Caster 在该方向变化
+相机后来转向 → 不知道旧内容已经陈旧
+```
+
+所以 Demand 只能决定“何时物化”，不能决定“内容是否有效”。Per-Face Signature 是延迟更新不变成漏更新的必要条件。
+
+### 15.10 直接进入 Tile/Page 或 Virtual Shadow Map
+
+把 1024² Face 再切成 Tile，理论上可以把局部性继续下沉。但当前正式数据先说明：
+
+- Sponza 通常需要六个 Face；
+- San Miguel 通常需要约五个 Face；
+- 还没有证据证明每个 Required Face 内只使用很小的像素区域。
+
+Tile 化会额外引入 Page Table、Tile Residency、局部 Raster Region、滤波边界扩张、分配与回收策略。当前先完成 Face 粒度，是用更低复杂度验证“空间失效 + 延迟物化”收益；只有后续统计证明 Face 内利用率长期稀疏，Tile/Page 才是有证据的下一步。
+
+### 15.11 点光源移动后分帧更新六面
+
+可以按优先级把六面分散到多帧，但 Point Position 改变后旧六面在数学上都对应旧光源位置。继续采样会产生时间误差和阴影滞后。
+
+这可以作为显式 Shadow Update Budget 下的平稳降级策略，却不能包装成精确缓存命中。当前 C 保持精确语义：Required 且 Stale 的 Face 本帧必须完成，否则禁用采样。
+
 ---
 
 ## 16. 正确性验证为什么这样设计
 
 ### 16.1 失效矩阵
 
-12 种 workload 覆盖：
+阶段 B 的 12 种 workload 覆盖：
 
 - 三类 Light Transform；
 - Caster Transform；
@@ -1129,45 +1780,98 @@ Layered 路径在逐面证据中不完整。接受它会把错误工作量当作
 
 完整的 24 条场景记录及其底层运行文件见[失效矩阵原始数据](benchmark-results/shadow-optimizations/per-light-cache-invalidation-matrix.json)。
 
-### 16.2 点阴影逐面证据
+在此基础上，C 档再以 B 的固定 Six-face 路径为 Oracle，补了会直接威胁 Face Cache 正确性的关键事件：
+
+| 用例 | 场景数 | C 的预期行为 | 正式结果 |
+|---|---:|---|---|
+| Deferred Face 后续变为 Required | 1 | 进入 Required 的同一帧先重建再采样 | `+X → -X` 时序通过 |
+| Point Light 移动 | 2 | 当前需求六面全部重建 | 画面与六面 Hash 一致 |
+| 局部 Caster 移动 | 2 | 只重建受影响 Face，其余 Face 命中 | 平均 1 面绘制、5 面命中 |
+| Point Shadow FBO Resize | 2 | Target Generation 变化，六面失效 | 六面全部重建并收敛 |
+| Point Shadow FBO Replace | 2 | 即使尺寸相同也不能复用旧目标 | 六面全部重建并收敛 |
+| Point Shadow Shader Reload | 2 | Shader Revision 使六面失效 | 六面全部重建并收敛 |
+
+这 11 组 B/C 独立进程比较全部满足：
+
+- 最终画面严格 `0` 变化像素；
+- Point Cubemap 六面逐面 Hash 完全一致；
+- Renderer-owned Texture、Mesh CPU/GPU、Render Target 字节统计一致；
+- Resource Failure 与 Conservative Fallback 都为 0。
+
+另执行一次同槽位 Model Replace 的 ABA Smoke：Revision `3 → 4`、失效一次、Model 数量 `2 → 2`、Point 更新一次。详细截图、Face 工作量和 Deferred 时序见 [Point Shadow Cache 正确性审计报告](POINT_SHADOW_CACHE_CORRECTNESS_AUDIT_CN.md)。
+
+### 16.2 C 档的 Mask 不变量
+
+C 的逐帧遥测记录：
+
+- `RequiredFaceMask`；
+- `UpdateFaceMask`；
+- Required / Rendered / Hit / Deferred Face Count；
+- Face Signature Build Count 与 CPU 时间；
+- 部分更新 / 完整更新次数；
+- Six-face Submission Count。
+
+应持续满足：
+
+```text
+UpdateMask ⊆ RequiredMask
+HitMask    = RequiredMask & ~UpdateMask
+Deferred   = StaleMask & ~RequiredMask
+RenderedFaceCount = popcount(UpdateMask)
+SubmissionPassCount 与 RenderedFaceCount 闭合
+```
+
+同时，若目标换代或策略切换，六个 Face Valid Bit 必须一起清零；若 `UpdateMask != 0x3f`，只允许逐面 Clear，不能整张 Cubemap Clear。
+
+这些不变量回答“系统是否真的按设计减少了 Face 工作”，但还不能单独证明深度内容正确，所以仍需要逐面读回和最终截图。
+
+### 16.3 点阴影逐面证据
 
 主画面中某个 Cubemap Face 可能恰好没有明显贡献，仅看截图不一定能发现漏 Face。因此直接读回六个 Depth Face，比只做最终画面截图更接近根因。
 
-### 16.3 主画面截图
+阶段 B 的 A/B Six-face 验证证明完整重建路径没有漏 Face。C 再增加两层：
 
-六组 1920×1080 A/B 截图：
+1. 性能模式读取当前 Required Face，验证实际使用内容；
+2. 独立 PCSS Force-all 审计强制六面全部物化，把 C 与 B 的六面深度 Hash 逐面比较。
 
-- 预设门槛：变化像素 `≤32`；
-- 实测最大：`6 / 2,073,600`；
-- 六组都存在极少量跨进程边缘量化差异，因此不声明逐字节 Exact；
-- 报告明确区分“容差通过”和“逐字节一致”。
+Sponza 与 San Miguel 的 Force-all 六面 Hash 全部一致，证明 C 的 Deferred Face 在被要求物化后能够收敛到 Six-face 基准。
 
-![Sponza 优化前后画面对比](docs/benchmark-images/shadow-optimizations/per-light-cache-no-cache-vs-per-light-1080p-six-face-final/captures/sponza-pair1-comparison.png)
+### 16.4 主画面截图
 
-![San Miguel 优化前后画面对比](docs/benchmark-images/shadow-optimizations/per-light-cache-no-cache-vs-per-light-1080p-six-face-final/captures/san-miguel-pair1-comparison.png)
+当前 1920×1080 三档截图门禁：
 
-### 16.4 资源一致性
+- A/B：严格 `0` 变化像素；
+- B/C：严格 `0` 变化像素；
+- B 独立重复运行：严格 `0` 变化像素；
+- 没有通过放宽容差掩盖 C 的错误。
 
-Renderer-owned Texture、Mesh GPU、Render Target 的聚合字节统计在 A/B 六组配对中数值完全一致。这里比较的是引擎记录的资源类别字节计数，不是 Shadow Map 内容或驱动总显存的逐字节读回。
+三档审计过程中还发现并修复了一个与缓存无关的可重复性问题：Opaque Draw 原先按 Shader/Material 指针地址排序，不同进程会改变少量共面边缘像素的覆盖次序；改为场景首次出现顺序的稳定批次键后，跨进程截图达到严格一致。这个修复没有计入阴影缓存收益。
 
-这支持本次优化没有通过增加被统计的 Renderer-owned 资源来换取时间，例如：
+![Sponza A/B/C 截图](docs/benchmark-images/shadow-optimizations/point-shadow-cache-3way-1080p-a298e37/sponza-three-way-screenshot.png)
 
-```text
-为了少更新，悄悄保留第二份完整 Shadow Map 或大型历史 Buffer。
-```
+![San Miguel A/B/C 截图](docs/benchmark-images/shadow-optimizations/point-shadow-cache-3way-1080p-a298e37/san-miguel-three-way-screenshot.png)
 
-![Renderer-owned 资源对比](docs/benchmark-images/shadow-optimizations/per-light-cache-no-cache-vs-per-light-1080p-six-face-final/renderer-owned-resources.png)
+### 16.5 资源一致性
+
+Renderer-owned Texture、Mesh GPU、Render Target 的聚合字节统计在 A/B/C 中完全一致：
+
+| 场景 | Texture A/B/C | Mesh GPU A/B/C | Render Target A/B/C |
+|---|---:|---:|---:|
+| Sponza | `243742611 / 243742611 / 243742611` | `15135820 / 15135820 / 15135820` | `87609344 / 87609344 / 87609344` |
+| San Miguel | `463827497 / 463827497 / 463827497` | `434863012 / 434863012 / 434863012` | `87609344 / 87609344 / 87609344` |
+
+C 额外保存的只是 CPU 侧六个 Signature、Valid Mask 和遥测字段，没有创建第二份 Shadow Cubemap 或大型历史 Buffer。这里比较的是引擎记录的资源类别字节计数，不是驱动总显存读回。
 
 四层证据各自回答不同问题：
 
 | 证据层 | 回答的问题 | 本次结果 |
 |---|---|---|
-| 控制流 | 真的只更新了应该更新的灯吗 | `3 → 1`，Point 更新与 `6 × Six-face Submission` 核算闭合 |
-| 内部产物 | Cubemap 六个面是否都正确生成 | 六面 Submission 核算闭合；12 次正式调用的 72 个面有效；基于深度位模式的 36 个 A/B 配对 Hash 全部一致 |
-| 最终画面 | 采样、光照合成后的结果是否可接受 | 六组 1080p 截图均在 `≤32` 变化像素门槛内，最大 6 个像素 |
-| 资源 | 是否增加了引擎可统计的资源字节数 | Texture、Mesh GPU、Render Target 的聚合字节计数在六组配对中完全一致 |
+| 控制流 | 真的只更新了应该更新的灯和 Face 吗 | A/B/C 更新灯与 Face Count 闭合；C Rendered = `popcount(UpdateMask)` |
+| 内部产物 | Deferred Face 最终能否得到正确六面内容 | PCSS Force-all 中两场景六面 Hash 全部一致 |
+| 最终画面 | 采样、光照合成结果是否一致 | A/B、B/C、B Repeat 均严格 0 变化像素 |
+| 资源 | 是否增加 Renderer-owned GPU 资源 | Texture、Mesh GPU、Render Target 三档完全一致 |
 
-只看 FPS 可能掩盖漏画；只看最终截图可能看不出某个 Cubemap Face 恰好没有贡献；只看逐面 Hash 又不能覆盖最终采样和光照合成。四层互相约束，才构成完整的正确性证据。
+只看 FPS 可能掩盖漏画；只看最终截图可能看不出某个 Cubemap Face 恰好没有贡献；只看 Force-all Hash 又不能证明性能模式每帧的 Required Mask 调度正确。控制流、内部产物、最终画面和资源四层互相约束，才构成完整证据。
 
 ---
 
@@ -1190,12 +1894,17 @@ Renderer-owned Texture、Mesh GPU、Render Target 的聚合字节统计在 A/B �
 - Shader Program ID 为 0：不渲染、不 Commit；
 - FBO 不完整：不 Commit；
 - Six-face 任一 Face FBO 失败：整个 Point 不 Commit；
+- Point Target 换代：六个 Face Valid Bit 一起清空；
+- Receiver Bounds 非法或 Camera 缺失：Required Mask 退化为六面；
+- 部分更新：只 Commit 实际 `renderedMask`，不能把 Deferred Face 标为有效；
 - Caster State 不可靠：禁用旧内容并记录 Conservative Fallback；
 - Target Generation 不匹配：视为 Miss；
 - 空 Caster：清屏后才 Commit；
 - Sampling Path：只消费 `IsSampleable` 的内容。
 
-Telemetry 让这些路径在 Benchmark 中可见。正式 `move-point` 测量窗口内：
+Telemetry 让这些路径在 Benchmark 中可见。阶段 B 的正式 `move-point` 和当前 A/B/C 正式测量窗口内，资源失败与保守回退都保持为零；三档结果没有被异常路径污染。
+
+阶段 B 的健康计数示例：
 
 ```text
 Shadow Resource Failure = 0
@@ -1209,15 +1918,17 @@ Unexpected Empty Clear  = 0
 
 ## 18. 当前局限与下一步演进
 
-### 18.1 Scene 级 Caster Revision 仍然保守
+### 18.1 Auto-fit 的灯光级 Caster 依赖仍然保守
 
-当前任意 Caster 变化会让所有灯失效。下一步可以维护：
+C 已经能对非 Auto-fit 投影和 Point Face 生成空间 Caster Signature，但 Auto Fit 会让“投影范围”和“相关 Caster”互相依赖。当前 Directional、Spot 与整灯 Point 的 Auto-fit 路径仍使用全局 Caster 状态。
+
+下一步可以维护稳定的：
 
 ```text
 Light ↔ Caster Overlap Graph
 ```
 
-每个 Caster 只递增受影响灯的 Caster Subset Revision。
+并把 Fit 输入定义成可增量维护的 Caster Set，而不是每帧从最终投影反推。每个 Caster 只递增受影响灯或 Cascade 的 Subset Revision。
 
 例如：
 
@@ -1227,7 +1938,37 @@ Light ↔ Caster Overlap Graph
 
 这会把“单灯局部增量”进一步扩展为“单 Caster 局部增量”。
 
-### 18.2 从同步扫描转向事件驱动版本
+### 18.2 Point Light 移动仍通常使六面 Stale
+
+六个 Face 的 View Matrix 共享 Point Position。灯移动后，旧深度对应旧光源原点，因此六面 Signature 全部变化是正确行为。
+
+若要进一步减少移动 Point 的成本，需要引入不同性质的技术：
+
+- 基于运动幅度和误差界限的 Shadow Reprojection；
+- 显式更新预算和跨帧调度；
+- 允许短暂陈旧内容的质量策略；
+- 更细粒度的 Page/Tile 重投影。
+
+这些方案都会引入时间误差、复杂遮挡验证或更大的状态空间，不能再被称为“无损精确缓存命中”。当前实现选择准确性优先。
+
+### 18.3 空间 Signature 仍是线性扫描
+
+`BuildSpatialShadowCasterSignature` 和 Receiver Demand 当前扫描 Bounds List。在 Sponza/San Miguel 上成本可接受且已有正式计数，但复杂度仍近似：
+
+```text
+O(Caster × LightProjection)
+O(VisibleReceiver × 6 PointFaces)
+```
+
+下一步应让 Scene BVH、Loose Octree、Grid 或动态 AABB Tree 同时服务：
+
+- Shadow Caster 子集查询；
+- Receiver Face Demand；
+- Light-Caster Overlap 更新。
+
+这样优化的不只是 Hash 速度，也能避免每盏灯重复遍历全场。
+
+### 18.4 从同步扫描转向事件驱动版本
 
 当前为了兼容公开可变字段，会在 Frame Build 阶段同步 Shadow State。
 
@@ -1240,7 +1981,7 @@ Light ↔ Caster Overlap Graph
 
 这样可以减少每帧观察成本，同时保留版本化依赖。
 
-### 18.3 Hash 不是密码学证明
+### 18.5 Hash 不是密码学证明
 
 当前 Signature 使用 `std::size_t` 聚合，工程上碰撞概率很低，但理论上不是零。
 
@@ -1257,19 +1998,19 @@ Light ↔ Caster Overlap Graph
 
 Hash 只用于快速比较，Debug Build 可在 Hit 时进行结构化交叉检查。
 
-### 18.4 更新预算与平稳降级
+### 18.6 更新预算与平稳降级
 
-有了准确的 Per-Light Dirty Set 后，才能安全增加：
+有了准确的 Per-Light 和 Per-Face Dirty Set 后，才能安全增加：
 
 - 每帧 Shadow Update Budget；
-- 按屏幕贡献或重要性排序；
+- 按屏幕贡献、Required 状态或重要性排序；
 - 低优先级灯延迟一帧；
-- 大更新拆分；
+- 六面大更新拆分；
 - Shadow Cache LRU 与显存预算。
 
-这些调度策略的前提是 Dirty Set 本身可信，否则只是把错误随机分摊到更多帧。
+这些调度策略必须显式定义允许的时间误差。当前精确路径仍要求 Required + Stale 在 Lighting Pass 前完成；以后若允许延迟，需要作为可观察的降级策略，而不是伪装成 Hit。
 
-### 18.5 更大规模的资源布局
+### 18.7 更大规模的资源布局与 Tile 门槛
 
 未来即使迁移到：
 
@@ -1280,18 +2021,29 @@ Hash 只用于快速比较，Debug Build 可在 Hit 时进行结构化交叉检�
 
 “依赖版本 + 局部失效 + 成功后发布”的结构仍然成立，只是 Cache Entry 从“一盏灯一张纹理”变成一个 Tile、Page、Cascade 或 Command Range。
 
+是否进入 Tile/Page，应该先增加以下遥测：
+
+- 每个 Required Face 的 Receiver 投影覆盖率；
+- Dirty Caster 在 Face 内的屏幕包围区域；
+- 滤波 Padding 后的 Dirty Tile 数；
+- Tile 管理 CPU 与显存成本；
+- Page 命中率与最坏更新尖峰。
+
+只有“经常需要 5～6 个 Face，但每面只覆盖很小区域”被数据确认后，Tile 化才有充分收益依据。
+
 CSM 的完整数学、稳定化、缓存依赖、Dirty Tile 边界与项目接入方案见 [CSM 技术原理与增量更新工程设计](CSM_TECHNICAL_PRINCIPLES_CN.md)。
 
-### 18.6 下一轮正确性补强
+### 18.8 下一轮正确性补强
 
-当前证据已经足以支撑本次 Per-Light 优化结论，但若要把它推进到更接近生产引擎的验证等级，优先级最高的是：
+当前证据已经足以支撑 A→B→C 结论，但若要推进到更接近生产引擎的验证等级，优先级最高的是：
 
 1. 注入 Shader 缺失/不可用、主 FBO/Face FBO 不完整、非法 Caster Bounds，验证缓存保持失效、采样关闭、下一帧重试和失败计数增长；
-2. 为 Directional 与 Spot 的 2D Shadow Map 增加直接读回 Hash；当前严格逐位证据集中在 Point Cubemap，2D 缓存主要由最终截图间接覆盖；
-3. 为同一 VAO/Buffer 内的原地几何变化和骨骼姿态引入显式 Geometry Content Revision，补齐当前签名无法自动观察的内容变化；
-4. 增加多盏同类型灯、灯增删、Shadow 开关、Alpha Texture 原地更新和跨 GPU/驱动测试；
-5. 在长时运行中周期性抽样 Shadow Hash；当前读回证明正式调用的最终帧，不是对 1,000 个测量帧逐帧读回；
-6. 让 Benchmark Schema 记录进程 ID 和创建时间，使“三轮独立 renderer 进程”除了由 Harness 控制流保证外，也能由结果文件独立审计。
+2. 对 Cubemap Seam、超大 Receiver OBB、透明 Receiver 和 PCSS 最大滤波半径增加专门 Required Mask 边界用例；
+3. 为 Directional 与 Spot 的 2D Shadow Map 增加直接读回 Hash；当前严格逐位证据集中在 Point Cubemap；
+4. 为同一 VAO/Buffer 内的原地几何变化和骨骼姿态引入显式 Geometry Content Revision；
+5. 增加多盏同类型灯、灯增删、Shadow 开关、Alpha Texture 原地更新和跨 GPU/驱动测试；
+6. 在长时运行中周期性抽样 Required Face Hash，而不只验证正式调用的最终帧；
+7. 在 Benchmark Schema 中记录进程 ID、创建时间和每阶段 Face Mask 分布，使独立进程和三段行为能由结果文件直接审计。
 
 ---
 
@@ -1299,45 +2051,47 @@ CSM 的完整数学、稳定化、缓存依赖、Dirty Tile 边界与项目接�
 
 ### 第 0–1 分钟：背景
 
-> 场景有 Directional、Point、Spot 三盏阴影灯。最初没有 Shadow Cache，渲染器每帧都会重新生成三盏灯的阴影，不管输入有没有变化。
+> 场景有 Directional、Point、Spot 三盏阴影灯。最初没有 Shadow Cache，渲染器每帧都会重新生成三盏灯的阴影；Point 一次更新又固定包含六个 Cubemap Face Pass。
 
 ### 第 1–2 分钟：问题证据
 
-> 我做了按灯型的更新计数。只移动 Point Light 时，Directional、Point、Spot 仍然每帧各更新一次，说明初始路径没有利用变化局部性。
+> 我先做按灯型更新计数。只移动 Point Light 时仍然是 3 盏灯更新，证明存在灯光级放大。完成 Per-Light 后又发现：Point 只要 Miss，仍固定提交六面；局部 Caster 明明只影响少数方向，灯内还有第二层放大。
 
-### 第 2–4 分钟：核心抽象
+### 第 2–4 分钟：A→B
 
-> 三盏灯物理上已经有独立 FBO，所以我把 Cache Entry 下沉到 Light。每个 Key 包含共享 Caster Revision、对应 Shadow Shader Revision、该灯的 Transform/Projection 和路径配置；GPU Target 身份则另外用 FBO、Texture、尺寸和 Resource Generation 校验。
+> 三盏灯物理上已有独立 FBO，所以我把 Cache Entry 从 Scene 下沉到 Light。Key 包含 Caster Revision、Shadow Shader Revision、Light Transform/Projection 和路径配置；GPU Target 另外用 FBO、Texture、尺寸与 Resource Generation 校验。每帧先 Check，只有 Miss 进入 Selection，成功完成才 Commit。
 
-### 第 4–6 分钟：算法
+### 第 4–6 分钟：B→C
 
-> 每帧先同步 Caster State，再逐灯 Check。Hit 的灯跳过，Miss 的灯进入 Selection。Selection 有 Pending 和 Completed 两阶段，只有资源门槛通过且渲染或正确 Clear 的路径完整结束后才 Commit。Lighting Pass 只采样已经发布的内容。这是事务式发布语义，不是带 GPU Fence 的严格事务。
+> Point 又有六个可独立绑定的 Face FBO，所以我继续为每面维护 Valid Bit 和 Signature。每面 Signature 只 Hash 与该 Face Frustum 相交的 Caster。另从当前相机可见 Receiver 生成 Required Mask，最终 Update Mask 等于 Required 与 Stale 的交集。非需求的陈旧面不伪装成有效，只延迟到未来第一次需要时重建。
 
-### 第 6–7 分钟：最难的正确性
+### 第 6–7 分钟：部分更新算法
 
-> 我覆盖了 Shader Reload、材质 Alpha、Caster 移动与启停、FBO Resize、同尺寸 Target Replacement 和空场景。Resource Generation 解决 GL ID 复用的 ABA 问题，空场景必须 Clear，不能简单跳过。
+> 全六面更新可以一次 Clear 整张 Cubemap；部分更新绝不能这样做，否则会清掉缓存面。我为选中 Face 绑定独立 FBO，只 Clear 和 Draw 该面，完成后只 Commit renderedMask。目标换代会让六个 Valid Bit 一起失效。
 
-### 第 7–8 分钟：Point 六面陷阱
+### 第 7–8 分钟：正确性与降级
 
-> 逐面读回发现 Layered Geometry Shader 路径在当前驱动上可能漏五个 Face，所以没有接受那组更漂亮的性能，而是 fail-closed 到 Six-face，并对每个 Face 的深度位模式计算 64 位 Hash 做 A/B 对比。
+> Required Mask 用 Camera-visible Receiver OBB/Sphere 与六个带滤波 Padding 的 Face Frustum 求交。Bounds 或 Camera 不可靠就强制六面。逐面读回曾发现 Layered 路径会漏五面，所以生产路径继续使用 Six-face。C 另外用 PCSS Force-all 把六面全部物化，与 B 做逐面 Hash。
 
 ### 第 8–9 分钟：结果
 
-> 正式 1080p、无缓存/Per-Light 各三轮、每轮 1,000 帧；固定 60 Hz 的 Point + Camera 连续轨迹中，Caster 保持静止，更新数稳定从 3 降到 1，Point 自身仍每帧提交六面。Sponza / San Miguel 的 Shadow GPU Median 分别下降 21.46% / 45.76%，P95 分别下降 23.50% / 40.39%。
+> 正式 1080p、A/B/C 每档三个独立进程、每轮 1800 帧。Sponza 的 GPU Frame A→C 降低 24.32%，San Miguel 降低 33.19%；B→C 的 Point Shadow GPU 分别下降 15.16% 和 25.15%。Point Face 从 6.00/4.00 降到 3.10 和 2.94，屏幕严格 0 像素差，Force-all 六面 Hash 与 Renderer-owned 资源统计一致。
 
 ### 第 9–10 分钟：权衡与下一步
 
-> Light 变化已经局部化；Caster Revision 仍是场景级，这是保守选择。下一步会维护 Light-Caster Overlap Revision，让单个动态 Caster 也只失效真正受影响的灯。
+> Point Light 自身移动仍会让六个 Face Signature 变化，Sponza 的 Receiver Demand 也经常需要六面，所以我不会声称所有 Point 更新都降到两三面。当前主要收益是局部 Caster 与 Camera-only 复用。下一步先用 BVH/Overlap Graph 降低空间扫描，再根据 Face 内覆盖率决定是否值得上 Tile/Page。
 
 ---
 
 ## 20. 90 秒精简版
 
-> 项目最初没有 Shadow Cache，每帧都会重绘 Directional、Point、Spot 三盏灯。我通过分灯型更新计数确认，单独移动 Point 时真正需要变化的只有 Point Cubemap。中间的 Global Cache 解决过静态复用，但正式 A/B 按无缓存初始调度与最终 Per-Light 方案比较。
+> 项目最初没有 Shadow Cache，每帧都会重绘 Directional、Point、Spot，Point 又固定绘制六个 Cubemap Face。我把优化拆成 A→B→C 两步：A 是无缓存全量重绘；B 把 Cache Entry 下沉到每盏灯；C 再把 Point 下沉到六个 Face。
 >
-> 解决方案是把 Cache Entry 下沉到每盏灯。每个 Key 组合 Scene Caster Revision、对应 Shadow Shader Revision、Light Transform/Projection 和渲染路径配置；同时用 FBO、Texture、尺寸和 Resource Generation 验证 GPU 目标仍是同一代资源。每帧先逐灯 Check，只把 Miss 放进 Selection；前置门槛通过且 CPU 提交路径完整结束，或空场景 Clear 已发出后才 Commit。未完成项保持 Invalid，Lighting Pass 只采样已发布内容。
+> B 的每灯 Key 组合 Caster、Shader、Light Transform/Projection 和路径配置，并用 FBO、Texture、尺寸与 Resource Generation 验证 GPU 目标。只有 Miss 进入 Selection，提交完成后才发布。它解决了“移动 Point 却连 Directional 和 Spot 一起重画”的问题，但 Point 一旦 Miss 仍固定六面。
 >
-> 我还覆盖了 Caster 移动/启停、Alpha Material、Shader 热重载、分辨率、同尺寸 FBO Replacement 和空场景。Point Shadow 用六面 Submission 核算、逐面有效性与基于深度位模式的 A/B Hash 联合验证，避免把漏 Face 的 Layered 路径误当优化。最终在 1920×1080、无缓存/Per-Light 各三轮、每轮 1,000 帧的 Point + Camera 连续轨迹中，把每帧更新灯数从 3 降到 1，Sponza / San Miguel 的 Shadow GPU Median 分别下降 21.46% / 45.76%；Point 仍保持每帧六面提交，画面与资源通过一致性校验。
+> C 为每个 Face 保存 Valid Bit 和空间 Caster Signature，再用可见 Receiver 生成 Required Mask；本帧只更新 `Required & Stale`。部分更新只 Clear 选中 Face，并只 Commit renderedMask；非需求陈旧面延迟到未来第一次需要时重建。Bounds 不可靠则强制六面，PCSS Force-all 审计验证六面最终与基准完全一致。
+>
+> 正式 1920×1080、A/B/C 每档三个独立进程、每轮 1800 帧。Sponza/San Miguel 的 GPU Frame A→C 分别降低 24.32%/33.19%，B→C 的 Point Shadow GPU 降低 15.16%/25.15%，Point Face 平均从 A 的 6.00、B 的 4.00 降到 3.10/2.94。屏幕严格 0 像素差，六面 Hash 与 Renderer-owned 资源一致。边界是 Point Light 自身移动仍通常使六面 Stale，主要收益来自局部 Caster 和缓存 Face 复用。
 
 ---
 
@@ -1345,40 +2099,64 @@ CSM 的完整数学、稳定化、缓存依赖、Dirty Tile 边界与项目接�
 
 | 主题 | 位置 |
 |---|---|
-| Per-Light Cache Record | [Light.h](Light.h) `ShadowMapCacheState`，约 9–85 行；三类灯的缓存成员约 99、141、188 行 |
-| Target 创建、Resize 与失效 | [Light.cpp](Light.cpp) `EnsureShadowFBO`，约 42–71、120–149、255–284 行 |
-| FBO 完整性与 Resource Generation | [FramebufferManager.cpp](FramebufferManager.cpp)，约 7–15、155–157、295–302 行 |
-| Caster State 同步 | [Scene.cpp](Scene.cpp) `BuildMeshDrawLists` / `CommitShadowCasterState`，约 155–268、1880–1934 行 |
-| Material 深度相关 Signature | [Material.h](Material.h) `ComputeShadowStateSignature`，约 298–321、404–438 行 |
-| Mesh / Model Shadow Revision | [Model.cpp](Model.cpp) `SyncShadowStateRevision`，约 361–382、583–604 行 |
-| 无缓存控制路径 | [Global.h](Global.h) `SHADOW_CACHE_DISABLED`、[Global.cpp](Global.cpp) 环境变量解析；[Scene.cpp](Scene.cpp) `DrawShadowMap` / `DrawShadowMapRevisionGlobal(true)`，约 3156–3400 行 |
-| Global Cache 中间方案 | [Scene.cpp](Scene.cpp) `BuildShadowRevisionSignature` / `DrawShadowMapRevisionGlobal(false)`，约 1979–2060、3156–3382 行 |
-| 三种 Per-Light Signature | [Scene.cpp](Scene.cpp) `Build*ShadowRevisionSignature`，约 2063–2137 行 |
-| Per-Light Check / Select / Commit | [Scene.cpp](Scene.cpp) `DrawShadowMapPerLight`，约 2863–3135 行 |
-| 实际 Shadow Update | [Scene.cpp](Scene.cpp) `RenderShadowMapUpdate`，约 2451–2855 行 |
-| Six-face 保守路径 | [Scene.cpp](Scene.cpp) `ShouldUseSixFacePointShadow`，约 1161–1169 行 |
-| Shader Revision | [Shader.cpp](Shader.cpp) `Reload`，约 237–266 行 |
-| Forward 采样门控 | [Light.cpp](Light.cpp) `SetLightUniforms`，约 102–108、228–234、349–355 行 |
-| Deferred 采样门控 | [DeferRenderPass.cpp](DeferRenderPass.cpp)，约 150–163 行 |
-| Benchmark 与逐面证据 | [test.cpp](test.cpp) |
-| 确定性运动轨迹 | [BenchmarkMotionTimeline.cpp](BenchmarkMotionTimeline.cpp) / [BenchmarkMotionTimeline.h](BenchmarkMotionTimeline.h) |
-| A/B Harness | [tools/Test-ShadowOptimizations.ps1](tools/Test-ShadowOptimizations.ps1) |
+| Per-Light Cache Record | [Light.h](Light.h) `ShadowMapCacheState` |
+| Point Per-Face Cache Record | [Light.h](Light.h) `PointShadowFaceCacheState` / `PointLight::shadowFaceCache` |
+| Target 创建、Resize 与失效 | [Light.cpp](Light.cpp) 三类灯的 `EnsureShadowFBO` |
+| FBO 完整性与 Resource Generation | [FramebufferManager.cpp](FramebufferManager.cpp) `FBO::Init` / `GetResourceGeneration` / Cubemap Face FBO |
+| Caster State 与 Bounds 同步 | [Scene.cpp](Scene.cpp) `BuildMeshDrawLists` / `CommitShadowCasterState` |
+| Model 容器拓扑版本 | [Scene.h](Scene.h) `ModelSource::SceneTopologyRevision`、`AddModel` / `DeleteModel` / `ReplaceModel` / `ClearModels` |
+| Topology Revision 同步与缓存失效 | [Scene.cpp](Scene.cpp) `SynchronizeSceneTopologyRevision` |
+| Material 深度相关 Signature | [Material.h](Material.h) `ComputeShadowStateSignature` / `InvalidateShadowState` |
+| Mesh / Model Shadow Revision | [Model.cpp](Model.cpp) `SyncShadowStateRevision` |
+| A 无缓存控制路径 | [Global.h](Global.h) `SHADOW_CACHE_DISABLED`；[Scene.cpp](Scene.cpp) `DrawShadowMapRevisionGlobal(true)` |
+| Global Cache 中间方案 | [Scene.cpp](Scene.cpp) `BuildShadowRevisionSignature` / `DrawShadowMapRevisionGlobal(false)` |
+| B 三种 Per-Light Signature | [Scene.cpp](Scene.cpp) `BuildDirectional/Point/SpotShadowRevisionSignature` |
+| C 空间 Caster Signature | [Scene.cpp](Scene.cpp) `BuildSpatialShadowCasterSignature` |
+| C Point Face Signature | [Scene.cpp](Scene.cpp) `BuildPointShadowFaceRevisionSignatures` |
+| C Receiver Demand | [Scene.cpp](Scene.cpp) `ComputePointShadowRequiredFaceMask` |
+| B/C Check、Select、Commit | [Scene.cpp](Scene.cpp) `DrawShadowMapPerLight` |
+| Six-face 与局部 Face Clear/Draw | [Scene.cpp](Scene.cpp) `RenderShadowMapUpdate` |
+| 策略切换整体失效 | [Scene.cpp](Scene.cpp) `DrawShadowMapRevision` / `SynchronizeShadowCacheGranularity` |
+| Six-face 保守路径 | [Scene.cpp](Scene.cpp) `ShouldUseSixFacePointShadow` |
+| Shader Revision | [Shader.cpp](Shader.cpp) `Reload` |
+| Forward 采样门控 | [Light.cpp](Light.cpp) 三类灯的 `SetLightUniforms` |
+| Deferred 采样门控 | [DeferRenderPass.cpp](DeferRenderPass.cpp) |
+| Benchmark、Face Mask 与逐面证据 | [test.cpp](test.cpp) |
+| 三阶段确定性轨迹 | [BenchmarkMotionTimeline.cpp](BenchmarkMotionTimeline.cpp) / [EditorMotionTimeline.cpp](EditorMotionTimeline.cpp) |
+| UI 三档切换与实时遥测 | [mygui.h](mygui.h) |
+| A/B/C 正式 Harness | [tools/Test-PointShadowCache3Way.ps1](tools/Test-PointShadowCache3Way.ps1) |
+| 通用 A/B Harness | [tools/Test-ShadowOptimizations.ps1](tools/Test-ShadowOptimizations.ps1) |
 | 失效矩阵 Harness | [tools/Test-PerLightShadowCache.ps1](tools/Test-PerLightShadowCache.ps1) |
-| 连续运动正式入口与报告 | [tools/Test-ShadowMotionTimeline.ps1](tools/Test-ShadowMotionTimeline.ps1) / [SHADOW_MOTION_TIMELINE_CN.md](SHADOW_MOTION_TIMELINE_CN.md) |
+| 三档报告生成 | [tools/generate_point_shadow_cache_3way_report.py](tools/generate_point_shadow_cache_3way_report.py) |
+| 关键正确性 Harness | [tools/Test-PointShadowCacheCorrectness.ps1](tools/Test-PointShadowCacheCorrectness.ps1) |
+| 正确性报告生成 | [tools/generate_point_shadow_cache_correctness_report.py](tools/generate_point_shadow_cache_correctness_report.py) |
+| 当前正式结果 | [POINT_SHADOW_CACHE_3WAY_REPORT_CN.md](POINT_SHADOW_CACHE_3WAY_REPORT_CN.md) |
+| 当前正确性审计 | [POINT_SHADOW_CACHE_CORRECTNESS_AUDIT_CN.md](POINT_SHADOW_CACHE_CORRECTNESS_AUDIT_CN.md) |
 
 ---
 
 ## 22. 最终技术判断
 
-这项工作的价值不只在于微扰实验获得 `21.57% / 46.06%`、Point + Camera 连续运动复验获得 `21.46% / 45.76%` 的 Shadow GPU Median 改善，而在于建立了一套可以继续扩展的增量渲染框架：
+这项工作的价值不只在于 Sponza/San Miguel 的 GPU Frame A→C 分别下降 `24.32% / 33.19%`，或 Point Shadow B→C 分别下降 `15.16% / 25.15%`，而在于完成了两次有证据支撑的缓存粒度下沉：
 
 ```text
-明确依赖
-    → 精确定位 Dirty Entry
-        → 只执行必要工作
-            → 成功后发布
-                → 失败时不暴露半成品
-                    → 用计数、内容和资源三类证据验证
+A：帧级全量调度
+    → B：Light Entry
+        → C：Point Face Entry
+            → Required & Stale
+                → 局部 Clear / Draw / Commit
+                    → Deferred Face 按需物化
+                        → 不可靠时回退六面
 ```
 
-它把一个看似普通的“阴影缓存优化”，提升为一个关于依赖图、版本化状态、GPU 资源生命期、事务式发布和保守降级的完整引擎案例。
+它把一个看似普通的“阴影缓存优化”，提升为一个关于依赖图、版本化状态、空间关联、需求驱动物化、GPU 资源生命期、事务式发布和保守降级的完整引擎案例。
+
+最重要的工程判断是保持结论边界：
+
+- A→B 已经稳定解决未变化灯光的重复重绘；
+- B→C 已经在局部 Caster 工作负载中稳定减少 Point Face；
+- Point Light 自身移动仍通常需要重建当前需求的 5～6 面；
+- 当前数据还不足以直接证明 Tile/Page 化值得；
+- 任何无法证明局部性的状态继续保守失效。
+
+因此它既有可量化收益，也没有把实验中没有发生的能力写进结论。
