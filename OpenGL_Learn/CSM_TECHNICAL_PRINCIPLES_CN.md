@@ -169,6 +169,209 @@ flowchart LR
 
 Lighting Pass 根据当前 Fragment 的线性 View-Space Depth 选择对应 Cascade。
 
+### 4.1 Cascade 是视锥区间，不是 Mipmap 层
+
+CSM 与 Mipmap 都有“Level”的概念，但 Cascade 并不是上一层 Shadow Texture 的缩小副本。
+
+CSM 的逻辑关系是相邻的 Camera Depth 区间：
+
+```text
+Cascade 0 = [Camera Near, Split 1)
+Cascade 1 = [Split 1, Split 2)
+Cascade 2 = [Split 2, Split 3)
+Cascade 3 = [Split 3, Shadow Distance]
+```
+
+除用于消除接缝的 Transition Band 外，各级在选择意义上主要负责不同的 Receiver 距离范围。它们不是：
+
+```text
+完整 Shadow Map
+    → 缩小 1/2
+        → 再缩小 1/2
+```
+
+而是：
+
+```text
+同一个 Directional Light
+    → 为不同 Camera Frustum Slice
+        → 分别计算 Light Matrix
+            → 分别重新渲染 Shadow Depth
+```
+
+### 4.2 CSM 与 Mipmap 共享同一种 LOD 思想
+
+二者共同遵循：
+
+> 数据采样密度应该匹配最终屏幕真正需要的密度。
+
+从视觉直觉上看：
+
+```text
+靠近相机
+    → 屏幕占用大
+        → 需要更高空间频率
+
+远离相机
+    → 屏幕占用小
+        → 可以使用更低空间频率
+```
+
+因此可以把 CSM 理解为 Shadow 系统中的一种空间 LOD。但它与 Mipmap 的“Level 内容”和“选级依据”不同。
+
+| 维度 | CSM | Mipmap |
+|---|---|---|
+| 被分级的对象 | Camera Frustum / Shadow Projection | 同一张纹理 |
+| 每级内容 | 使用不同 Light Matrix 重新渲染 | 从上一级预过滤/降采样 |
+| 主要选级依据 | Receiver 的线性 View-Space Depth | 屏幕像素的 Texture Footprint |
+| 常见输入 | Fragment World Position、View Matrix、Split | UV 的 `dFdx` / `dFdy`、Texture Size |
+| 每级覆盖 | 不同 Camera Depth 区间 | 相同纹理内容 |
+| 解决问题 | Directional Shadow Perspective Aliasing | Texture Minification Aliasing |
+| 能否增加近处原始细节 | 可以，通过更小 Shadow Projection 重绘 | 不可以，只能保留或减少已有细节 |
+
+### 4.3 Mipmap 的选级并不直接读取相机距离
+
+“远处使用粗糙纹理、近处使用精细纹理”是正确的常见结果，但不是 Mipmap 的严格判定规则。
+
+GPU 更接近于计算：
+
+```text
+一个屏幕像素
+    → 在纹理空间覆盖了多少原始 Texel
+```
+
+如果一个 Pixel 约覆盖：
+
+```text
+1 × 1 Texel → Mip 0
+2 × 2 Texel → Mip 1
+4 × 4 Texel → Mip 2
+8 × 8 Texel → Mip 3
+```
+
+粗略的各向同性 LOD 可以表达为：
+
+```text
+rhoX = length(dUVdx * textureSize)
+rhoY = length(dUVdy * textureSize)
+rho  = max(rhoX, rhoY)
+lod  = log2(rho)
+```
+
+其中 `dUVdx`、`dUVdy` 来自相邻 Fragment 的纹理坐标变化。
+
+Camera Distance 经常让纹理在屏幕上缩小，所以它与 Mip Level 高度相关，但不是唯一因素：
+
+- 很近但接近掠射角的地面，沿某一方向仍可能覆盖大量 Texel；
+- 很远但尺寸巨大的广告牌，仍可能需要较细 Mip；
+- Camera FOV、屏幕分辨率、模型缩放和 UV Tiling 都会影响 Texture Footprint；
+- 各向异性表面可能在 X/Y 两个方向需要不同采样尺度。
+
+因此更准确的描述是：
+
+```text
+Mipmap 按屏幕空间 Texture Footprint 选级；
+距离只是影响 Footprint 的重要原因之一。
+```
+
+### 4.4 CSM 通常按 Receiver 的 View Depth 选级
+
+CSM 第一版一般不使用 UV Derivative 选择 Cascade，而是使用当前正在着色的 Receiver Fragment：
+
+```text
+viewDepth = -(ViewMatrix * WorldPosition).z
+```
+
+再与 Cascade Split 比较：
+
+```text
+viewDepth < Split 1 → Cascade 0
+viewDepth < Split 2 → Cascade 1
+viewDepth < Split 3 → Cascade 2
+otherwise           → Cascade 3
+```
+
+这里选择依据是 Receiver，不是 Caster：
+
+- 地面 Fragment 在 8 m：采样 Near Cascade；
+- 建筑 Fragment 在 70 m：采样 Far Cascade；
+- Camera 外的建筑即使不可见，只要可能给该 Receiver 投影，仍需进入对应 Shadow Pass。
+
+这也是为什么 Cascade Shader 需要当前 Fragment 的 World Position、View Depth 和对应的 Light Matrix。
+
+### 4.5 “每一级是上一级的 1/4”什么时候成立
+
+如果每一级 Shadow Texture 都保持相同分辨率，例如 `2048²`，但世界空间覆盖边长逐级扩大两倍：
+
+| Cascade | 世界覆盖边长 | 覆盖面积 | Texture |
+|---|---:|---:|---:|
+| 0 | 20 m | 400 m² | 2048² |
+| 1 | 40 m | 1,600 m² | 2048² |
+| 2 | 80 m | 6,400 m² | 2048² |
+| 3 | 160 m | 25,600 m² | 2048² |
+
+则：
+
+```text
+边长扩大 2 倍
+    → 面积扩大 4 倍
+        → 单位面积获得的 Shadow Texel 数约变成 1/4
+```
+
+这个“1/4”描述的是单位世界面积的 Texel Density，不一定是 Shadow Texture 本身缩小到 `1/4`。
+
+对应的线性世界精度是：
+
+```text
+worldUnitsPerTexel = worldWidth / resolution
+```
+
+边长扩大两倍时，每个 Texel 覆盖的世界长度扩大两倍，面积扩大四倍。
+
+实际 CSM 不要求固定的两倍比例。Practical Split 会根据 Near、Shadow Distance、Cascade Count 与 Lambda 生成不均匀区间。
+
+### 4.6 为什么 Shadow Map 的 Mipmap 不能替代 CSM
+
+假设一张覆盖 400 m 的单张 Shadow Map，在人物附近只分配到约 10 个 Texel。
+
+生成 Mipmap 后只能得到：
+
+```text
+Mip 0：10 个有效细节 Texel
+Mip 1：约 5 个
+Mip 2：约 2～3 个
+Mip 3：约 1 个
+```
+
+Mipmap 能降低 Minification 时的走样，却不能把已经不存在的近景细节增加到 100 个 Texel。
+
+CSM 的做法是为 Near Cascade 改变 Light Projection：
+
+```text
+原来 2048² 覆盖 400 m
+    ↓
+Near Cascade 的 2048² 只覆盖 20 m
+```
+
+因此近景从深度生成阶段就获得更多 Shadow Texel，而不是对一张低密度结果做后处理。
+
+此外，普通 Color Texture 的 Mipmap 是对颜色做预过滤；Shadow Map 保存的是遮挡深度。简单平均深度不等价于正确阴影：
+
+- 一个区域内可能同时存在近处 Caster 与远处背景；
+- 平均深度可能代表一个现实中不存在的表面；
+- Depth Compare、PCF、PCSS、Min/Max Depth Pyramid 各自需要不同的归约语义；
+- Shadow Mipmap 可以服务于 Filter、Blocker Search 或层次剔除，但不能代替 Near Cascade 的独立高密度投影。
+
+所以最准确的记忆是：
+
+```text
+Mipmap
+    = 同一纹理内容的采样 LOD
+
+CSM
+    = Directional Shadow Projection 的空间 LOD
+```
+
 ---
 
 ## 5. Cascade Split 怎样计算
@@ -1953,6 +2156,8 @@ Cascade
 
 > 项目当前的 Directional Shadow 是一张覆盖完整 Caster 范围的 2D Depth Map。它稳定且容易缓存，但大场景中世界单位/Texel 固定，远景覆盖会牺牲近景阴影质量。CSM 会按相机 View Depth 把 Frustum 分成多个 Cascade，每级生成独立的正交 Shadow Map，让近处获得更高 Texel 密度、远处维持覆盖范围。
 >
+> CSM 与 Mipmap 共享“让数据密度匹配屏幕需求”的 LOD 思想，但不是同一种层级。Mipmap 根据 UV Derivative 推导的 Texture Footprint 选择同一纹理的降采样版本；CSM 根据 Receiver 的线性 View Depth 选择使用不同 Light Matrix 重新渲染的 Shadow Layer。Shadow Mipmap 只能减少已有细节，不能替代 Near Cascade 从投影阶段增加 Shadow Texel 密度。
+>
 > 真正困难的不只是多画几张图，而是稳定性和依赖建模。每级需要 Practical Split、Receiver Frustum Fit、Off-screen Caster Z 扩张、Stable Extent、Texel Snapping、Per-Cascade Bias、边界 Blend，以及独立的逻辑 Signature 和 GPU Layer 代际。CSM 使 Camera 成为合法失效源，因此现有 Point + Camera 的 `3→1` Per-Light 结论不能直接套用。
 >
 > 工程上我会先实现正确的 4-Cascade Hard Shadow，再加入 Stable CSM、Per-Cascade Culling 与 Cache。对于大场景少量动态人物，优先采用 Static/Dynamic 分层；只有 Dry-run 数据证明 Dirty Area 很小时才进入 Tile。正式结果仍按 1920×1080、A/B 各三轮、逐层内容、主画面和资源占用联合验证。
@@ -2021,6 +2226,9 @@ Tile                = Disabled
 | CSM | Cascaded Shadow Maps，级联阴影贴图 |
 | PSSM | Parallel-Split Shadow Maps，常见 CSM Split 方法 |
 | Cascade | 一个 Camera Depth 区间及对应 Shadow Map |
+| Mipmap | 同一纹理内容的预过滤降采样层级，通常按 Texture Footprint 选级 |
+| Texture Footprint | 一个屏幕像素在纹理空间覆盖的范围 |
+| Shadow Spatial LOD | 通过不同 Shadow Projection 分配空间采样密度 |
 | Shadow Distance | 实时 Directional Shadow 的最远距离 |
 | Stable CSM | Extent 与 Center 做稳定化/量化的 CSM |
 | Texel Snapping | 将 Light-Space Projection 对齐到 Shadow Texel |
