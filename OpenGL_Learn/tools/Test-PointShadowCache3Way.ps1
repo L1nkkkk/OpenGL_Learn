@@ -6,7 +6,8 @@ param(
     [switch]$SkipReport,
     [switch]$SkipCorrectnessAudit,
     [switch]$SkipExternalWarmup,
-    [string]$BatchId = "point-shadow-cache-3way-1080p",
+    [switch]$AllowDirtySource,
+    [string]$BatchId = "point-shadow-cache-3way-1080p-final",
     [string]$ReportOutputDirectory,
     [string]$ReportPath,
     [ValidateRange(64, 16384)]
@@ -14,11 +15,11 @@ param(
     [ValidateRange(64, 16384)]
     [int]$Height = 1080,
     [ValidateRange(30, 5000)]
-    [int]$MeasuredFrames = 600,
+    [int]$MeasuredFrames = 1800,
     [ValidateRange(4, 1000)]
-    [int]$ExternalWarmupFrames = 100,
+    [int]$ExternalWarmupFrames = 300,
     [ValidateRange(1, 300)]
-    [int]$InternalWarmupFrames = 15,
+    [int]$InternalWarmupFrames = 300,
     [ValidateRange(1, 3)]
     [int]$FormalRunsPerVariant = 3,
     [ValidateSet("sponza", "san-miguel")]
@@ -26,7 +27,7 @@ param(
     [ValidateRange(1, 1000)]
     [int]$TimelineFps = 60,
     [ValidateRange(30, 36000)]
-    [int]$TimelineCycleFrames = 600
+    [int]$TimelineCycleFrames = 1800
 )
 
 $ErrorActionPreference = "Stop"
@@ -203,8 +204,69 @@ if (-not $SkipCorrectnessAudit) {
     & $runner @auditArguments
 }
 
+function Read-ExperimentMetadata {
+    param([string]$ExperimentId)
+    $path = Join-Path $resultRoot "$ExperimentId\metadata.json"
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        throw "Missing experiment metadata: $path"
+    }
+    return Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+}
+
+$primaryMetadata = Read-ExperimentMetadata $globalVsPerLightId
+$secondaryMetadata = Read-ExperimentMetadata $perLightVsPerFaceId
+$metadataSet = @($primaryMetadata, $secondaryMetadata)
+if (-not $SkipCorrectnessAudit) {
+    $metadataSet += Read-ExperimentMetadata $correctnessId
+}
+$gitHeads = @(
+    $metadataSet |
+        ForEach-Object { [string]$_.source.gitHead } |
+        Sort-Object -Unique
+)
+$executableHashes = @(
+    $metadataSet |
+        ForEach-Object {
+            [string]$_.executables.A.sha256
+            [string]$_.executables.B.sha256
+        } |
+        Sort-Object -Unique
+)
+if ($gitHeads.Count -ne 1) {
+    throw "Three-way experiments were not produced from one Git commit."
+}
+if ($executableHashes.Count -ne 1) {
+    throw "Three-way experiments did not use one identical executable."
+}
+if (-not $AllowDirtySource -and
+    @($metadataSet | Where-Object { [bool]$_.source.gitDirty }).Count -gt 0) {
+    throw (
+        "Formal three-way results require gitDirty=false. " +
+        "Run from the clean frozen worktree, or use -AllowDirtySource only for smoke tests."
+    )
+}
+if (-not $SkipCorrectnessAudit) {
+    $auditSummaryPath = Join-Path $resultRoot "$correctnessId\summary.json"
+    $auditSummary =
+        Get-Content -LiteralPath $auditSummaryPath -Raw |
+            ConvertFrom-Json
+    foreach ($scene in @($auditSummary.scenes)) {
+        foreach ($capture in @($scene.correctness.captureComparisons)) {
+            if (-not [bool]$capture.exact) {
+                throw "$($scene.displayName) Force-All final screenshot differs."
+            }
+        }
+        foreach ($cube in @($scene.correctness.pointShadowCubeComparisons)) {
+            if (-not [bool]$cube.exact -or
+                @($cube.faces | Where-Object { -not [bool]$_.exact }).Count -gt 0) {
+                throw "$($scene.displayName) Force-All six-face hash differs."
+            }
+        }
+    }
+}
+
 $manifest = [ordered]@{
-    schemaVersion = 1
+    schemaVersion = 2
     batchId = $BatchId
     createdUtc = [DateTime]::UtcNow.ToString("o")
     resolution = @($Width, $Height)
@@ -227,6 +289,13 @@ $manifest = [ordered]@{
         A = "global-dirty"
         B = "per-light"
         C = "per-light-point-per-face"
+    }
+    provenance = [ordered]@{
+        gitHead = $gitHeads[0]
+        gitDirty = [bool]$primaryMetadata.source.gitDirty
+        executableSha256 = $executableHashes[0]
+        formalOrder = @($primaryMetadata.order)
+        requestedSwapInterval = 0
     }
     experiments = [ordered]@{
         globalVsPerLight = $globalVsPerLightId

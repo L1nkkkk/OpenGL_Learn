@@ -30,6 +30,11 @@ COLORS = {
     "C": "#39A275",
 }
 FACE_NAMES = ["+X", "-X", "+Y", "-Y", "+Z", "-Z"]
+PHASES = [
+    ("point-camera", "Point+Camera"),
+    ("local-caster-camera", "Local Caster+Camera"),
+    ("camera-only", "Camera-only"),
+]
 
 
 def parse_args() -> argparse.Namespace:
@@ -194,6 +199,170 @@ def gpu_frame_series(runs: list[dict[str, Any]]) -> np.ndarray:
     )
 
 
+def expanded_zone_series(
+    run: dict[str, Any], zone: str, activity_field: str
+) -> np.ndarray:
+    timeline = nested(run, "motionTimeline", "samples", default=[])
+    zone_samples = list(
+        nested(run, "profiler", "samples", "gpuZones", zone, default=[])
+    )
+    result = np.zeros(len(timeline), dtype=np.float64)
+    cursor = 0
+    for index, sample in enumerate(timeline):
+        active = float(nested(sample, "shadow", activity_field, default=0.0)) > 0.0
+        if active:
+            if cursor >= len(zone_samples):
+                raise RuntimeError(
+                    f"{zone} samples ended before timeline activity at frame {index}"
+                )
+            result[index] = float(zone_samples[cursor])
+            cursor += 1
+    if cursor != len(zone_samples):
+        raise RuntimeError(
+            f"{zone} has {len(zone_samples)} samples but timeline consumed {cursor}"
+        )
+    return result
+
+
+def aligned_zone_series(
+    runs: list[dict[str, Any]], zone: str, activity_field: str
+) -> np.ndarray:
+    series = [
+        expanded_zone_series(run, zone, activity_field)
+        for run in runs
+    ]
+    minimum = min((len(item) for item in series), default=0)
+    return (
+        np.mean(np.stack([item[:minimum] for item in series]), axis=0)
+        if minimum
+        else np.asarray([], dtype=np.float64)
+    )
+
+
+def amortized_zone_per_frame(
+    runs: list[dict[str, Any]], zone: str, activity_field: str
+) -> float:
+    return median(
+        float(np.sum(expanded_zone_series(run, zone, activity_field))) /
+        max(1, int(run.get("measuredFrames", 1)))
+        for run in runs
+    )
+
+
+def phase_indices(run: dict[str, Any], phase_index: int) -> np.ndarray:
+    timeline = nested(run, "motionTimeline", "samples", default=[])
+    cycle_frames = max(
+        1,
+        int(nested(run, "motionTimeline", "cycleFrames", default=len(timeline) or 1)),
+    )
+    return np.asarray(
+        [
+            index
+            for index, sample in enumerate(timeline)
+            if min(
+                2,
+                int(sample.get("cycleFrame", index)) * 3 // cycle_frames,
+            )
+            == phase_index
+        ],
+        dtype=np.int64,
+    )
+
+
+def percentile_value(values: np.ndarray, percentile: float) -> float:
+    if values.size == 0:
+        return 0.0
+    return float(np.percentile(values, percentile, method="linear"))
+
+
+def aggregate_phase_data(runs: list[dict[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for phase_index, (phase_id, phase_name) in enumerate(PHASES):
+        per_run: list[dict[str, float]] = []
+        for run in runs:
+            indices = phase_indices(run, phase_index)
+            gpu_frame = np.asarray(
+                nested(run, "profiler", "samples", "gpuFrame", default=[]),
+                dtype=np.float64,
+            )
+            shadow_gpu = expanded_zone_series(
+                run, "Shadow Map Update", "updateCount"
+            )
+            point_gpu = expanded_zone_series(
+                run, "Point Shadow Update", "pointLightUpdateCount"
+            )
+            samples = nested(run, "motionTimeline", "samples", default=[])
+
+            def counter(field: str) -> np.ndarray:
+                return np.asarray(
+                    [
+                        float(nested(samples[index], "shadow", field, default=0.0))
+                        for index in indices
+                    ],
+                    dtype=np.float64,
+                )
+
+            gpu_values = gpu_frame[indices] if indices.size else np.asarray([])
+            shadow_values = shadow_gpu[indices] if indices.size else np.asarray([])
+            point_values = point_gpu[indices] if indices.size else np.asarray([])
+            per_run.append(
+                {
+                    "gpuMedian": percentile_value(gpu_values, 50.0),
+                    "gpuP95": percentile_value(gpu_values, 95.0),
+                    "gpuP99": percentile_value(gpu_values, 99.0),
+                    "shadowGpuPerFrame": (
+                        float(np.sum(shadow_values)) / max(1, len(indices))
+                    ),
+                    "pointGpuPerFrame": (
+                        float(np.sum(point_values)) / max(1, len(indices))
+                    ),
+                    "updatedLights": float(np.mean(counter("updatedLightCount")))
+                    if indices.size
+                    else 0.0,
+                    "requiredFaces": float(
+                        np.mean(counter("pointShadowRequiredFaceCount"))
+                    )
+                    if indices.size
+                    else 0.0,
+                    "renderedFaces": float(
+                        np.mean(counter("pointShadowRenderedFaceCount"))
+                    )
+                    if indices.size
+                    else 0.0,
+                    "faceHits": float(
+                        np.mean(counter("pointShadowFaceCacheHitCount"))
+                    )
+                    if indices.size
+                    else 0.0,
+                    "cacheCheckCpu": float(
+                        np.mean(counter("cacheCheckCpuMilliseconds"))
+                    )
+                    if indices.size
+                    else 0.0,
+                    "faceDemandCpu": float(
+                        np.mean(counter("pointShadowFaceDemandCpuMilliseconds"))
+                    )
+                    if indices.size
+                    else 0.0,
+                    "faceSignatureCpu": float(
+                        np.mean(counter("pointShadowFaceSignatureCpuMilliseconds"))
+                    )
+                    if indices.size
+                    else 0.0,
+                }
+            )
+        phase_result: dict[str, Any] = {"displayName": phase_name}
+        if per_run:
+            phase_result.update(
+                {
+                    key: median(run_data[key] for run_data in per_run)
+                    for key in per_run[0]
+                }
+            )
+        result[phase_id] = phase_result
+    return result
+
+
 def save_figure(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     plt.tight_layout()
@@ -208,7 +377,7 @@ def chart_performance(scene_data: dict[str, Any], output: Path) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(12.5, 4.6))
     for axis, metric, title in [
         (axes[0], "gpu", "GPU 帧时间中位数"),
-        (axes[1], "point_gpu", "Point Shadow 更新时间中位数"),
+        (axes[1], "point_gpu", "Point Shadow 更新样本中位数"),
     ]:
         for offset, variant in enumerate(VARIANTS):
             values = [
@@ -331,6 +500,49 @@ def chart_face_histogram(scene_data: dict[str, Any], output: Path) -> None:
     save_figure(output)
 
 
+def chart_phase_comparison(scene_data: dict[str, Any], output: Path) -> None:
+    scene_ids = list(scene_data)
+    fig, axes = plt.subplots(
+        len(scene_ids),
+        2,
+        figsize=(13.0, 4.2 * len(scene_ids)),
+        squeeze=False,
+    )
+    x = np.arange(len(PHASES))
+    width = 0.24
+    for row, scene_id in enumerate(scene_ids):
+        scene = scene_data[scene_id]
+        for column, (field, title, unit) in enumerate(
+            [
+                ("pointGpuPerFrame", "Point Shadow 每帧摊销", "ms/帧"),
+                ("renderedFaces", "Point Face 实际绘制", "Face/帧"),
+            ]
+        ):
+            axis = axes[row][column]
+            for offset, variant in enumerate(VARIANTS):
+                values = [
+                    scene["phases"][variant][phase_id][field]
+                    for phase_id, _ in PHASES
+                ]
+                bars = axis.bar(
+                    x + (offset - 1) * width,
+                    values,
+                    width,
+                    color=COLORS[variant],
+                    label=VARIANTS[variant],
+                )
+                axis.bar_label(bars, fmt="%.3f", padding=2, fontsize=7)
+            axis.set_title(f"{scene['displayName']}：{title}")
+            axis.set_ylabel(unit)
+            axis.set_xticks(x, [name for _, name in PHASES])
+            axis.grid(axis="y", alpha=0.2)
+            axis.margins(y=0.16)
+            if row == 0 and column == 0:
+                axis.legend(frameon=False, fontsize=8)
+    fig.suptitle("三阶段收益与退化边界", fontsize=15)
+    save_figure(output)
+
+
 def load_ui_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     for path in [
         Path("C:/Windows/Fonts/msyh.ttc"),
@@ -382,6 +594,57 @@ def build_screenshot_montage(
     return {"exactAB": exact_ab, "exactBC": exact_bc, "resolution": [width, height]}
 
 
+def build_pair_screenshot_montage(
+    before: Path,
+    after: Path,
+    before_label: str,
+    after_label: str,
+    title: str,
+    output: Path,
+) -> dict[str, Any]:
+    images = [
+        Image.open(before).convert("RGB"),
+        Image.open(after).convert("RGB"),
+    ]
+    if images[0].size != images[1].size:
+        raise RuntimeError(f"{title} screenshot resolutions differ")
+    exact = ImageChops.difference(images[0], images[1]).getbbox() is None
+    width, height = images[0].size
+    preview_width = 760
+    preview_height = max(1, round(height * preview_width / width))
+    header = 78
+    gap = 14
+    canvas = Image.new(
+        "RGB",
+        (preview_width * 2 + gap * 3, preview_height + header + gap),
+        "white",
+    )
+    draw = ImageDraw.Draw(canvas)
+    font = load_ui_font(22)
+    small_font = load_ui_font(16)
+    for index, (source, label) in enumerate(
+        zip(images, [before_label, after_label])
+    ):
+        x = gap + index * (preview_width + gap)
+        canvas.paste(
+            source.resize(
+                (preview_width, preview_height),
+                Image.Resampling.LANCZOS,
+            ),
+            (x, header),
+        )
+        draw.text((x, 10), label, fill="#333333", font=font)
+    draw.text(
+        (gap, 47),
+        f"{title} | 最终截图：{'完全一致' if exact else '不一致'}",
+        fill="#333333",
+        font=small_font,
+    )
+    output.parent.mkdir(parents=True, exist_ok=True)
+    canvas.save(output)
+    return {"exact": exact, "resolution": [width, height]}
+
+
 def build_data(
     manifest: dict[str, Any], manifest_path: Path, output_dir: Path
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -391,6 +654,35 @@ def build_data(
     primary_summary = read_json(
         result_root / experiments["globalVsPerLight"] / "summary.json"
     )
+    primary_metadata = read_json(
+        result_root / experiments["globalVsPerLight"] / "metadata.json"
+    )
+    secondary_metadata = read_json(
+        result_root / experiments["perLightVsPerFace"] / "metadata.json"
+    )
+    provenance = {
+        "gitHead": nested(primary_metadata, "source", "gitHead", default=""),
+        "gitDirty": bool(
+            nested(primary_metadata, "source", "gitDirty", default=True)
+        ),
+        "sourceSha256": nested(
+            primary_metadata, "source", "sha256", default=""
+        ),
+        "executableSha256": nested(
+            primary_metadata, "executables", "A", "sha256", default=""
+        ),
+        "secondaryGitHead": nested(
+            secondary_metadata, "source", "gitHead", default=""
+        ),
+        "secondaryGitDirty": bool(
+            nested(secondary_metadata, "source", "gitDirty", default=True)
+        ),
+        "secondaryExecutableSha256": nested(
+            secondary_metadata, "executables", "A", "sha256", default=""
+        ),
+        "formalOrder": primary_metadata.get("order", []),
+        "requestedSwapInterval": 0,
+    }
     display_names = {
         str(scene["id"]): str(scene["displayName"])
         for scene in primary_summary["scenes"]
@@ -470,6 +762,16 @@ def build_data(
                     "shadow",
                     "measuredAveragePointShadowFaceSignatureCpuMilliseconds",
                 ),
+                "shadowGpuPerFrame": amortized_zone_per_frame(
+                    variant_runs,
+                    "Shadow Map Update",
+                    "updateCount",
+                ),
+                "pointGpuPerFrame": amortized_zone_per_frame(
+                    variant_runs,
+                    "Point Shadow Update",
+                    "pointLightUpdateCount",
+                ),
             }
             timelines[variant] = {
                 "updatedLights": aligned_series(
@@ -485,7 +787,32 @@ def build_data(
                     variant_runs, "pointShadowRenderedFaceCount"
                 ),
                 "gpuFrame": gpu_frame_series(variant_runs),
+                "shadowGpuFrame": aligned_zone_series(
+                    variant_runs,
+                    "Shadow Map Update",
+                    "updateCount",
+                ),
+                "pointGpuFrame": aligned_zone_series(
+                    variant_runs,
+                    "Point Shadow Update",
+                    "pointLightUpdateCount",
+                ),
+                "cacheCheckCpu": aligned_series(
+                    variant_runs, "cacheCheckCpuMilliseconds"
+                ),
+                "faceDemandCpu": aligned_series(
+                    variant_runs,
+                    "pointShadowFaceDemandCpuMilliseconds",
+                ),
+                "faceSignatureCpu": aligned_series(
+                    variant_runs,
+                    "pointShadowFaceSignatureCpuMilliseconds",
+                ),
             }
+        phases = {
+            variant: aggregate_phase_data(variant_runs)
+            for variant, variant_runs in runs.items()
+        }
 
         formal_dir_ab = (
             result_root / experiments["globalVsPerLight"] / "formal" / scene_id
@@ -515,7 +842,14 @@ def build_data(
         memory = {
             variant: {
                 key: int(median(run["memoryBytes"][key] for run in variant_runs))
-                for key in ("texture", "meshCpu", "meshGpu", "renderTarget")
+                for key in (
+                    "processWorkingSet",
+                    "processPrivate",
+                    "texture",
+                    "meshCpu",
+                    "meshGpu",
+                    "renderTarget",
+                )
             }
             for variant, variant_runs in runs.items()
         }
@@ -529,6 +863,7 @@ def build_data(
             "metrics": metrics,
             "work": work,
             "timeline": timelines,
+            "phases": phases,
             "memory": memory,
             "bRecheckGpuMedian": aggregate_metric(b_recheck, "gpu", "median"),
         }
@@ -540,14 +875,31 @@ def build_data(
         for scene in audit_summary["scenes"]:
             captures = scene["correctness"]["captureComparisons"]
             cubes = scene["correctness"]["pointShadowCubeComparisons"]
+            audit_formal = (
+                result_root / correctness_id / "formal" / scene["id"]
+            )
+            audit_montage = (
+                output_dir / f"{scene['id']}-force-all-pcss-screenshot.png"
+            )
+            montage_check = build_pair_screenshot_montage(
+                audit_formal / "A1.ppm",
+                audit_formal / "B1.ppm",
+                "B Six-face Oracle",
+                "C Per-Face Materialized",
+                f"{scene['displayName']} Force-All PCSS",
+                audit_montage,
+            )
             audit[scene["id"]] = {
                 "pixelsExact": all(bool(item["exact"]) for item in captures),
                 "allSixFacesExact": all(bool(item["exact"]) for item in cubes),
                 "faceResults": cubes,
+                "montage": str(audit_montage),
+                "montageExact": montage_check["exact"],
             }
     return scene_data, {
         "screenshots": screenshot_checks,
         "materializedAudit": audit,
+        "provenance": provenance,
     }
 
 
@@ -579,9 +931,11 @@ def write_report(
     performance_chart = output_dir / "three-way-performance.png"
     work_chart = output_dir / "three-way-work.png"
     histogram_chart = output_dir / "point-face-update-histogram.png"
+    phase_chart = output_dir / "three-phase-comparison.png"
     chart_performance(scene_data, performance_chart)
     chart_work(scene_data, work_chart)
     chart_face_histogram(scene_data, histogram_chart)
+    chart_phase_comparison(scene_data, phase_chart)
     timeline_charts = {}
     for scene_id, scene in scene_data.items():
         path = output_dir / f"{scene_id}-timeline.png"
@@ -593,6 +947,8 @@ def write_report(
         "",
         "> 本报告由同一 Release 可执行文件自动生成。三档仅切换阴影缓存策略；场景、Shader、FBO、阴影分辨率、运动轨迹及渲染路径保持一致。",
         "",
+        "配套原理文档：[阴影缓存 A→B→C：从 Per-Light 到 Point Per-Face 的增量更新原理](PER_LIGHT_SHADOW_CACHE_TECHNICAL_PRINCIPLES_CN.md)。",
+        "",
         "## 1. 实验结论",
         "",
     ]
@@ -603,10 +959,16 @@ def write_report(
         sub_a = scene["work"]["A"]["pointSubmissions"]
         sub_b = scene["work"]["B"]["pointSubmissions"]
         sub_c = scene["work"]["C"]["pointSubmissions"]
+        amortized = [
+            scene["work"][variant]["pointGpuPerFrame"]
+            for variant in VARIANTS
+        ]
         lines.append(
-            f"- **{scene['displayName']}**：Point Shadow GPU 中位数 "
+            f"- **{scene['displayName']}**：Point Shadow 更新样本 GPU 中位数 "
             f"`{fmt(a)} → {fmt(b)} → {fmt(c)} ms`；"
-            f"Point Face 提交 `{fmt(sub_a, 2)} → {fmt(sub_b, 2)} → {fmt(sub_c, 2)} 次/帧`。"
+            f"每帧摊销 `{fmt(amortized[0])} → {fmt(amortized[1])} → "
+            f"{fmt(amortized[2])} ms`；Point Face 提交 "
+            f"`{fmt(sub_a, 2)} → {fmt(sub_b, 2)} → {fmt(sub_c, 2)} 次/帧`。"
         )
     lines.extend(
         [
@@ -616,6 +978,8 @@ def write_report(
             f"![三档性能对比]({markdown_path(performance_chart, report_path)})",
             "",
             f"![三档工作量对比]({markdown_path(work_chart, report_path)})",
+            "",
+            f"![三阶段收益与退化边界]({markdown_path(phase_chart, report_path)})",
             "",
             "## 2. 三档定义与统一轨迹",
             "",
@@ -643,11 +1007,22 @@ def write_report(
         for label, metric in [
             ("GPU 帧时间中位数 (ms)", "gpu"),
             ("GPU 帧时间 P95 (ms)", "gpu"),
-            ("Shadow Update GPU 中位数 (ms)", "shadow_gpu"),
-            ("Point Shadow GPU 中位数 (ms)", "point_gpu"),
+            ("GPU 帧时间 P99 (ms)", "gpu"),
+            ("Shadow Update 样本中位数 (ms)", "shadow_gpu"),
+            ("Shadow Update 样本 P95 (ms)", "shadow_gpu"),
+            ("Shadow Update 样本 P99 (ms)", "shadow_gpu"),
+            ("Point Shadow 更新样本中位数 (ms)", "point_gpu"),
+            ("Point Shadow 更新样本 P95 (ms)", "point_gpu"),
+            ("Point Shadow 更新样本 P99 (ms)", "point_gpu"),
             ("整帧墙钟时间中位数 (ms)", "wall"),
+            ("整帧墙钟时间 P95 (ms)", "wall"),
+            ("整帧墙钟时间 P99 (ms)", "wall"),
         ]:
-            percentile = "p95" if "P95" in label else "median"
+            percentile = (
+                "p99"
+                if "P99" in label
+                else ("p95" if "P95" in label else "median")
+            )
             values = [
                 scene["metrics"][variant][metric][percentile]
                 for variant in VARIANTS
@@ -671,6 +1046,8 @@ def write_report(
             ("Point Face 提交", "pointSubmissions"),
             ("Point Face 实际绘制", "pointRenderedFaces"),
             ("Point Face 缓存命中", "pointFaceHits"),
+            ("Shadow GPU 摊销 (ms/帧)", "shadowGpuPerFrame"),
+            ("Point GPU 摊销 (ms/帧)", "pointGpuPerFrame"),
             ("Caster Draw", "casterDraws"),
             ("Caster Triangle", "casterTriangles"),
         ]:
@@ -679,6 +1056,31 @@ def write_report(
                 f"| {label} | {fmt(values[0], 2)} | {fmt(values[1], 2)} | "
                 f"{fmt(values[2], 2)} |"
             )
+        lines.extend(
+            [
+                "",
+                "#### 三阶段拆分",
+                "",
+                "| 阶段/档位 | GPU Median | GPU P95 | GPU P99 | Shadow GPU 摊销 | Point GPU 摊销 | Required | Rendered | Hit | Cache Check CPU | Demand CPU | Face Signature CPU |",
+                "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+            ]
+        )
+        for phase_id, phase_name in PHASES:
+            for variant in VARIANTS:
+                phase = scene["phases"][variant][phase_id]
+                lines.append(
+                    f"| {phase_name} / {variant} | "
+                    f"{fmt(phase['gpuMedian'])} | {fmt(phase['gpuP95'])} | "
+                    f"{fmt(phase['gpuP99'])} | "
+                    f"{fmt(phase['shadowGpuPerFrame'])} | "
+                    f"{fmt(phase['pointGpuPerFrame'])} | "
+                    f"{fmt(phase['requiredFaces'], 2)} | "
+                    f"{fmt(phase['renderedFaces'], 2)} | "
+                    f"{fmt(phase['faceHits'], 2)} | "
+                    f"{fmt(phase['cacheCheckCpu'], 4)} | "
+                    f"{fmt(phase['faceDemandCpu'], 4)} | "
+                    f"{fmt(phase['faceSignatureCpu'], 4)} |"
+                )
         lines.extend(
             [
                 "",
@@ -717,8 +1119,8 @@ def write_report(
             "",
             "独立进程截图审计还暴露并修复了一个与阴影缓存无关的可重复性问题：Opaque 批次原先按 Shader/Material 内存地址排序，不同进程可能改变少量共面像素的先后覆盖。现在改为按场景首次出现顺序生成稳定批次键，以下屏幕比较继续使用严格 `0` 像素差门禁，没有放宽容差。",
             "",
-            "| 场景 | A/B 屏幕像素 | B/C 屏幕像素 | B 重复运行截图 | PCSS 六面深度 Hash |",
-            "|---|---|---|---|---|",
+            "| 场景 | A/B 屏幕像素 | B/C 屏幕像素 | B 重复运行截图 | Force-All PCSS 最终截图 | PCSS 六面深度 Hash |",
+            "|---|---|---|---|---|---|",
         ]
     )
     for scene_id, scene in scene_data.items():
@@ -728,8 +1130,17 @@ def write_report(
             f"| {scene['displayName']} | {'完全一致' if screen['exactAB'] else '不一致'} | "
             f"{'完全一致' if screen['exactBC'] else '不一致'} | "
             f"{'完全一致' if screen['duplicateBExact'] else '不一致'} | "
+            f"{'完全一致' if audit.get('pixelsExact') and audit.get('montageExact') else '未通过/未运行'} | "
             f"{'六面完全一致' if audit.get('allSixFacesExact') else '未通过/未运行'} |"
         )
+        if audit.get("montage"):
+            lines.extend(
+                [
+                    "",
+                    f"![{scene['displayName']} Force-All PCSS 最终截图]("
+                    f"{markdown_path(Path(audit['montage']), report_path)})",
+                ]
+            )
     lines.extend(
         [
             "",
@@ -747,20 +1158,30 @@ def write_report(
     lines.extend(
         [
             "",
-            "| 场景 | 纹理内存 A/B/C（字节） | Mesh GPU A/B/C（字节） | Render Target A/B/C（字节） |",
-            "|---|---:|---:|---:|",
+            "| 场景 | Working Set A/B/C | Private A/B/C | 纹理 A/B/C | Mesh GPU A/B/C | Render Target A/B/C |",
+            "|---|---:|---:|---:|---:|---:|",
         ]
     )
     for scene in scene_data.values():
         memory = scene["memory"]
         lines.append(
             f"| {scene['displayName']} | "
+            f"{memory['A']['processWorkingSet']}/{memory['B']['processWorkingSet']}/{memory['C']['processWorkingSet']} | "
+            f"{memory['A']['processPrivate']}/{memory['B']['processPrivate']}/{memory['C']['processPrivate']} | "
             f"{memory['A']['texture']}/{memory['B']['texture']}/{memory['C']['texture']} | "
             f"{memory['A']['meshGpu']}/{memory['B']['meshGpu']}/{memory['C']['meshGpu']} | "
             f"{memory['A']['renderTarget']}/{memory['B']['renderTarget']}/{memory['C']['renderTarget']} |"
         )
     first_scene = next(iter(scene_data.values()))
     hardware = first_scene["hardware"]
+    provenance = correctness["provenance"]
+    provenance_ok = (
+        not provenance["gitDirty"]
+        and not provenance["secondaryGitDirty"]
+        and provenance["gitHead"] == provenance["secondaryGitHead"]
+        and provenance["executableSha256"]
+        == provenance["secondaryExecutableSha256"]
+    )
     lines.extend(
         [
             "",
@@ -768,9 +1189,14 @@ def write_report(
             "",
             f"- 分辨率：`{manifest['resolution'][0]}×{manifest['resolution'][1]}`。",
             f"- 每档独立进程：`{manifest['formalRunsPerVariant']}` 轮；每轮测量 `{manifest['measuredFrames']}` 帧。",
+            f"- 预热：外部独立预热 `{manifest['externalWarmupFrames']}` 帧，进程内预热 `{manifest['internalWarmupFrames']}` 帧。",
+            f"- 配对顺序：`{'-'.join(provenance['formalOrder'])}`；VSync 请求值：`Off (swap interval 0)`。",
             "- 渲染：Release、PBR Forward、Hard Shadow 性能隔离；另以 PCSS 执行完整六面正确性审计。",
             "- Point Shadow：显式 Six-face 路径、逐面 Caster Culling；三档使用相同 Shader、FBO 与分辨率。",
             f"- GPU：`{hardware['vendor']} / {hardware['renderer']}`；OpenGL `{hardware['version']}`。",
+            f"- 被测源码 Commit：`{provenance['gitHead']}`；`gitDirty={str(provenance['gitDirty']).lower()}`。",
+            f"- Release 可执行文件 SHA-256：`{provenance['executableSha256']}`。",
+            f"- 两组性能实验来源一致性：`{'通过' if provenance_ok else '未通过'}`。",
             "",
             "## 7. UI 手动验证与一键复现",
             "",
@@ -779,7 +1205,7 @@ def write_report(
             "- 顶部 A/B/C 按钮分别切换全局重绘、Per-Light、Per-Light + Per-Face。正式测试仍以脚本的独立进程数据为准。",
             "",
             "```powershell",
-            ".\\tools\\Test-PointShadowCache3Way.ps1 -SkipBuild -BatchId point-shadow-cache-3way-1080p -Width 1920 -Height 1080 -MeasuredFrames 600 -ExternalWarmupFrames 100 -InternalWarmupFrames 15 -FormalRunsPerVariant 3 -SceneIds sponza,san-miguel",
+            ".\\tools\\Test-PointShadowCache3Way.ps1 -SkipBuild -BatchId point-shadow-cache-3way-1080p-final -Width 1920 -Height 1080 -MeasuredFrames 1800 -ExternalWarmupFrames 300 -InternalWarmupFrames 300 -FormalRunsPerVariant 3 -TimelineCycleFrames 1800 -SceneIds sponza,san-miguel",
             "```",
             "",
             "## 8. 边界与结论",

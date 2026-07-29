@@ -85,6 +85,10 @@ struct BenchmarkTimelineFrameTelemetry {
 	BenchmarkMotionSample motion;
 	double wallMilliseconds = 0.0;
 	double shadowUpdateCpuMilliseconds = 0.0;
+	double cacheCheckCpuMilliseconds = 0.0;
+	double casterStateSyncCpuMilliseconds = 0.0;
+	double pointShadowFaceDemandCpuMilliseconds = 0.0;
+	double pointShadowFaceSignatureCpuMilliseconds = 0.0;
 	std::uint64_t updateCount = 0;
 	std::uint64_t cacheHitCount = 0;
 	std::uint64_t lightCacheHitCount = 0;
@@ -100,6 +104,9 @@ struct BenchmarkTimelineFrameTelemetry {
 	std::uint8_t pointShadowUpdateFaceMask = 0;
 	std::uint64_t spotLightUpdateCount = 0;
 	std::uint64_t casterBoundsRebuildCount = 0;
+	std::uint64_t sceneTopologyRevision = 0;
+	std::uint64_t sceneTopologyInvalidationCount = 0;
+	std::uint64_t sceneTopologyModelCount = 0;
 };
 
 struct PointShadowFaceEvidence {
@@ -443,6 +450,7 @@ bool ParseClassicSceneTestOptions(
 		options.shadowWorkload != "move-point" &&
 		options.shadowWorkload != "move-spot" &&
 		options.shadowWorkload != "move-caster" &&
+		options.shadowWorkload != "move-local-caster" &&
 		options.shadowWorkload != "change-caster-material" &&
 		options.shadowWorkload != "reload-shadow-2d" &&
 		options.shadowWorkload != "reload-shadow-point" &&
@@ -454,15 +462,19 @@ bool ParseClassicSceneTestOptions(
 		options.shadowWorkload != "timeline-caster" &&
 		options.shadowWorkload != "timeline-camera" &&
 		options.shadowWorkload != "timeline-mixed" &&
-		options.shadowWorkload != "timeline-cache-3way") {
+		options.shadowWorkload != "timeline-cache-3way" &&
+		options.shadowWorkload != "deferred-face-required" &&
+		options.shadowWorkload != "replace-model-aba") {
 		errorMessage =
 			"--classic-scene-shadow-workload must be static-hit, force-update, "
 			"move-directional, move-point, move-spot, move-caster, "
+			"move-local-caster, "
 			"change-caster-material, reload-shadow-2d, "
 			"reload-shadow-point, resize-point-shadow, "
 			"replace-point-shadow-target, toggle-caster, timeline-point, "
 			"timeline-point-camera, timeline-caster, timeline-camera, "
-			"timeline-mixed, or timeline-cache-3way";
+			"timeline-mixed, timeline-cache-3way, "
+			"deferred-face-required, or replace-model-aba";
 		return false;
 	}
 	if (options.shadowVariant.empty()) {
@@ -514,12 +526,15 @@ bool ParseClassicSceneTestOptions(
 		return false;
 	}
 	if ((options.shadowWorkload == "move-point" ||
+			options.shadowWorkload == "move-local-caster" ||
+			options.shadowWorkload == "deferred-face-required" ||
+			options.shadowWorkload == "replace-model-aba" ||
 			options.shadowWorkload == "timeline-point" ||
 			options.shadowWorkload == "timeline-point-camera") &&
 		options.shadowLights != "point" &&
 		options.shadowLights != "all") {
 		errorMessage =
-			"point-motion workloads require point or all shadow lights";
+			"point-shadow workloads require point or all shadow lights";
 		return false;
 	}
 	if ((options.shadowWorkload == "timeline-mixed" ||
@@ -875,6 +890,20 @@ void WriteJsonBenchmarkMotionTimeline(
 			<< frame.spotLightUpdateCount << ",\n"
 			<< "          \"casterBoundsRebuildCount\": "
 			<< frame.casterBoundsRebuildCount << ",\n"
+			<< "          \"sceneTopologyRevision\": "
+			<< frame.sceneTopologyRevision << ",\n"
+			<< "          \"sceneTopologyInvalidationCount\": "
+			<< frame.sceneTopologyInvalidationCount << ",\n"
+			<< "          \"sceneTopologyModelCount\": "
+			<< frame.sceneTopologyModelCount << ",\n"
+			<< "          \"cacheCheckCpuMilliseconds\": "
+			<< frame.cacheCheckCpuMilliseconds << ",\n"
+			<< "          \"casterStateSyncCpuMilliseconds\": "
+			<< frame.casterStateSyncCpuMilliseconds << ",\n"
+			<< "          \"pointShadowFaceDemandCpuMilliseconds\": "
+			<< frame.pointShadowFaceDemandCpuMilliseconds << ",\n"
+			<< "          \"pointShadowFaceSignatureCpuMilliseconds\": "
+			<< frame.pointShadowFaceSignatureCpuMilliseconds << ",\n"
 			<< "          \"updateCpuMilliseconds\": "
 			<< frame.shadowUpdateCpuMilliseconds << "\n"
 			<< "        }\n"
@@ -1290,7 +1319,7 @@ bool WriteClassicSceneResult(
 		measurementStartShadowStats.totalDirectionalFitCpuMilliseconds,
 		shadowStats.totalDirectionalFitCpuMilliseconds);
 	output << "{\n"
-		<< "  \"schemaVersion\": 18,\n"
+		<< "  \"schemaVersion\": 19,\n"
 		<< "  \"success\": " << (success ? "true" : "false") << ",\n"
 		<< "  \"scene\": \"" << EscapeJsonString(options.sceneName) << "\",\n"
 		<< "  \"modelPath\": \"" << EscapeJsonString(options.modelPath) << "\",\n"
@@ -1528,6 +1557,20 @@ bool WriteClassicSceneResult(
 			shadowStats.casterBoundsRebuildCount) << ",\n"
 		<< "    \"casterRevision\": "
 		<< shadowStats.casterRevision << ",\n"
+		<< "    \"sceneTopologyRevision\": "
+		<< shadowStats.sceneTopologyRevision << ",\n"
+		<< "    \"measurementStartSceneTopologyRevision\": "
+		<< measurementStartShadowStats.sceneTopologyRevision << ",\n"
+		<< "    \"sceneTopologyInvalidationCount\": "
+		<< shadowStats.sceneTopologyInvalidationCount << ",\n"
+		<< "    \"measuredSceneTopologyInvalidationCount\": "
+		<< CounterDelta(
+			measurementStartShadowStats.sceneTopologyInvalidationCount,
+			shadowStats.sceneTopologyInvalidationCount) << ",\n"
+		<< "    \"sceneTopologyModelCount\": "
+		<< shadowStats.sceneTopologyModelCount << ",\n"
+		<< "    \"measurementStartSceneTopologyModelCount\": "
+		<< measurementStartShadowStats.sceneTopologyModelCount << ",\n"
 		<< "    \"lastCacheCheckUsedLegacySignature\": "
 		<< (shadowStats.lastCacheCheckUsedLegacySignature
 			? "true"
@@ -2208,6 +2251,8 @@ int main(int argc, char** argv) {
 	std::shared_ptr<Model> classicSceneModel;
 	std::shared_ptr<Material> classicSceneMotionCasterMaterial;
 	std::shared_ptr<Model> classicSceneMotionCaster;
+	std::shared_ptr<Model> classicSceneDeferredReceiver;
+	std::shared_ptr<Model> classicSceneReplacementCaster;
 	const bool useBuiltInMaterialScene =
 		pbrSmokeTest || benchmarkPhongMaterialScene || benchmarkPbrMaterialScene;
 	if (classicSceneOptions.enabled) {
@@ -2388,8 +2433,16 @@ int main(int argc, char** argv) {
 				-classicSceneSourceCenter * classicSceneAppliedScale);
 		}
 		scene.modelSource.AddModel(classicSceneModel);
-		if (classicSceneOptions.shadowWorkload ==
-			"timeline-cache-3way") {
+		const bool needsLocalMotionCaster =
+			classicSceneOptions.shadowWorkload ==
+				"timeline-cache-3way" ||
+			classicSceneOptions.shadowWorkload ==
+				"move-local-caster" ||
+			classicSceneOptions.shadowWorkload ==
+				"deferred-face-required" ||
+			classicSceneOptions.shadowWorkload ==
+				"replace-model-aba";
+		if (needsLocalMotionCaster) {
 			classicSceneMotionCasterMaterial =
 				std::make_shared<Material>("pbr");
 			classicSceneMotionCasterMaterial->AddProperty(
@@ -2432,8 +2485,52 @@ int main(int argc, char** argv) {
 			classicSceneMotionCaster->SetPosition(
 				classicSceneOptions.pointLightPosition +
 				classicSceneOptions.normalizedRadius *
-				glm::vec3(0.12f, 0.02f, 0.0f));
+					glm::vec3(0.12f, 0.02f, 0.0f));
+			if (classicSceneOptions.shadowWorkload ==
+				"deferred-face-required") {
+				classicSceneMotionCaster->SetName(
+					"Deferred -X Shadow Caster");
+				classicSceneMotionCaster->SetPosition(
+					classicSceneOptions.pointLightPosition +
+						classicSceneOptions.normalizedRadius *
+							glm::vec3(-0.12f, 0.0f, 0.0f));
+			}
 			scene.modelSource.AddModel(classicSceneMotionCaster);
+			if (classicSceneOptions.shadowWorkload ==
+				"deferred-face-required") {
+				classicSceneModel->SetActiveStatus(false);
+				classicSceneDeferredReceiver =
+					std::make_shared<Model>(
+						"models/sphere/sphere.obj",
+						classicSceneMotionCasterMaterial.get());
+				classicSceneDeferredReceiver->SetName(
+					"Required +X Shadow Receiver");
+				classicSceneDeferredReceiver->SetScale(
+					casterRadius / casterSourceRadius);
+				classicSceneDeferredReceiver->SetPosition(
+					classicSceneOptions.pointLightPosition +
+						classicSceneOptions.normalizedRadius *
+							glm::vec3(0.12f, 0.0f, 0.0f));
+				scene.modelSource.AddModel(
+					classicSceneDeferredReceiver);
+			}
+			else if (classicSceneOptions.shadowWorkload ==
+				"replace-model-aba") {
+				classicSceneMotionCaster->SetName(
+					"Topology ABA Caster");
+				classicSceneReplacementCaster =
+					std::make_shared<Model>(
+						"models/sphere/sphere.obj",
+						classicSceneMotionCasterMaterial.get());
+				classicSceneReplacementCaster->SetName(
+					classicSceneMotionCaster->GetName());
+				classicSceneReplacementCaster->SetScale(
+					classicSceneMotionCaster->scale);
+				classicSceneReplacementCaster->SetPosition(
+					classicSceneMotionCaster->position);
+				classicSceneReplacementCaster->SetRotation(
+					classicSceneMotionCaster->rotation);
+			}
 		}
 
 		camera.cameraPos = classicSceneOptions.cameraPosition;
@@ -2727,10 +2824,107 @@ int main(int argc, char** argv) {
 	BenchmarkMotionSample classicSceneCurrentMotionSample =
 		classicSceneMotionTimeline.Sample(
 			-classicSceneOptions.warmupFrames);
+	bool classicSceneTopologyReplacementPerformed = false;
 	auto applyClassicShadowWorkload = [&](int frameNumber) {
 		if (!classicSceneOptions.enabled ||
 			!classicSceneOptions.shadowExperiment ||
 			classicSceneOptions.shadowWorkload == "static-hit") {
+			return;
+		}
+
+		if (classicSceneOptions.shadowWorkload ==
+			"deferred-face-required") {
+			const int timelineFrame =
+				frameNumber -
+				classicSceneOptions.warmupFrames -
+				1;
+			classicSceneCurrentMotionSample =
+				classicSceneMotionTimeline.Sample(timelineFrame);
+			const bool measured = timelineFrame >= 0;
+			properties.POINT_SHADOW_FORCE_ALL_FACES_REQUIRED =
+				!measured;
+			const bool viewPositiveFace =
+				measured
+					? timelineFrame == 0
+					: (frameNumber & 1) != 0;
+			if (classicSceneMotionCaster) {
+				const glm::vec3 movedCasterPosition =
+					classicSceneBaseModelPosition +
+					classicSceneOptions.normalizedRadius *
+						glm::vec3(
+							0.0f,
+							measured ? 0.01f : 0.0f,
+							0.0f);
+				classicSceneMotionCaster->SetPosition(
+					movedCasterPosition);
+				classicSceneCurrentMotionSample.casterPosition =
+					movedCasterPosition;
+			}
+			const glm::vec3 cameraPosition =
+				classicSceneBasePointPosition +
+				classicSceneOptions.normalizedRadius *
+					glm::vec3(0.0f, 0.025f, 0.025f);
+			const glm::vec3 cameraTarget =
+				viewPositiveFace && classicSceneDeferredReceiver
+					? classicSceneDeferredReceiver->position
+					: (classicSceneMotionCaster
+						? classicSceneMotionCaster->position
+						: classicSceneBasePointPosition -
+							glm::vec3(
+								classicSceneOptions.normalizedRadius *
+									0.12f,
+								0.0f,
+								0.0f));
+			camera.cameraPos = cameraPosition;
+			const glm::vec3 cameraDirection =
+				cameraTarget - cameraPosition;
+			if (glm::length(cameraDirection) > 0.0001f) {
+				camera.cameraFront =
+					glm::normalize(cameraDirection);
+			}
+			camera.up = glm::vec3(0.0f, 1.0f, 0.0f);
+			classicSceneCurrentMotionSample.cameraPosition =
+				cameraPosition;
+			classicSceneCurrentMotionSample.cameraTarget =
+				cameraTarget;
+			classicSceneCurrentMotionSample.cameraUp = camera.up;
+			classicSceneCurrentMotionSample.pointPosition =
+				classicSceneBasePointPosition;
+			return;
+		}
+
+		if (classicSceneOptions.shadowWorkload ==
+			"replace-model-aba") {
+			const int timelineFrame =
+				frameNumber -
+				classicSceneOptions.warmupFrames -
+				1;
+			classicSceneCurrentMotionSample =
+				classicSceneMotionTimeline.Sample(timelineFrame);
+			if (timelineFrame >= 0 &&
+				!classicSceneTopologyReplacementPerformed) {
+				const std::shared_ptr<Model> oldModel =
+					classicSceneMotionCaster;
+				if (!oldModel ||
+					!classicSceneReplacementCaster ||
+					!scene.modelSource.ReplaceModel(
+						oldModel,
+						classicSceneReplacementCaster)) {
+					classicSceneFailed = true;
+					std::cerr
+						<< "[ClassicScene] topology ABA replacement failed"
+						<< std::endl;
+				}
+				else {
+					classicSceneMotionCaster =
+						classicSceneReplacementCaster;
+					classicSceneTopologyReplacementPerformed = true;
+				}
+			}
+			if (classicSceneMotionCaster) {
+				classicSceneCurrentMotionSample.casterPosition =
+					classicSceneMotionCaster->position;
+			}
 			return;
 		}
 
@@ -2841,6 +3035,19 @@ int main(int argc, char** argv) {
 					0.0f));
 			return true;
 		};
+		auto moveLocalCaster = [&]() {
+			if (!classicSceneMotionCaster) {
+				return false;
+			}
+			classicSceneMotionCaster->SetPosition(
+				classicSceneBaseModelPosition +
+					glm::vec3(
+						phase * 0.002f *
+							classicSceneOptions.worldScale,
+						0.0f,
+						0.0f));
+			return true;
+		};
 		auto changeCasterMaterial = [&]() {
 			if (!classicSceneOverrideMaterial) {
 				return false;
@@ -2925,6 +3132,11 @@ int main(int argc, char** argv) {
 		}
 		else if (classicSceneOptions.shadowWorkload == "move-caster") {
 			moveCaster();
+		}
+		else if (
+			classicSceneOptions.shadowWorkload ==
+			"move-local-caster") {
+			moveLocalCaster();
 		}
 		else if (
 			classicSceneOptions.shadowWorkload ==
@@ -3505,6 +3717,28 @@ int main(int argc, char** argv) {
 								.casterBoundsRebuildCount,
 							currentShadowStats
 								.casterBoundsRebuildCount);
+					frameTelemetry.sceneTopologyRevision =
+						currentShadowStats.sceneTopologyRevision;
+					frameTelemetry.sceneTopologyInvalidationCount =
+						CounterDelta(
+							classicScenePreviousFrameShadowStats
+								.sceneTopologyInvalidationCount,
+							currentShadowStats
+								.sceneTopologyInvalidationCount);
+					frameTelemetry.sceneTopologyModelCount =
+						currentShadowStats.sceneTopologyModelCount;
+					frameTelemetry.cacheCheckCpuMilliseconds =
+						currentShadowStats
+							.lastCacheCheckCpuMilliseconds;
+					frameTelemetry.casterStateSyncCpuMilliseconds =
+						currentShadowStats
+							.lastCasterStateSyncCpuMilliseconds;
+					frameTelemetry.pointShadowFaceDemandCpuMilliseconds =
+						currentShadowStats
+							.lastPointShadowFaceDemandCpuMilliseconds;
+					frameTelemetry.pointShadowFaceSignatureCpuMilliseconds =
+						currentShadowStats
+							.lastPointShadowFaceSignatureCpuMilliseconds;
 					frameTelemetry.shadowUpdateCpuMilliseconds =
 						frameTelemetry.updateCount > 0
 							? currentShadowStats
@@ -3661,7 +3895,9 @@ int main(int argc, char** argv) {
 		SceneStateIO::Save(scene, camera, sceneStatePath);
 	}
 	scene.SetSelectedModelForMaterials(nullptr);
-	scene.modelSource.models.clear();
+	scene.modelSource.ClearModels();
+	classicSceneDeferredReceiver.reset();
+	classicSceneReplacementCaster.reset();
 	classicSceneMotionCaster.reset();
 	classicSceneMotionCasterMaterial.reset();
 	classicSceneModel.reset();

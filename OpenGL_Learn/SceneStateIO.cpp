@@ -34,19 +34,19 @@ namespace {
 		return glm::vec3(in[0].GetFloat(), in[1].GetFloat(), in[2].GetFloat());
 	}
 
-	Model* FindModelByName(Scene& scene, const std::string& name) {
-		for (auto& m : scene.modelSource.models) {
+	std::shared_ptr<Model> FindModelSharedByName(
+		Scene& scene,
+		const std::string& name) {
+		for (const auto& m : scene.modelSource.GetModels()) {
 			if (!m) continue;
-			if (m->GetName() == name) return m.get();
+			if (m->GetName() == name) return m;
 		}
-		return nullptr;
+		return {};
 	}
 
-	void RemoveModelByName(Scene& scene, const std::string& name) {
-		scene.modelSource.models.erase(
-			std::remove_if(scene.modelSource.models.begin(), scene.modelSource.models.end(),
-				[&](const std::shared_ptr<Model>& m) { return m && m->GetName() == name; }),
-			scene.modelSource.models.end());
+	Model* FindModelByName(Scene& scene, const std::string& name) {
+		const auto model = FindModelSharedByName(scene, name);
+		return model.get();
 	}
 
 	std::shared_ptr<Model> CreateGeneratedModelById(const std::string& generatorId) {
@@ -140,12 +140,14 @@ namespace {
 
 		Model* model = nullptr;
 		std::shared_ptr<Model> createdModel;
+		const std::shared_ptr<Model> existingModel =
+			FindModelSharedByName(scene, modelName);
 
 		if (m.HasMember("source") && m["source"].IsObject()) {
 			const auto& src = m["source"];
 			if (src.HasMember("type") && src["type"].IsString()) {
 				const std::string srcType = src["type"].GetString();
-				Model* existing = FindModelByName(scene, modelName);
+				Model* existing = existingModel.get();
 				if (srcType == "file") {
 					if (src.HasMember("path") && src["path"].IsString()) {
 						const std::string modelPath = src["path"].GetString();
@@ -182,8 +184,12 @@ namespace {
 
 		if (createdModel) {
 			createdModel->SetName(modelName);
-			RemoveModelByName(scene, modelName);
-			scene.modelSource.AddModel(createdModel);
+			if (!existingModel ||
+				!scene.modelSource.ReplaceModel(
+					existingModel,
+					createdModel)) {
+				scene.modelSource.AddModel(createdModel);
+			}
 			model = createdModel.get();
 		}
 		else if (!model) {
@@ -286,7 +292,7 @@ bool SceneStateIO::Save(const Scene& scene, const Camera& camera, const std::str
 	doc.AddMember("camera", cameraObj, alloc);
 
 	Value models(rapidjson::kArrayType);
-	for (const auto& m : scene.modelSource.models) {
+	for (const auto& m : scene.modelSource.GetModels()) {
 		if (!m) continue;
 		Value one(rapidjson::kObjectType);
 		one.AddMember("name", Value(m->GetName().c_str(), alloc), alloc);

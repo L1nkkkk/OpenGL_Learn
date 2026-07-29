@@ -12,7 +12,9 @@ enum class BenchmarkMotionProfile {
 	Camera,
 	PointCamera,
 	Mixed,
-	CacheThreeWay
+	CacheThreeWay,
+	DeferredFaceRequired,
+	TopologyAba
 };
 
 enum class BenchmarkMotionTrack : std::uint32_t {

@@ -2211,7 +2211,8 @@ private:
 		}
 		ImGui::TextDisabled(
 			"%llu model(s), %llu light(s)",
-			static_cast<unsigned long long>(scene.modelSource.models.size()),
+			static_cast<unsigned long long>(
+				scene.modelSource.GetModels().size()),
 			static_cast<unsigned long long>(
 				scene.lightSource.pointLights.size() +
 				scene.lightSource.directionLights.size() +

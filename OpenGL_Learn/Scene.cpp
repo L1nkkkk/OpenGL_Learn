@@ -175,10 +175,11 @@ namespace {
 void Scene::BuildMeshDrawLists()
 {
 	PERF_CPU_SCOPE("Build Draw Lists");
+	const auto& models = modelSource.GetModels();
 	m_visibleModels.clear();
 	m_opaqueMeshList.clear();
 	m_transparentMeshList.clear();
-	m_visibleModels.reserve(modelSource.models.size());
+	m_visibleModels.reserve(models.size());
 	std::uint64_t activeModelCount = 0;
 	std::uint64_t visibleModelCount = 0;
 	std::uint64_t culledModelCount = 0;
@@ -191,8 +192,11 @@ void Scene::BuildMeshDrawLists()
 	double shadowStateSyncMilliseconds = 0.0;
 	if (syncShadowState) {
 		m_shadowCasterBoundsScratch.clear();
-		m_shadowCasterBoundsScratch.reserve(modelSource.models.size());
-		hash_combine(shadowCasterSignature, modelSource.models.size());
+		m_shadowCasterBoundsScratch.reserve(models.size());
+		hash_combine(
+			shadowCasterSignature,
+			modelSource.GetSceneTopologyRevision());
+		hash_combine(shadowCasterSignature, models.size());
 	}
 
 	const bool useFrustumCulling = properties.FRUSTUM_CULLING && camera_ptr;
@@ -205,7 +209,7 @@ void Scene::BuildMeshDrawLists()
 			camera_ptr->GetViewMatrix());
 	}
 
-	for (auto& model : modelSource.models) {
+	for (const auto& model : models) {
 		std::uint64_t modelShadowStateRevision = 0;
 		if (syncShadowState) {
 			const auto syncStart = std::chrono::steady_clock::now();
@@ -401,6 +405,7 @@ void Scene::BuildMeshDrawLists()
 
 void Scene::PrepareRenderData()
 {
+	SynchronizeSceneTopologyRevision();
 	BuildMeshDrawLists();
 }
 
@@ -425,7 +430,7 @@ unsigned int Scene::BindImageBasedLighting(Shader& shader, unsigned int firstTex
 
 bool Scene::UsesPbrMaterials() const
 {
-	for (const auto& model : modelSource.models) {
+	for (const auto& model : modelSource.GetModels()) {
 		if (!model) {
 			continue;
 		}
@@ -679,7 +684,7 @@ void Scene::DrawDefferedModels()
 void Scene::RenderScene(Shader& shader) {
 	PERF_CPU_SCOPE("Shadow Caster Submission");
 	MaterialBatchScope materialBatch;
-	for (auto& model : modelSource.models) {
+	for (const auto& model : modelSource.GetModels()) {
 		if (!model || !model->GetAcitveStatus()) continue;
 		shader.setMat4("model", model->getModelMatrix());
 		model->Draw(&shader);
@@ -695,7 +700,7 @@ void Scene::BuildShadowCasterDrawList() {
 	m_shadowCasterDrawList.clear();
 	m_shadowCasterDrawListTriangleCount = 0;
 
-	for (auto& model : modelSource.models) {
+	for (const auto& model : modelSource.GetModels()) {
 		if (!model || !model->GetAcitveStatus()) {
 			continue;
 		}
@@ -1914,7 +1919,7 @@ bool Scene::ComputeShadowCasterBounds(glm::vec3& center, float& radius) const {
 	glm::vec3 boundsMax(std::numeric_limits<float>::lowest());
 	bool foundCaster = false;
 
-	for (const auto& model : modelSource.models) {
+	for (const auto& model : modelSource.GetModels()) {
 		if (!model || !model->GetAcitveStatus()) {
 			continue;
 		}
@@ -1948,7 +1953,7 @@ bool Scene::ComputeShadowCasterBounds(glm::vec3& center, float& radius) const {
 
 	center = (boundsMin + boundsMax) * 0.5f;
 	radius = 0.0f;
-	for (const auto& model : modelSource.models) {
+	for (const auto& model : modelSource.GetModels()) {
 		if (!model || !model->GetAcitveStatus()) {
 			continue;
 		}
@@ -1964,9 +1969,10 @@ bool Scene::ComputeShadowCasterBounds(glm::vec3& center, float& radius) const {
 }
 
 bool Scene::HasActiveShadowCasters() const {
+	const auto& models = modelSource.GetModels();
 	return std::any_of(
-		modelSource.models.begin(),
-		modelSource.models.end(),
+		models.begin(),
+		models.end(),
 		[](const std::shared_ptr<Model>& model) {
 			return model && model->GetAcitveStatus();
 		});
@@ -2033,11 +2039,15 @@ void Scene::RefreshShadowCasterStateFallback() {
 	const std::uint64_t shadowStateSyncEpoch =
 		NextShadowStateSyncEpoch();
 	std::size_t signature = 0;
-	hash_combine(signature, modelSource.models.size());
+	const auto& models = modelSource.GetModels();
+	hash_combine(
+		signature,
+		modelSource.GetSceneTopologyRevision());
+	hash_combine(signature, models.size());
 	m_shadowCasterBoundsScratch.clear();
-	m_shadowCasterBoundsScratch.reserve(modelSource.models.size());
+	m_shadowCasterBoundsScratch.reserve(models.size());
 
-	for (auto& model : modelSource.models) {
+	for (const auto& model : models) {
 		hash_combine(
 			signature,
 			reinterpret_cast<std::uintptr_t>(model.get()));
@@ -2079,6 +2089,9 @@ std::size_t Scene::BuildShadowRevisionSignature(
 	std::uint64_t shadowShaderRevision,
 	std::uint64_t pointShadowShaderRevision) const {
 	std::size_t signature = 0;
+	hash_combine(
+		signature,
+		modelSource.GetSceneTopologyRevision());
 	hash_combine(signature, m_shadowCasterStateSignature);
 	hash_combine(signature, m_shadowCasterRevision);
 	hash_combine(signature, shadowShaderRevision);
@@ -2165,6 +2178,9 @@ std::size_t Scene::BuildDirectionalShadowRevisionSignature(
 	const DirectionLight& light,
 	std::uint64_t shadowShaderRevision) const {
 	std::size_t signature = 0;
+	hash_combine(
+		signature,
+		modelSource.GetSceneTopologyRevision());
 	if (properties.SHADOW_SPATIAL_CASTER_CACHE &&
 		!light.autoFitShadow) {
 		hash_combine(
@@ -2207,6 +2223,9 @@ std::size_t Scene::BuildPointShadowRevisionSignature(
 	const PointLight& light,
 	std::uint64_t pointShadowShaderRevision) const {
 	std::size_t signature = 0;
+	hash_combine(
+		signature,
+		modelSource.GetSceneTopologyRevision());
 	if (properties.SHADOW_SPATIAL_CASTER_CACHE &&
 		!light.autoFitShadow) {
 		std::size_t casterSignature = 0;
@@ -2256,6 +2275,9 @@ std::size_t Scene::BuildSpotShadowRevisionSignature(
 	const SpotLight& light,
 	std::uint64_t shadowShaderRevision) const {
 	std::size_t signature = 0;
+	hash_combine(
+		signature,
+		modelSource.GetSceneTopologyRevision());
 	if (properties.SHADOW_SPATIAL_CASTER_CACHE &&
 		!light.autoFitShadow) {
 		hash_combine(
@@ -2290,6 +2312,9 @@ std::size_t Scene::BuildSpatialShadowCasterSignature(
 	if (!m_shadowCasterStateReliable ||
 		!IsFiniteMatrix(lightViewProjection)) {
 		std::size_t fallback = 0;
+		hash_combine(
+			fallback,
+			modelSource.GetSceneTopologyRevision());
 		hash_combine(fallback, m_shadowCasterStateSignature);
 		hash_combine(fallback, m_shadowCasterRevision);
 		return fallback;
@@ -2297,6 +2322,9 @@ std::size_t Scene::BuildSpatialShadowCasterSignature(
 
 	const Frustum lightFrustum = BuildFrustum(lightViewProjection);
 	std::size_t signature = 0;
+	hash_combine(
+		signature,
+		modelSource.GetSceneTopologyRevision());
 	std::uint64_t acceptedCasterCount = 0;
 	for (const ShadowCasterBoundItem& item :
 		m_shadowCasterBoundsScratch) {
@@ -2327,6 +2355,9 @@ Scene::BuildPointShadowFaceRevisionSignatures(
 	std::array<std::size_t, 6> signatures{};
 	for (std::size_t face = 0; face < signatures.size(); ++face) {
 		std::size_t signature = 0;
+		hash_combine(
+			signature,
+			modelSource.GetSceneTopologyRevision());
 		hash_combine(
 			signature,
 			BuildSpatialShadowCasterSignature(
@@ -2508,6 +2539,9 @@ std::size_t Scene::BuildShadowCacheSignature() const {
 	std::size_t signature = 0;
 	hash_combine(
 		signature,
+		modelSource.GetSceneTopologyRevision());
+	hash_combine(
+		signature,
 		properties.DIRECTIONAL_SHADOW_LIGHT_AABB_FIT);
 	hash_combine(
 		signature,
@@ -2537,7 +2571,7 @@ std::size_t Scene::BuildShadowCacheSignature() const {
 	};
 
 	std::unordered_set<const Material*> hashedMaterials;
-	for (const auto& model : modelSource.models) {
+	for (const auto& model : modelSource.GetModels()) {
 		hash_combine(signature, reinterpret_cast<std::uintptr_t>(model.get()));
 		if (!model) {
 			continue;
@@ -2671,6 +2705,32 @@ void Scene::InvalidateShadowCache() {
 	InvalidatePerLightShadowCaches();
 }
 
+void Scene::SynchronizeSceneTopologyRevision() {
+	const std::uint64_t currentRevision =
+		modelSource.GetSceneTopologyRevision();
+	m_shadowStats.sceneTopologyRevision = currentRevision;
+	m_shadowStats.sceneTopologyModelCount =
+		modelSource.GetModels().size();
+	if (m_observedSceneTopologyRevision == 0) {
+		m_observedSceneTopologyRevision = currentRevision;
+		return;
+	}
+	if (m_observedSceneTopologyRevision == currentRevision) {
+		return;
+	}
+
+	m_observedSceneTopologyRevision = currentRevision;
+	++m_shadowStats.sceneTopologyInvalidationCount;
+	m_shadowCacheValid = false;
+	InvalidatePerLightShadowCaches();
+	m_shadowCasterStateInitialized = false;
+	m_shadowCasterStatePrepared = false;
+	m_shadowCasterStateReliable = true;
+	m_shadowCasterBoundsValid = false;
+	m_shadowCasterDrawListValid = false;
+	m_shadowCasterDrawListRevision = 0;
+}
+
 void Scene::SynchronizeShadowCacheGranularity(
 	bool perLightCacheEnabled) {
 	if (m_shadowCacheGranularityInitialized &&
@@ -2757,7 +2817,7 @@ void Scene::UpdateShadowCasterStats(
 		if (m_pendingUnculledRenderedLightCount > 0) {
 			std::uint64_t meshCount = 0;
 			std::uint64_t triangleCount = 0;
-			for (const auto& model : modelSource.models) {
+			for (const auto& model : modelSource.GetModels()) {
 				if (!model || !model->GetAcitveStatus()) {
 					continue;
 				}
@@ -2793,7 +2853,7 @@ void Scene::UpdateShadowCasterStats(
 	else {
 		std::uint64_t meshCount = 0;
 		std::uint64_t triangleCount = 0;
-		for (const auto& model : modelSource.models) {
+		for (const auto& model : modelSource.GetModels()) {
 			if (!model || !model->GetAcitveStatus()) {
 				continue;
 			}
@@ -3942,6 +4002,7 @@ void Scene::DrawShadowMapRevisionGlobal(bool forceUpdate) {
 
 void Scene::DrawShadowMap() {
 	PERF_CPU_SCOPE("Shadow Maps");
+	SynchronizeSceneTopologyRevision();
 	if (properties.SHADOW_CACHE_DISABLED) {
 		if (!m_shadowCacheStrategyInitialized ||
 			!m_shadowCacheDisabledLastFrame) {
@@ -4239,7 +4300,7 @@ void Scene::ClearContent()
     }
 
     SetSelectedModelForMaterials(nullptr);
-    modelSource.models.clear();
+    modelSource.ClearModels();
     lightSource.pointLights.clear();
     lightSource.directionLights.clear();
     lightSource.spotLights.clear();
@@ -4261,6 +4322,8 @@ void Scene::ClearContent()
     m_shadowCasterBoundsValid = false;
     m_shadowCasterStateSignature = 0;
     m_shadowCasterRevision = 0;
+    m_observedSceneTopologyRevision =
+        modelSource.GetSceneTopologyRevision();
     m_cachedShadowCasterCenter = glm::vec3(0.0f);
     m_cachedShadowCasterRadius = 0.0f;
     m_shadowCasterBoundsScratch.clear();
@@ -4277,6 +4340,10 @@ void Scene::ClearContent()
     m_pendingUnculledTrianglePassMultiplier = 0;
     m_pendingShadowDrawPassMultiplier = 0;
     m_shadowStats = {};
+    m_shadowStats.sceneTopologyRevision =
+        m_observedSceneTopologyRevision;
+    m_shadowStats.sceneTopologyModelCount =
+        modelSource.GetModels().size();
     framebufferManager.TrimUnusedFBOs();
 }
 
@@ -4403,7 +4470,7 @@ void Scene::SetSceneGui()
 
     if (ImGui::CollapsingHeader("Model Settings")) {
         if (ImGui::TreeNode("Models")) {
-            for (auto& model : modelSource.models) {
+            for (const auto& model : modelSource.GetModels()) {
                 std::string label = "Model: " + model->GetName();
                 if (ImGui::TreeNode(label.c_str())) {
                     if (ImGui::Button("View Materials")) {

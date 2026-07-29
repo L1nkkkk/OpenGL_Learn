@@ -36,6 +36,7 @@ param(
         "move-point",
         "move-spot",
         "move-caster",
+        "move-local-caster",
         "change-caster-material",
         "reload-shadow-2d",
         "reload-shadow-point",
@@ -47,7 +48,9 @@ param(
         "timeline-caster",
         "timeline-camera",
         "timeline-mixed",
-        "timeline-cache-3way"
+        "timeline-cache-3way",
+        "deferred-face-required",
+        "replace-model-aba"
     )]
     [string]$Workload = "static-hit",
     [ValidateSet("directional", "point", "spot", "all")]
@@ -262,6 +265,9 @@ if ($Workload -eq "move-directional" -and
 }
 if ($Workload -in @(
         "move-point",
+        "move-local-caster",
+        "deferred-face-required",
+        "replace-model-aba",
         "timeline-point",
         "timeline-point-camera"
     ) -and
@@ -1370,7 +1376,9 @@ function Assert-RunResult {
         "timeline-caster",
         "timeline-camera",
         "timeline-mixed",
-        "timeline-cache-3way"
+        "timeline-cache-3way",
+        "deferred-face-required",
+        "replace-model-aba"
     )
     $timelineProperty =
         $Result.PSObject.Properties["motionTimeline"]
@@ -1384,7 +1392,11 @@ function Assert-RunResult {
     }
     $timelineSamples = @($timeline.samples)
     if ($isTimelineWorkload) {
-        $expectedProfile = $Workload.Substring("timeline-".Length)
+        $expectedProfile = switch ($Workload) {
+            "deferred-face-required" { "deferred-face-required" }
+            "replace-model-aba" { "topology-aba" }
+            default { $Workload.Substring("timeline-".Length) }
+        }
         $expectedTracks = switch ($Workload) {
             "timeline-point" { @("point") }
             "timeline-point-camera" { @("point", "camera") }
@@ -1392,6 +1404,8 @@ function Assert-RunResult {
             "timeline-camera" { @("camera") }
             "timeline-mixed" { @("point", "caster", "camera") }
             "timeline-cache-3way" { @("point", "caster", "camera") }
+            "deferred-face-required" { @() }
+            "replace-model-aba" { @() }
         }
         if ([int]$timeline.schemaVersion -ne 1 -or
             [string]$timeline.profile -ne $expectedProfile -or
@@ -1483,6 +1497,8 @@ function Assert-RunResult {
             "spotLightUpdateCount" = "measuredSpotLightUpdateCount"
             "casterBoundsRebuildCount" =
                 "measuredCasterBoundsRebuildCount"
+            "sceneTopologyInvalidationCount" =
+                "measuredSceneTopologyInvalidationCount"
         }
         foreach ($frameField in $timelineCounterMap.Keys) {
             $aggregateField = $timelineCounterMap[$frameField]
@@ -1510,6 +1526,12 @@ function Assert-RunResult {
         $Workload -in @("static-hit", "timeline-camera")
     $phasedCacheWorkload =
         $Workload -eq "timeline-cache-3way"
+    $specialCorrectnessWorkload =
+        $Workload -in @(
+            "move-local-caster",
+            "deferred-face-required",
+            "replace-model-aba"
+        )
     if ($phasedCacheWorkload) {
         $measuredUpdates =
             [int64]$Result.shadow.measuredUpdateCount
@@ -1573,7 +1595,7 @@ function Assert-RunResult {
             }
         }
     }
-    else {
+    elseif (-not $specialCorrectnessWorkload) {
         if ([int64]$Result.shadow.measuredUpdateCount -ne
             $ExpectedSamples) {
             throw "$($Scene.displayName) $Label update workload invariant failed."
@@ -1618,7 +1640,8 @@ function Assert-RunResult {
     $expectedDirectionalUpdates = 0L
     $expectedPointUpdates = 0L
     $expectedSpotUpdates = 0L
-    if (-not $shadowStableWorkload -or -not $perLightCacheEnabled) {
+    if ((-not $shadowStableWorkload -or -not $perLightCacheEnabled) -and
+        -not $specialCorrectnessWorkload) {
         $updateEveryEnabledLight =
             $Workload -in @(
                 "force-update",
@@ -1675,6 +1698,7 @@ function Assert-RunResult {
         }
     }
     if (-not $phasedCacheWorkload -and
+        -not $specialCorrectnessWorkload -and
         ([int64]$Result.shadow.measuredDirectionalLightUpdateCount -ne
             $expectedDirectionalUpdates -or
         [int64]$Result.shadow.measuredPointLightUpdateCount -ne
@@ -1690,6 +1714,7 @@ function Assert-RunResult {
         $expectedPointUpdates +
         $expectedSpotUpdates
     if (-not $phasedCacheWorkload -and
+        -not $specialCorrectnessWorkload -and
         [int64]$Result.shadow.measuredUpdatedLightCount -ne
         $expectedUpdatedLights) {
         throw (
@@ -1713,6 +1738,7 @@ function Assert-RunResult {
         }
     }
     if (-not $phasedCacheWorkload -and
+        -not $specialCorrectnessWorkload -and
         [int64]$Result.shadow.measuredLightCacheHitCount -ne
         $expectedLightHits) {
         throw (

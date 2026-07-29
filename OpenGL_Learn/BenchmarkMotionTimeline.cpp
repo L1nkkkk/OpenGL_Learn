@@ -150,6 +150,12 @@ BenchmarkMotionProfile BenchmarkMotionTimeline::ProfileFromWorkload(
 	if (workload == "timeline-cache-3way") {
 		return BenchmarkMotionProfile::CacheThreeWay;
 	}
+	if (workload == "deferred-face-required") {
+		return BenchmarkMotionProfile::DeferredFaceRequired;
+	}
+	if (workload == "replace-model-aba") {
+		return BenchmarkMotionProfile::TopologyAba;
+	}
 	return BenchmarkMotionProfile::None;
 }
 
@@ -169,6 +175,10 @@ const char* BenchmarkMotionTimeline::ProfileName(
 		return "mixed";
 	case BenchmarkMotionProfile::CacheThreeWay:
 		return "cache-3way";
+	case BenchmarkMotionProfile::DeferredFaceRequired:
+		return "deferred-face-required";
+	case BenchmarkMotionProfile::TopologyAba:
+		return "topology-aba";
 	default:
 		return "none";
 	}
@@ -198,6 +208,9 @@ std::uint32_t BenchmarkMotionTimeline::TrackMask(
 			static_cast<std::uint32_t>(BenchmarkMotionTrack::Point) |
 			static_cast<std::uint32_t>(BenchmarkMotionTrack::Caster) |
 			static_cast<std::uint32_t>(BenchmarkMotionTrack::Camera);
+	case BenchmarkMotionProfile::DeferredFaceRequired:
+	case BenchmarkMotionProfile::TopologyAba:
+		return 0u;
 	default:
 		return 0u;
 	}

@@ -85,21 +85,66 @@ struct LightSource {
 };
 
 struct ModelSource {
-	std::vector<std::shared_ptr<Model>> models;
-	ModelSource() {}
+	ModelSource() = default;
 
-	std::vector<std::shared_ptr<Model>>& GetModels() { return models; }
-	const std::vector<std::shared_ptr<Model>>& GetModels() const { return models; }
+	const std::vector<std::shared_ptr<Model>>& GetModels() const {
+		return models;
+	}
+
+	std::uint64_t GetSceneTopologyRevision() const {
+		return sceneTopologyRevision;
+	}
 
 	void AddModel(const std::shared_ptr<Model>& model) {
 		assert(model != nullptr && "AddModel: model is null");
 		models.push_back(model);
+		AdvanceSceneTopologyRevision();
 	}
 
-	void DeleteModel(const std::shared_ptr<Model>& model) {
+	bool DeleteModel(const std::shared_ptr<Model>& model) {
 		assert(model != nullptr && "DeleteModel: model is null");
-		models.erase(std::remove(models.begin(), models.end(), model), models.end());
+		const auto oldSize = models.size();
+		models.erase(
+			std::remove(models.begin(), models.end(), model),
+			models.end());
+		if (models.size() == oldSize) {
+			return false;
+		}
+		AdvanceSceneTopologyRevision();
+		return true;
 	}
+
+	bool ReplaceModel(
+		const std::shared_ptr<Model>& oldModel,
+		const std::shared_ptr<Model>& newModel) {
+		assert(oldModel != nullptr && "ReplaceModel: old model is null");
+		assert(newModel != nullptr && "ReplaceModel: new model is null");
+		const auto iterator =
+			std::find(models.begin(), models.end(), oldModel);
+		if (iterator == models.end()) {
+			return false;
+		}
+		*iterator = newModel;
+		AdvanceSceneTopologyRevision();
+		return true;
+	}
+
+	void ClearModels() {
+		models.clear();
+		// Clear is an explicit topology barrier even for an already empty source.
+		AdvanceSceneTopologyRevision();
+	}
+
+private:
+	void AdvanceSceneTopologyRevision() {
+		++sceneTopologyRevision;
+		if (sceneTopologyRevision == 0) {
+			++sceneTopologyRevision;
+		}
+	}
+
+	std::vector<std::shared_ptr<Model>> models;
+	std::uint64_t sceneTopologyRevision = 1;
 };
 
 class SkyboxSource {
@@ -148,6 +193,9 @@ public:
 		std::uint64_t casterStateSyncCount = 0;
 		std::uint64_t casterBoundsRebuildCount = 0;
 		std::uint64_t casterRevision = 0;
+		std::uint64_t sceneTopologyRevision = 0;
+		std::uint64_t sceneTopologyInvalidationCount = 0;
+		std::uint64_t sceneTopologyModelCount = 0;
 		std::uint64_t lightCacheHitCount = 0;
 		std::uint64_t directionalLightUpdateCount = 0;
 		std::uint64_t pointLightUpdateCount = 0;
@@ -305,6 +353,9 @@ public:
 	const ShadowSystemStats& GetShadowSystemStats() const {
 		return m_shadowStats;
 	}
+	std::uint64_t GetSceneTopologyRevision() const {
+		return modelSource.GetSceneTopologyRevision();
+	}
 	void InvalidateShadowCache();
 	void ClearContent();
 
@@ -398,6 +449,7 @@ private:
 	void DrawShadowMapRevisionGlobal(bool forceUpdate);
 	void DrawShadowMapPerLight();
 	void InvalidatePerLightShadowCaches();
+	void SynchronizeSceneTopologyRevision();
 	void SynchronizeShadowCacheGranularity(bool perLightCacheEnabled);
 	void DisableEnabledShadowContent();
 	bool CommitEnabledShadowContent();
@@ -449,6 +501,7 @@ private:
 	bool m_shadowCasterBoundsValid = false;
 	std::size_t m_shadowCasterStateSignature = 0;
 	std::uint64_t m_shadowCasterRevision = 0;
+	std::uint64_t m_observedSceneTopologyRevision = 0;
 	glm::vec3 m_cachedShadowCasterCenter = glm::vec3(0.0f);
 	float m_cachedShadowCasterRadius = 0.0f;
 	std::vector<ShadowCasterBoundItem> m_shadowCasterBoundsScratch;
