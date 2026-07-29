@@ -1280,6 +1280,8 @@ Hash 只用于快速比较，Debug Build 可在 Hit 时进行结构化交叉检�
 
 “依赖版本 + 局部失效 + 成功后发布”的结构仍然成立，只是 Cache Entry 从“一盏灯一张纹理”变成一个 Tile、Page、Cascade 或 Command Range。
 
+CSM 的完整数学、稳定化、缓存依赖、Dirty Tile 边界与项目接入方案见 [CSM 技术原理与增量更新工程设计](CSM_TECHNICAL_PRINCIPLES_CN.md)。
+
 ### 18.6 下一轮正确性补强
 
 当前证据已经足以支撑本次 Per-Light 优化结论，但若要把它推进到更接近生产引擎的验证等级，优先级最高的是：
