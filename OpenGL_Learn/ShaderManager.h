@@ -62,6 +62,7 @@ public:
 		LightVolume,
 		LightVolumeFullscreen,
 		SSAO,
+		SSAOUpsample,
 		//StartGeometryShaderIndex
 		Explode,
 		NormalLines,
@@ -152,6 +153,7 @@ private:
 		"lightVolume",
 		"lightVolumeFullscreen",
 		"ssao",
+		"ssaoUpsample",
 		"explode",
 		"normal",
 		"shadowCube",

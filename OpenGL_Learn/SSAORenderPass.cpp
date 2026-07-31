@@ -7,6 +7,14 @@
 
 FBOAttributes SSAORenderPass::BuildAttributesFromSystemProperties()
 {
+	const bool halfRaw =
+		SystemProperties::GetInstance().SSAO_MODE ==
+		SSAOProperty::HalfRaw;
+	return BuildAOAttributes(halfRaw);
+}
+
+FBOAttributes SSAORenderPass::BuildAOAttributes(bool halfResolution) const
+{
 	FBOAttributes attr = FramebuffersManager::GenCurrentAttr();
 	attr.aaType = AntiAliasManager::AntiAliasType::Default;
 	attr.isBloom = false;
@@ -14,6 +22,11 @@ FBOAttributes SSAORenderPass::BuildAttributesFromSystemProperties()
 	attr.isGamma = false;
 	attr.textureAttrs.clear();
 	attr.textureAttrs.push_back({ GL_TEXTURE_2D, GL_R16F, GL_RED, GL_FLOAT });
+	if (halfResolution) {
+		const auto& properties = SystemProperties::GetInstance();
+		attr.width = (properties.SCREEN_WIDTH + 1) / 2;
+		attr.height = (properties.SCREEN_HEIGHT + 1) / 2;
+	}
 	return attr;
 }
 
@@ -21,6 +34,77 @@ void SSAORenderPass::Init(int width, int height)
 {
 	(void)width;
 	(void)height;
+}
+
+const FBO* SSAORenderPass::GetGenerationFBO() const
+{
+	return SystemProperties::GetInstance().SSAO_MODE ==
+		SSAOProperty::HalfBilateral
+		? m_halfGenerationFBO
+		: m_outputFBO;
+}
+
+void SSAORenderPass::ConfigureAOTexture(
+	FBO* fbo,
+	std::uint64_t& configuredGeneration)
+{
+	if (!fbo ||
+		fbo->textureIDs.empty() ||
+		fbo->textureIDs.front() == 0 ||
+		configuredGeneration == fbo->GetResourceGeneration()) {
+		return;
+	}
+	GLState::BindTexture(GL_TEXTURE_2D, fbo->textureIDs.front());
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	GLState::BindTexture(GL_TEXTURE_2D, 0);
+	configuredGeneration = fbo->GetResourceGeneration();
+}
+
+void SSAORenderPass::UpdateRenderTargets()
+{
+	auto& properties = SystemProperties::GetInstance();
+	auto& framebufferManager = FramebuffersManager::GetInstance();
+	const bool bilateral =
+		properties.SSAO_MODE == SSAOProperty::HalfBilateral;
+
+	if (!bilateral && m_halfGenerationFBO) {
+		framebufferManager.ReleaseFBO(m_halfGenerationFBO);
+		m_halfGenerationFBO = nullptr;
+		m_hasHalfGenerationAttr = false;
+		m_configuredHalfGeneration = 0;
+		framebufferManager.TrimUnusedFBOs();
+	}
+
+	UpdateFBOFromSystemProperties();
+	ConfigureAOTexture(m_outputFBO, m_configuredOutputGeneration);
+
+	if (!bilateral) {
+		return;
+	}
+
+	const FBOAttributes halfAttr = BuildAOAttributes(true);
+	if (!m_hasHalfGenerationAttr ||
+		!(m_lastHalfGenerationAttr == halfAttr)) {
+		framebufferManager.ReleaseFBO(m_halfGenerationFBO);
+		m_halfGenerationFBO = framebufferManager.GetFBO(halfAttr);
+		m_lastHalfGenerationAttr = halfAttr;
+		m_hasHalfGenerationAttr = true;
+		m_configuredHalfGeneration = 0;
+		if (m_halfGenerationFBO) {
+			m_halfGenerationFBO->passName =
+				"SSAORenderPass_HalfGenerate";
+			framebufferManager.RegisterFBO(
+				"SSAORenderPass_HalfGenerate",
+				m_halfGenerationFBO);
+		}
+		framebufferManager.TrimUnusedFBOs();
+	}
+	ConfigureAOTexture(
+		m_halfGenerationFBO,
+		m_configuredHalfGeneration);
 }
 
 void SSAORenderPass::EnsureKernelAndNoise()
@@ -65,52 +149,118 @@ void SSAORenderPass::Render(Scene* scene, const FBO* gbufferFBO)
 	if (!properties.SSAO || !gbufferFBO || gbufferFBO->textureIDs.size() < 2)
 		return;
 
-	UpdateFBOFromSystemProperties();
-	if (!m_outputFBO || m_outputFBO->textureIDs.empty())
+	UpdateRenderTargets();
+	FBO* generationFBO =
+		properties.SSAO_MODE == SSAOProperty::HalfBilateral
+			? m_halfGenerationFBO
+			: m_outputFBO;
+	if (!m_outputFBO ||
+		!m_outputFBO->IsComplete() ||
+		m_outputFBO->textureIDs.empty() ||
+		!generationFBO ||
+		!generationFBO->IsComplete() ||
+		generationFBO->textureIDs.empty())
 		return;
 
 	EnsureKernelAndNoise();
 
 	auto ssaoShader = ShaderManager::GetInstance().GetShader(ShaderManager::SSAO);
-	if (!ssaoShader)
+	const bool bilateral =
+		properties.SSAO_MODE == SSAOProperty::HalfBilateral;
+	auto upsampleShader = bilateral
+		? ShaderManager::GetInstance().GetShader(ShaderManager::SSAOUpsample)
+		: nullptr;
+	if (!ssaoShader || (bilateral && !upsampleShader))
 		return;
 
-	GLState::BindFramebuffer(GL_FRAMEBUFFER, m_outputFBO->framebufferID);
-	glViewport(0, 0, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
-	GLState::Disable(GL_DEPTH_TEST);
-	GLState::Disable(GL_STENCIL_TEST);
-	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-	glClear(GL_COLOR_BUFFER_BIT);
+	{
+		PERF_CPU_SCOPE("SSAO Generate");
+		PERF_GPU_SCOPE("SSAO Generate");
+		GLState::BindFramebuffer(
+			GL_FRAMEBUFFER,
+			generationFBO->framebufferID);
+		glViewport(0, 0, generationFBO->width, generationFBO->height);
+		GLState::Disable(GL_DEPTH_TEST);
+		GLState::Disable(GL_STENCIL_TEST);
+		glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT);
 
-	ssaoShader->use();
-	ssaoShader->setInt("gPosition", 0);
-	ssaoShader->setInt("gNormal", 1);
-	ssaoShader->setInt("texNoise", 2);
-	ssaoShader->setInt("screenWidth", properties.SCREEN_WIDTH);
-	ssaoShader->setInt("screenHeight", properties.SCREEN_HEIGHT);
-	ssaoShader->setFloat("radius", properties.SSAO_RADIUS);
-	ssaoShader->setFloat("bias", properties.SSAO_BIAS);
-	ssaoShader->setInt("kernelSize", properties.SSAO_KERNEL_SIZE);
+		ssaoShader->use();
+		ssaoShader->setInt("gPosition", 0);
+		ssaoShader->setInt("gNormal", 1);
+		ssaoShader->setInt("texNoise", 2);
+		// Keep the original four-full-resolution-pixel noise period in all
+		// modes so the 64-sample A/B changes the raster grid, not the noise.
+		ssaoShader->setInt("screenWidth", properties.SCREEN_WIDTH);
+		ssaoShader->setInt("screenHeight", properties.SCREEN_HEIGHT);
+		ssaoShader->setFloat("radius", properties.SSAO_RADIUS);
+		ssaoShader->setFloat("bias", properties.SSAO_BIAS);
+		ssaoShader->setInt("kernelSize", properties.SSAO_KERNEL_SIZE);
 
-	for (int i = 0; i < 64; ++i)
-		ssaoShader->setVec3("ssaoKernel[" + std::to_string(i) + "]", m_kernel[i]);
+		for (int i = 0; i < 64; ++i) {
+			ssaoShader->setVec3(
+				"ssaoKernel[" + std::to_string(i) + "]",
+				m_kernel[i]);
+		}
 
-	GLState::ActiveTexture(GL_TEXTURE0);
-	GLState::BindTexture(GL_TEXTURE_2D, gbufferFBO->textureIDs[0]);
-	GLState::ActiveTexture(GL_TEXTURE1);
-	GLState::BindTexture(GL_TEXTURE_2D, gbufferFBO->textureIDs[1]);
-	GLState::ActiveTexture(GL_TEXTURE2);
-	GLState::BindTexture(GL_TEXTURE_2D, m_noiseTexture);
+		GLState::ActiveTexture(GL_TEXTURE0);
+		GLState::BindTexture(GL_TEXTURE_2D, gbufferFBO->textureIDs[0]);
+		GLState::ActiveTexture(GL_TEXTURE1);
+		GLState::BindTexture(GL_TEXTURE_2D, gbufferFBO->textureIDs[1]);
+		GLState::ActiveTexture(GL_TEXTURE2);
+		GLState::BindTexture(GL_TEXTURE_2D, m_noiseTexture);
 
-	GLState::BindVertexArray(globalVAOs.quadVAO);
-	PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, 6);
-	glDrawArrays(GL_TRIANGLES, 0, 6);
+		GLState::BindVertexArray(globalVAOs.quadVAO);
+		PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, 6);
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+	}
+
+	if (bilateral) {
+		PERF_CPU_SCOPE("SSAO Upsample");
+		PERF_GPU_SCOPE("SSAO Upsample");
+		GLState::BindFramebuffer(
+			GL_FRAMEBUFFER,
+			m_outputFBO->framebufferID);
+		glViewport(0, 0, m_outputFBO->width, m_outputFBO->height);
+		GLState::Disable(GL_DEPTH_TEST);
+		GLState::Disable(GL_STENCIL_TEST);
+
+		upsampleShader->use();
+		upsampleShader->setInt("halfAO", 0);
+		upsampleShader->setInt("gPosition", 1);
+		upsampleShader->setInt("gNormal", 2);
+		upsampleShader->setFloat(
+			"depthSigma",
+			properties.SSAO_BILATERAL_DEPTH_SIGMA);
+		upsampleShader->setFloat(
+			"normalPower",
+			properties.SSAO_BILATERAL_NORMAL_POWER);
+
+		GLState::ActiveTexture(GL_TEXTURE0);
+		GLState::BindTexture(
+			GL_TEXTURE_2D,
+			generationFBO->textureIDs[0]);
+		GLState::ActiveTexture(GL_TEXTURE1);
+		GLState::BindTexture(GL_TEXTURE_2D, gbufferFBO->textureIDs[0]);
+		GLState::ActiveTexture(GL_TEXTURE2);
+		GLState::BindTexture(GL_TEXTURE_2D, gbufferFBO->textureIDs[1]);
+
+		GLState::BindVertexArray(globalVAOs.quadVAO);
+		PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, 6);
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+	}
 
 	GLState::BindFramebuffer(GL_FRAMEBUFFER, 0);
+	glViewport(0, 0, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
 }
 
 void SSAORenderPass::Destroy()
 {
+	auto& framebufferManager = FramebuffersManager::GetInstance();
+	framebufferManager.ReleaseFBO(m_halfGenerationFBO);
+	m_halfGenerationFBO = nullptr;
+	m_hasHalfGenerationAttr = false;
+	m_configuredHalfGeneration = 0;
 	if (m_noiseTexture != 0) {
 		GLState::ForgetTexture(m_noiseTexture);
 		glDeleteTextures(1, &m_noiseTexture);
@@ -118,7 +268,8 @@ void SSAORenderPass::Destroy()
 	}
 	m_kernelNoiseReady = false;
 	m_kernel.clear();
-	FramebuffersManager::GetInstance().ReleaseFBO(m_outputFBO);
+	framebufferManager.ReleaseFBO(m_outputFBO);
 	m_outputFBO = nullptr;
 	m_hasAttr = false;
+	m_configuredOutputGeneration = 0;
 }

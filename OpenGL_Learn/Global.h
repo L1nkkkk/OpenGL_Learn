@@ -51,6 +51,27 @@ namespace ShadowOptimization {
     };
 }
 
+namespace SSAOProperty {
+    enum Mode {
+        LegacyFull = 0,
+        HalfRaw,
+        HalfBilateral,
+    };
+
+    inline const char* ModeName(int mode) {
+        switch (mode) {
+        case LegacyFull:
+            return "legacy-full";
+        case HalfRaw:
+            return "half-raw";
+        case HalfBilateral:
+            return "half-bilateral";
+        default:
+            return "unknown";
+        }
+    }
+}
+
 // Viewport ??????? FramebuffersManager ????? isBusy ?? FBO ???????????????? color/depth ??????
 
 class SystemProperties {
@@ -251,6 +272,9 @@ public:
     float SSAO_RADIUS = 0.35f;
     float SSAO_BIAS = 0.025f;
     int SSAO_KERNEL_SIZE = 64;
+    int SSAO_MODE = SSAOProperty::LegacyFull;
+    float SSAO_BILATERAL_DEPTH_SIGMA = 0.02f;
+    float SSAO_BILATERAL_NORMAL_POWER = 32.0f;
     bool LIGHT_VOLUME = false;
     /// ??????? = ?????? ?? ???????????/??????????????
     float LIGHT_VOLUME_RADIUS_SCALE = 1.0f;
