@@ -126,7 +126,7 @@ void DeferRenderPass::DrawPointLightVolumesDeferred(Scene* scene)
 
 		defaultShader->use();
 		defaultShader->setMat4("model", pointLight.getModelMatrix());
-		pointLight.DrawPointLight();
+		pointLight.DrawGeometry();
 
 		// 2) 仅对模板非 0 像素做光照计算，叠加到平行光结果（深度 GEQUAL + 剔除正面，与重构前一致）
 		lightVolumeShader->use();
@@ -176,7 +176,7 @@ void DeferRenderPass::DrawPointLightVolumesDeferred(Scene* scene)
 			GLState::BindTexture(GL_TEXTURE_2D, ssaoFBO->textureIDs[0]);
 		}
 
-		pointLight.DrawPointLight();
+		pointLight.DrawGeometry();
 
 		pointLight.SetScale(savedScale);
 		GLState::StencilMask(0xFF);

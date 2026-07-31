@@ -202,7 +202,6 @@ public:
 		quadratic = 0.032f;
 	}
 
-	void DrawPointLight();
 	FBO* EnsureShadowFBO();
 	void FitShadowToBounds(const glm::vec3& center, float radius);
 

@@ -89,6 +89,8 @@ public:
 	~Mesh() = default;
 
 	void Draw(Shader* shader = nullptr, bool forcePbrMaterial = false);
+	// Submit only geometry; the caller owns shader, material, and render state.
+	void DrawGeometry();
 
 	unsigned int GetVAO() const;
 	std::size_t GetVertexCount() const;
@@ -216,6 +218,8 @@ public:
 	}
 
 	void Draw(Shader* shader = nullptr, unsigned int start_tex_index = 0);
+	// Geometry-only model path for proxy/stencil passes with caller-owned state.
+	void DrawGeometry();
 	static void DestroyMeshCache();
 	static void SetImportedMaterialSharingEnabled(bool enabled) {
 		s_importedMaterialSharingEnabled = enabled;
@@ -313,7 +317,11 @@ protected:
 	Mesh processMesh(aiMesh* mesh, const aiScene* scene, Material* mat = nullptr);
 	void processNode(aiNode* node, const aiScene* scene, Material* mat = nullptr);
 	void BuildMeshLists();
-	std::vector<Texture> loadMaterialTextures(aiMaterial* mat, aiTextureType type, std::string typeName);
+	std::vector<Texture> loadMaterialTextures(
+		aiMaterial* mat,
+		aiTextureType type,
+		std::string typeName,
+		bool requireTangentSpaceNormalEvidence = false);
 	void prosessMaterial(aiMaterial* mat,Material* material);
 	glm::vec3 CalculateLocalCenter();
 

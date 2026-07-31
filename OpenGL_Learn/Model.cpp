@@ -5,6 +5,7 @@
 #include <assimp/Exporter.hpp>
 #include <assimp/version.h>
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -31,6 +32,140 @@ namespace {
 		aiProcess_JoinIdenticalVertices |
 		aiProcess_SortByPType;
 	constexpr std::uint64_t kModelImportCacheVersion = 1;
+
+	struct HeightTextureClassification {
+		bool isTangentSpaceNormal = false;
+		std::string reason;
+	};
+
+	std::unordered_map<std::string, HeightTextureClassification> g_heightTextureClassifications;
+
+	bool HasNormalMapNameHint(const std::filesystem::path& texturePath)
+	{
+		std::string stem = texturePath.stem().string();
+		std::transform(stem.begin(), stem.end(), stem.begin(), [](unsigned char value) {
+			return static_cast<char>(std::tolower(value));
+		});
+		return stem.find("normal") != std::string::npos ||
+			stem.rfind("n_", 0) == 0 ||
+			stem.find("_nrm") != std::string::npos ||
+			stem.find("-nrm") != std::string::npos ||
+			(stem.size() > 2 && stem.compare(stem.size() - 2, 2, "_n") == 0) ||
+			(stem.size() > 2 && stem.compare(stem.size() - 2, 2, "-n") == 0);
+	}
+
+	HeightTextureClassification ClassifyHeightTexture(
+		const std::string& modelDirectory,
+		const char* texturePath)
+	{
+		namespace fs = std::filesystem;
+		fs::path resolvedPath(texturePath);
+		if (!resolvedPath.is_absolute()) {
+			resolvedPath = fs::path(modelDirectory) / resolvedPath;
+		}
+		std::error_code error;
+		fs::path absolutePath = fs::absolute(resolvedPath, error);
+		if (!error) {
+			resolvedPath = absolutePath.lexically_normal();
+		}
+
+		const std::string cacheKey = resolvedPath.generic_string();
+		const auto cached = g_heightTextureClassifications.find(cacheKey);
+		if (cached != g_heightTextureClassifications.end()) {
+			return cached->second;
+		}
+
+		HeightTextureClassification result;
+		int width = 0;
+		int height = 0;
+		int channelCount = 0;
+		const std::string nativePath = resolvedPath.string();
+		const bool hasNormalMapNameHint = HasNormalMapNameHint(resolvedPath);
+		if (stbi_info(nativePath.c_str(), &width, &height, &channelCount) == 0) {
+			// Some production assets use formats stb_image cannot inspect (for
+			// example DDS). In that case require explicit filename semantics.
+			result.isTangentSpaceNormal = hasNormalMapNameHint;
+			result.reason = hasNormalMapNameHint
+				? "normal-map filename hint"
+				: "image metadata unavailable and no normal-map filename hint";
+		}
+		else if (channelCount < 3) {
+			// A single/dual-channel HEIGHT texture cannot provide the XYZ vector
+			// expected by the existing tangent-space normal shader path.
+			result.reason = "fewer than three color channels";
+		}
+		else if (hasNormalMapNameHint) {
+			result.isTangentSpaceNormal = true;
+			result.reason = "normal-map filename hint";
+		}
+		else {
+			int loadedWidth = 0;
+			int loadedHeight = 0;
+			int loadedChannels = 0;
+			unsigned char* pixels = stbi_load(
+				nativePath.c_str(),
+				&loadedWidth,
+				&loadedHeight,
+				&loadedChannels,
+				3);
+			if (!pixels || loadedWidth <= 0 || loadedHeight <= 0) {
+				result.reason = "image pixels unavailable and no normal-map filename hint";
+			}
+			else {
+				constexpr std::size_t kMaximumSamples = 4096;
+				const std::size_t pixelCount =
+					static_cast<std::size_t>(loadedWidth) * static_cast<std::size_t>(loadedHeight);
+				const int sampleStride = (std::max)(
+					1,
+					static_cast<int>(std::sqrt(
+						static_cast<double>(pixelCount) / kMaximumSamples)));
+				std::size_t sampleCount = 0;
+				std::size_t positiveZCount = 0;
+				std::size_t blueDominantCount = 0;
+				double redTotal = 0.0;
+				double greenTotal = 0.0;
+				double blueTotal = 0.0;
+				for (int y = 0; y < loadedHeight; y += sampleStride) {
+					for (int x = 0; x < loadedWidth; x += sampleStride) {
+						const std::size_t offset =
+							(static_cast<std::size_t>(y) * loadedWidth + x) * 3;
+						const unsigned int red = pixels[offset];
+						const unsigned int green = pixels[offset + 1];
+						const unsigned int blue = pixels[offset + 2];
+						redTotal += red;
+						greenTotal += green;
+						blueTotal += blue;
+						positiveZCount += blue >= 128 ? 1 : 0;
+						blueDominantCount += blue >= (std::max)(red, green) + 8 ? 1 : 0;
+						++sampleCount;
+					}
+				}
+
+				const double positiveZRatio =
+					static_cast<double>(positiveZCount) / sampleCount;
+				const double blueDominantRatio =
+					static_cast<double>(blueDominantCount) / sampleCount;
+				const double meanRed = redTotal / sampleCount;
+				const double meanGreen = greenTotal / sampleCount;
+				const double meanBlue = blueTotal / sampleCount;
+				result.isTangentSpaceNormal =
+					positiveZRatio >= 0.80 &&
+					(blueDominantRatio >= 0.50 ||
+						meanBlue >= (std::max)(meanRed, meanGreen) + 24.0);
+				result.reason = result.isTangentSpaceNormal
+					? "normal-like RGB content"
+					: "RGB content is not normal-map-like";
+			}
+			stbi_image_free(pixels);
+		}
+
+		g_heightTextureClassifications.emplace(cacheKey, result);
+		if (!result.isTangentSpaceNormal) {
+			std::cout << "[Model Material] ignored HEIGHT texture as tangent-space normal: "
+				<< texturePath << " (" << result.reason << ")" << std::endl;
+		}
+		return result;
+	}
 
 	bool IsValidScene(const aiScene* scene)
 	{
@@ -396,6 +531,11 @@ void Mesh::Draw(Shader* shader, bool forcePbrMaterial)
 		shader->setBool("material.usePBR", true);
 	}
 	GLState::ActiveTexture(GL_TEXTURE0);
+	DrawGeometry();
+}
+
+void Mesh::DrawGeometry()
+{
 	GLState::BindVertexArray(GetVAO());
 	PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, GetDrawCount());
 	if (UsesIndices()) {
@@ -403,6 +543,16 @@ void Mesh::Draw(Shader* shader, bool forcePbrMaterial)
 	}
 	else {
 		glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(GetVertexCount()));
+	}
+}
+
+void Model::DrawGeometry()
+{
+	for (Mesh& mesh : meshes) {
+		if (!mesh.GetActiveStatus()) {
+			continue;
+		}
+		mesh.DrawGeometry();
 	}
 }
 
@@ -754,9 +904,15 @@ void Model::prosessMaterial(aiMaterial* mat,Material* material)
 	material->AddProperty("texture_specular", MaterialProperty::CreateTexture(loadMaterialTextures(mat, aiTextureType_SPECULAR, "texture_specular")));
 	auto normalTextures = loadMaterialTextures(mat, aiTextureType_NORMALS, "texture_normal");
 	if (normalTextures.empty()) {
-		// OBJ map_Bump is commonly exposed by Assimp as HEIGHT even when the
-		// referenced image is a tangent-space normal map.
-		normalTextures = loadMaterialTextures(mat, aiTextureType_HEIGHT, "texture_normal");
+		// Assimp exposes OBJ map_Bump as HEIGHT for both real height maps and
+		// tangent-space normal maps. Only promote textures with reliable normal
+		// evidence; feeding grayscale height into the XYZ shader path corrupts
+		// lighting instead of producing bump mapping.
+		normalTextures = loadMaterialTextures(
+			mat,
+			aiTextureType_HEIGHT,
+			"texture_normal",
+			true);
 	}
 	material->AddProperty("texture_normal", MaterialProperty::CreateTexture(normalTextures));
 	auto opacityTextures = loadMaterialTextures(
@@ -892,13 +1048,21 @@ void Model::prosessMaterial(aiMaterial* mat,Material* material)
 	material->AddProperty("useBloom", MaterialProperty::CreateBool(false));
 }
 
-std::vector<Texture> Model::loadMaterialTextures(aiMaterial* mat, aiTextureType type, std::string typeName)
+std::vector<Texture> Model::loadMaterialTextures(
+	aiMaterial* mat,
+	aiTextureType type,
+	std::string typeName,
+	bool requireTangentSpaceNormalEvidence)
 {
 	std::vector<Texture> textures;
 	for (unsigned int i = 0; i < mat->GetTextureCount(type); i++)
 	{
 		aiString str;
 		mat->GetTexture(type, i, &str);
+		if (requireTangentSpaceNormalEvidence &&
+			!ClassifyHeightTexture(directory, str.C_Str()).isTangentSpaceNormal) {
+			continue;
+		}
 		bool skip = false;
 		for (unsigned int j = 0; j < textures_loaded.size(); j++)
 		{

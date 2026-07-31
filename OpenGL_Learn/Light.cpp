@@ -1,6 +1,4 @@
 #include "Light.h"
-#include "GLStateCache.h"
-#include "Profiler.h"
 #include <algorithm>
 #include <cmath>
 
@@ -27,15 +25,6 @@ namespace {
 		manager.ReleaseFBO(target);
 		target = nullptr;
 		manager.TrimUnusedFBOs();
-	}
-}
-
-void PointLight::DrawPointLight() {
-	for (auto& mesh : meshes) {
-		auto VAO = mesh.GetVAO();
-		GLState::BindVertexArray(VAO);
-		PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, mesh.GetVertexCount());
-		glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.GetVertexCount()));
 	}
 }
 

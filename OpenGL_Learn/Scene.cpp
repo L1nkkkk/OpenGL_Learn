@@ -615,7 +615,7 @@ void Scene::DrawDefferedModels()
 
             defaultShader->use();
             defaultShader->setMat4("model", pointLight.getModelMatrix());
-            pointLight.DrawPointLight();
+            pointLight.DrawGeometry();
 
             lightVolumeShader->use();
             GLState::Enable(GL_BLEND);
@@ -659,7 +659,7 @@ void Scene::DrawDefferedModels()
             GLState::ActiveTexture(GL_TEXTURE3);
             GLState::BindTexture(GL_TEXTURE_2D, deferFBO->textureIDs[3]);
 
-            pointLight.DrawPointLight();
+            pointLight.DrawGeometry();
 
             pointLight.SetScale(savedScale);
             GLState::Disable(GL_BLEND);
@@ -1349,10 +1349,7 @@ void Scene::DrawPointLights()
     lightSource.pointLightShader.setVec3("lightColor", lightColor);
     for (unsigned int i = 0; i < lightSource.pointLights.size(); ++i) {
         if (!lightSource.pointLights[i].GetActiveStatus()) continue;
-        glm::mat4 model = lightSource.pointLights[i].getModelMatrix();
-        // Assume lightShader is a valid Shader object already in use
-        lightSource.pointLightShader.setMat4("model", model);
-        lightSource.pointLights[i].DrawPointLight();
+        lightSource.pointLights[i].Draw(&lightSource.pointLightShader);
     }
 }
 
