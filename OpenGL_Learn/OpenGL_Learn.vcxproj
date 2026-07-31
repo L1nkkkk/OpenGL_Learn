@@ -172,6 +172,7 @@
     <ClCompile Include="PostprocessRenderPass.cpp" />
     <ClCompile Include="Profiler.cpp" />
     <ClCompile Include="SceneStateIO.cpp" />
+    <ClCompile Include="SubmissionStressScene.cpp" />
     <ClCompile Include="SSAORenderPass.cpp" />
     <ClCompile Include="Scene.cpp" />
     <ClCompile Include="Shader.cpp" />
@@ -203,6 +204,7 @@
     <ClInclude Include="RenderPass.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="SceneStateIO.h" />
+    <ClInclude Include="SubmissionStressScene.h" />
     <ClInclude Include="SSAORenderPass.h" />
     <ClInclude Include="Scene.h" />
     <ClInclude Include="Shader.h" />

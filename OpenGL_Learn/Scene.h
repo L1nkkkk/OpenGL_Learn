@@ -273,6 +273,7 @@ public:
 		Model* model = nullptr;
 		Mesh* mesh = nullptr;
 		Shader* shader = nullptr;
+		std::uint64_t opaqueSortKey = 0;
 		glm::mat4 modelMatrix = glm::mat4(1.0f);
 		glm::vec3 worldBoundsCenter = glm::vec3(0.0f);
 		glm::vec3 worldBoundsAxisX = glm::vec3(0.0f);
@@ -280,6 +281,12 @@ public:
 		glm::vec3 worldBoundsAxisZ = glm::vec3(0.0f);
 		bool worldBoundsValid = false;
 		float worldBoundsRadius = 0.0f;
+	};
+
+	enum class OpaqueSortMode {
+		LegacyMapComparator,
+		KeyDirect,
+		KeyIndex
 	};
 
 	struct ModelFrameItem {
@@ -372,10 +379,27 @@ public:
 
 	// Build render submission once after scene/editor updates and before executing passes.
 	void PrepareRenderData();
+	// Benchmark-only staged replay. Each zone times one outer pass, so the
+	// object-heavy fixture can attribute collection cost without starting a
+	// high-overhead timer inside the per-object loop.
+	void ProfileCollectionBreakdown();
 	const std::vector<MeshDrawItem>& GetOpaqueMeshes() const;
 	const std::vector<MeshDrawItem>& GetTransparentMeshes() const;
+	void SetOpaqueSortMode(OpaqueSortMode mode) {
+		m_opaqueSortMode = mode;
+	}
+	OpaqueSortMode GetOpaqueSortMode() const {
+		return m_opaqueSortMode;
+	}
+	static const char* GetOpaqueSortModeName(OpaqueSortMode mode);
+	std::uint64_t ComputeOpaqueSubmissionSignature() const;
 
 private:
+	struct CollectionProbePreparedItem {
+		MeshDrawItem item;
+		bool transparent = false;
+	};
+
 	struct ShadowCasterBoundItem {
 		const Model* model = nullptr;
 		std::uint64_t revision = 0;
@@ -484,6 +508,13 @@ private:
 	std::vector<ModelFrameItem> m_visibleModels;
 	std::vector<MeshDrawItem> m_opaqueMeshList;
 	std::vector<MeshDrawItem> m_transparentMeshList;
+	std::vector<std::uint32_t> m_opaqueSortIndices;
+	std::vector<MeshDrawItem> m_opaqueMeshSortScratch;
+	std::vector<ModelFrameItem> m_collectionProbeModels;
+	std::vector<CollectionProbePreparedItem> m_collectionProbePreparedItems;
+	std::vector<MeshDrawItem> m_collectionProbeOpaqueItems;
+	std::vector<MeshDrawItem> m_collectionProbeTransparentItems;
+	OpaqueSortMode m_opaqueSortMode = OpaqueSortMode::KeyIndex;
 	ImageBasedLighting* m_imageBasedLighting = nullptr;
 	bool m_shadowCacheValid = false;
 	std::size_t m_shadowCacheSignature = 0;

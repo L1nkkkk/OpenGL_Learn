@@ -407,6 +407,19 @@ void PerformanceBenchmarkSession::SetMetadata(const PerformanceBenchmarkMetadata
 	m_metadata = metadata;
 }
 
+void PerformanceBenchmarkSession::SetOpaqueSubmissionSignature(
+	std::uint64_t signature)
+{
+	std::ostringstream stream;
+	stream << "0x"
+		<< std::hex
+		<< std::setw(16)
+		<< std::setfill('0')
+		<< signature;
+	m_metadata.opaqueSubmissionSignature = stream.str();
+	m_metadata.opaqueSubmissionSignatureValid = true;
+}
+
 bool PerformanceBenchmarkSession::OnFrameBoundary(bool sceneReady)
 {
 	if (!m_options.enabled) {
@@ -544,6 +557,36 @@ bool PerformanceBenchmarkSession::WriteReport()
 	writer.Key("directionLights"); writer.Int(m_metadata.directionLights);
 	writer.Key("spotLights"); writer.Int(m_metadata.spotLights);
 	writer.Key("shadowCastingLights"); writer.Int(m_metadata.shadowCastingLights);
+	writer.Key("opaqueSortMode");
+	writer.String(m_metadata.opaqueSortMode.c_str());
+	writer.Key("opaqueSubmissionSignature");
+	if (m_metadata.opaqueSubmissionSignatureValid) {
+		writer.String(
+			m_metadata.opaqueSubmissionSignature.c_str());
+	}
+	else {
+		writer.Null();
+	}
+	writer.Key("submissionStressScene");
+	writer.Bool(m_metadata.submissionStressScene);
+	if (m_metadata.submissionStressScene) {
+		writer.Key("submissionStressObjectCount");
+		writer.Int(m_metadata.submissionStressObjectCount);
+		writer.Key("submissionStressDynamicObjectCount");
+		writer.Int(m_metadata.submissionStressDynamicObjectCount);
+		writer.Key("submissionStressMaterialCount");
+		writer.Int(m_metadata.submissionStressMaterialCount);
+		writer.Key("submissionStressSeed");
+		writer.Uint(m_metadata.submissionStressSeed);
+		writer.Key("submissionStressRenderPath");
+		writer.String(m_metadata.submissionStressRenderPath.c_str());
+		writer.Key("submissionStressGeometrySet");
+		writer.String(
+			m_metadata.submissionStressGeometrySet.c_str());
+		writer.Key("submissionStressCollectionBreakdown");
+		writer.Bool(
+			m_metadata.submissionStressCollectionBreakdown);
+	}
 	writer.EndObject();
 
 	writer.Key("summary");

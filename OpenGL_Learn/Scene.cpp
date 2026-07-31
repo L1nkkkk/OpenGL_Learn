@@ -6,8 +6,10 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstring>
 #include <functional>
 #include <limits>
+#include <numeric>
 #include <unordered_set>
 
 namespace {
@@ -209,6 +211,8 @@ void Scene::BuildMeshDrawLists()
 			camera_ptr->GetViewMatrix());
 	}
 
+	{
+	PERF_CPU_SCOPE("Draw Item Collection");
 	for (const auto& model : models) {
 		std::uint64_t modelShadowStateRevision = 0;
 		if (syncShadowState) {
@@ -310,6 +314,7 @@ void Scene::BuildMeshDrawLists()
 				model.get(),
 				mesh,
 				shader,
+				0,
 				modelMatrix,
 				meshWorldCenter,
 				worldBoundsAxisX,
@@ -324,6 +329,7 @@ void Scene::BuildMeshDrawLists()
 		for (const auto& entry : model->GetTransparentMeshEntries()) {
 			appendMeshDrawItem(m_transparentMeshList, entry.mesh);
 		}
+	}
 	}
 
 	if (syncShadowState) {
@@ -346,52 +352,160 @@ void Scene::BuildMeshDrawLists()
 		m_shadowStats.lastCasterStateSyncCpuMilliseconds = 0.0;
 	}
 
-	// Pointer-address sorting changes across independent processes.  That can
-	// reorder coplanar opaque draws and produce a handful of non-repeatable
-	// edge pixels even when every render input is identical.  Preserve the
-	// batching benefit while deriving group order from deterministic scene
-	// traversal instead.
-	std::unordered_map<Shader*, std::size_t> shaderSortOrder;
-	std::unordered_map<Material*, std::size_t> materialSortOrder;
-	for (const MeshDrawItem& item : m_opaqueMeshList) {
-		if (shaderSortOrder.find(item.shader) == shaderSortOrder.end()) {
-			shaderSortOrder.emplace(item.shader, shaderSortOrder.size());
+	{
+		PERF_CPU_SCOPE("Opaque Draw Sorting");
+		// Pointer-address sorting changes across independent processes. Group
+		// ordinals therefore come from deterministic scene traversal rather than
+		// pointer values. The legacy path retains the original map lookups for a
+		// same-binary A/B; optimized comparators only read the precomputed key.
+		if (m_opaqueSortMode == OpaqueSortMode::LegacyMapComparator) {
+			std::unordered_map<Shader*, std::size_t> shaderSortOrder;
+			std::unordered_map<Material*, std::size_t> materialSortOrder;
+			{
+				PERF_CPU_SCOPE("Opaque Legacy Order Build");
+				for (MeshDrawItem& item : m_opaqueMeshList) {
+					auto shaderOrder =
+						shaderSortOrder.find(item.shader);
+					if (shaderOrder == shaderSortOrder.end()) {
+						shaderOrder = shaderSortOrder.emplace(
+							item.shader,
+							shaderSortOrder.size()).first;
+					}
+					Material* material =
+						item.mesh ? item.mesh->material_ptr : nullptr;
+					auto materialOrder =
+						materialSortOrder.find(material);
+					if (materialOrder ==
+						materialSortOrder.end()) {
+						materialOrder = materialSortOrder.emplace(
+							material,
+							materialSortOrder.size()).first;
+					}
+					item.opaqueSortKey =
+						(static_cast<std::uint64_t>(
+							shaderOrder->second) << 32) |
+						static_cast<std::uint64_t>(
+							materialOrder->second);
+				}
+			}
+			{
+				PERF_CPU_SCOPE("Opaque Sort Algorithm");
+				std::stable_sort(
+					m_opaqueMeshList.begin(),
+					m_opaqueMeshList.end(),
+					[&shaderSortOrder, &materialSortOrder](
+						const MeshDrawItem& a,
+						const MeshDrawItem& b) {
+						const std::size_t aShaderOrder =
+							shaderSortOrder.at(a.shader);
+						const std::size_t bShaderOrder =
+							shaderSortOrder.at(b.shader);
+						if (aShaderOrder != bShaderOrder) {
+							return aShaderOrder < bShaderOrder;
+						}
+
+						Material* aMaterial =
+							a.mesh ? a.mesh->material_ptr : nullptr;
+						Material* bMaterial =
+							b.mesh ? b.mesh->material_ptr : nullptr;
+						return materialSortOrder.at(aMaterial) <
+							materialSortOrder.at(bMaterial);
+					});
+			}
 		}
-		Material* material =
-			item.mesh ? item.mesh->material_ptr : nullptr;
-		if (materialSortOrder.find(material) == materialSortOrder.end()) {
-			materialSortOrder.emplace(material, materialSortOrder.size());
-		}
-	}
-	std::stable_sort(m_opaqueMeshList.begin(), m_opaqueMeshList.end(),
-		[&shaderSortOrder, &materialSortOrder](
-			const MeshDrawItem& a,
-			const MeshDrawItem& b) {
-			const std::size_t aShaderOrder =
-				shaderSortOrder.at(a.shader);
-			const std::size_t bShaderOrder =
-				shaderSortOrder.at(b.shader);
-			if (aShaderOrder != bShaderOrder) {
-				return aShaderOrder < bShaderOrder;
+		else {
+			{
+				PERF_CPU_SCOPE("Opaque Sort Key Build");
+				std::unordered_map<Shader*, std::uint32_t> shaderSortOrder;
+				std::unordered_map<Material*, std::uint32_t>
+					materialSortOrder;
+				// Typical scenes have far fewer shader/material groups than
+				// draws. Reserving one bucket per draw made key construction
+				// itself scale with the 30k stress count.
+				shaderSortOrder.reserve((std::min)(
+					m_opaqueMeshList.size(),
+					std::size_t{ 128 }));
+				materialSortOrder.reserve((std::min)(
+					m_opaqueMeshList.size(),
+					std::size_t{ 1024 }));
+				for (MeshDrawItem& item : m_opaqueMeshList) {
+					const auto shaderResult = shaderSortOrder.try_emplace(
+						item.shader,
+						static_cast<std::uint32_t>(
+							shaderSortOrder.size()));
+					Material* material =
+						item.mesh ? item.mesh->material_ptr : nullptr;
+					const auto materialResult =
+						materialSortOrder.try_emplace(
+							material,
+							static_cast<std::uint32_t>(
+								materialSortOrder.size()));
+					item.opaqueSortKey =
+						(static_cast<std::uint64_t>(
+							shaderResult.first->second) << 32) |
+						static_cast<std::uint64_t>(
+							materialResult.first->second);
+				}
 			}
 
-			Material* aMaterial =
-				a.mesh ? a.mesh->material_ptr : nullptr;
-			Material* bMaterial =
-				b.mesh ? b.mesh->material_ptr : nullptr;
-			return materialSortOrder.at(aMaterial) <
-				materialSortOrder.at(bMaterial);
-		});
+			if (m_opaqueSortMode == OpaqueSortMode::KeyDirect ||
+				m_opaqueMeshList.size() >
+					static_cast<std::size_t>(
+						(std::numeric_limits<std::uint32_t>::max)())) {
+				PERF_CPU_SCOPE("Opaque Sort Algorithm");
+				std::stable_sort(
+					m_opaqueMeshList.begin(),
+					m_opaqueMeshList.end(),
+					[](const MeshDrawItem& a, const MeshDrawItem& b) {
+						return a.opaqueSortKey < b.opaqueSortKey;
+					});
+			}
+			else {
+				{
+					PERF_CPU_SCOPE("Opaque Sort Algorithm");
+					m_opaqueSortIndices.resize(m_opaqueMeshList.size());
+					std::iota(
+						m_opaqueSortIndices.begin(),
+						m_opaqueSortIndices.end(),
+						std::uint32_t{ 0 });
+					std::stable_sort(
+						m_opaqueSortIndices.begin(),
+						m_opaqueSortIndices.end(),
+						[this](std::uint32_t a, std::uint32_t b) {
+							return m_opaqueMeshList[a].opaqueSortKey <
+								m_opaqueMeshList[b].opaqueSortKey;
+						});
+				}
+				{
+					PERF_CPU_SCOPE("Opaque Index Materialization");
+					m_opaqueMeshSortScratch.clear();
+					m_opaqueMeshSortScratch.reserve(
+						m_opaqueMeshList.size());
+					for (const std::uint32_t index :
+						m_opaqueSortIndices) {
+						m_opaqueMeshSortScratch.push_back(
+							std::move(m_opaqueMeshList[index]));
+					}
+					m_opaqueMeshList.swap(m_opaqueMeshSortScratch);
+				}
+			}
+		}
+	}
 
-	if (camera_ptr) {
-		std::sort(m_transparentMeshList.begin(), m_transparentMeshList.end(),
-			[this](const MeshDrawItem& a, const MeshDrawItem& b) {
-				const glm::vec3 aDelta = camera_ptr->cameraPos - a.worldBoundsCenter;
-				const glm::vec3 bDelta = camera_ptr->cameraPos - b.worldBoundsCenter;
-				const float da = glm::dot(aDelta, aDelta);
-				const float db = glm::dot(bDelta, bDelta);
-				return da > db;
-			});
+	{
+		PERF_CPU_SCOPE("Transparent Draw Sorting");
+		if (camera_ptr) {
+			std::sort(m_transparentMeshList.begin(), m_transparentMeshList.end(),
+				[this](const MeshDrawItem& a, const MeshDrawItem& b) {
+					const glm::vec3 aDelta =
+						camera_ptr->cameraPos - a.worldBoundsCenter;
+					const glm::vec3 bDelta =
+						camera_ptr->cameraPos - b.worldBoundsCenter;
+					const float da = glm::dot(aDelta, aDelta);
+					const float db = glm::dot(bDelta, bDelta);
+					return da > db;
+				});
+		}
 	}
 
 	PerformanceProfiler::GetInstance().SetSceneSubmissionStats(
@@ -401,6 +515,182 @@ void Scene::BuildMeshDrawLists()
 		culledMeshCount,
 		m_opaqueMeshList.size(),
 		m_transparentMeshList.size());
+}
+
+void Scene::ProfileCollectionBreakdown()
+{
+	PERF_CPU_SCOPE("Collection Probe Total");
+	const auto& models = modelSource.GetModels();
+	const bool useFrustumCulling =
+		properties.FRUSTUM_CULLING && camera_ptr;
+	Frustum cameraFrustum;
+	if (useFrustumCulling) {
+		const float aspectRatio =
+			static_cast<float>(properties.SCREEN_WIDTH) /
+			static_cast<float>(
+				(std::max)(1, properties.SCREEN_HEIGHT));
+		cameraFrustum = BuildFrustum(
+			camera_ptr->GetProjectionMatrix(aspectRatio) *
+			camera_ptr->GetViewMatrix());
+	}
+
+	m_collectionProbeModels.clear();
+	m_collectionProbeModels.reserve(models.size());
+	{
+		PERF_CPU_SCOPE(
+			"Collection Probe Model Matrix Bounds Frustum");
+		for (const auto& model : models) {
+			if (!model || !model->GetAcitveStatus()) {
+				continue;
+			}
+			const glm::mat4 modelMatrix = model->getModelMatrix();
+			const glm::vec3 worldBoundsCenter = glm::vec3(
+				modelMatrix *
+				glm::vec4(model->GetLoacalCenter(), 1.0f));
+			const float worldBoundsRadius =
+				model->GetLocalBoundingRadius() *
+				GetMaximumWorldScale(modelMatrix);
+			if (useFrustumCulling &&
+				!cameraFrustum.IntersectsSphere(
+					worldBoundsCenter,
+					worldBoundsRadius)) {
+				continue;
+			}
+			m_collectionProbeModels.push_back({
+				model.get(),
+				modelMatrix,
+				worldBoundsCenter,
+				worldBoundsRadius });
+		}
+	}
+
+	{
+		PERF_CPU_SCOPE("Collection Probe Material Revision");
+		for (const ModelFrameItem& modelItem :
+			m_collectionProbeModels) {
+			if (modelItem.model) {
+				modelItem.model->RefreshMaterialDrivenState();
+			}
+		}
+	}
+
+	m_collectionProbePreparedItems.clear();
+	m_collectionProbePreparedItems.reserve(
+		m_collectionProbeModels.size());
+	{
+		PERF_CPU_SCOPE(
+			"Collection Probe Mesh Bounds Validation");
+		for (const ModelFrameItem& modelItem :
+			m_collectionProbeModels) {
+			Model* model = modelItem.model;
+			if (!model) {
+				continue;
+			}
+			auto shaderPtr = model->GetShader();
+			Shader* shader = shaderPtr.get();
+			if (!shader) {
+				continue;
+			}
+			auto appendPreparedItem = [&](
+				Mesh* mesh,
+				bool transparent) {
+				if (!mesh || !mesh->GetActiveStatus()) {
+					return;
+				}
+
+				const glm::vec3 localBoundsMin =
+					mesh->GetBoundsMin();
+				const glm::vec3 localBoundsMax =
+					mesh->GetBoundsMax();
+				const glm::vec3 localBoundsExtent =
+					(localBoundsMax - localBoundsMin) * 0.5f;
+				const glm::vec3 worldBoundsAxisX =
+					glm::vec3(modelItem.modelMatrix[0]) *
+					localBoundsExtent.x;
+				const glm::vec3 worldBoundsAxisY =
+					glm::vec3(modelItem.modelMatrix[1]) *
+					localBoundsExtent.y;
+				const glm::vec3 worldBoundsAxisZ =
+					glm::vec3(modelItem.modelMatrix[2]) *
+					localBoundsExtent.z;
+				glm::vec3 meshWorldCenter =
+					modelItem.worldBoundsCenter;
+				float meshWorldRadius =
+					modelItem.worldBoundsRadius;
+				TransformBoundsToSphere(
+					modelItem.modelMatrix,
+					localBoundsMin,
+					localBoundsMax,
+					meshWorldCenter,
+					meshWorldRadius);
+				const bool meshWorldBoundsValid =
+					IsFiniteMatrix(modelItem.modelMatrix) &&
+					IsFiniteVector(localBoundsMin) &&
+					IsFiniteVector(localBoundsMax) &&
+					localBoundsMin.x <= localBoundsMax.x &&
+					localBoundsMin.y <= localBoundsMax.y &&
+					localBoundsMin.z <= localBoundsMax.z &&
+					IsFiniteVector(meshWorldCenter) &&
+					IsFiniteVector(worldBoundsAxisX) &&
+					IsFiniteVector(worldBoundsAxisY) &&
+					IsFiniteVector(worldBoundsAxisZ) &&
+					std::isfinite(meshWorldRadius) &&
+					meshWorldRadius >= 0.0f;
+
+				CollectionProbePreparedItem prepared;
+				prepared.item.model = model;
+				prepared.item.mesh = mesh;
+				prepared.item.shader = shader;
+				prepared.item.modelMatrix =
+					modelItem.modelMatrix;
+				prepared.item.worldBoundsCenter =
+					meshWorldCenter;
+				prepared.item.worldBoundsAxisX =
+					worldBoundsAxisX;
+				prepared.item.worldBoundsAxisY =
+					worldBoundsAxisY;
+				prepared.item.worldBoundsAxisZ =
+					worldBoundsAxisZ;
+				prepared.item.worldBoundsValid =
+					meshWorldBoundsValid;
+				prepared.item.worldBoundsRadius =
+					meshWorldRadius;
+				prepared.transparent = transparent;
+				m_collectionProbePreparedItems.push_back(
+					std::move(prepared));
+			};
+
+			for (const auto& entry :
+				model->GetOpaqueMeshEntries()) {
+				appendPreparedItem(entry.mesh, false);
+			}
+			for (const auto& entry :
+				model->GetTransparentMeshEntries()) {
+				appendPreparedItem(entry.mesh, true);
+			}
+		}
+	}
+
+	{
+		PERF_CPU_SCOPE("Collection Probe DrawItem Write");
+		m_collectionProbeOpaqueItems.clear();
+		m_collectionProbeTransparentItems.clear();
+		m_collectionProbeOpaqueItems.reserve(
+			m_collectionProbePreparedItems.size());
+		m_collectionProbeTransparentItems.reserve(
+			m_collectionProbePreparedItems.size());
+		for (const CollectionProbePreparedItem& prepared :
+			m_collectionProbePreparedItems) {
+			if (prepared.transparent) {
+				m_collectionProbeTransparentItems.push_back(
+					prepared.item);
+			}
+			else {
+				m_collectionProbeOpaqueItems.push_back(
+					prepared.item);
+			}
+		}
+	}
 }
 
 void Scene::PrepareRenderData()
@@ -417,6 +707,62 @@ const std::vector<Scene::MeshDrawItem>& Scene::GetOpaqueMeshes() const
 const std::vector<Scene::MeshDrawItem>& Scene::GetTransparentMeshes() const
 {
 	return m_transparentMeshList;
+}
+
+const char* Scene::GetOpaqueSortModeName(OpaqueSortMode mode)
+{
+	switch (mode) {
+	case OpaqueSortMode::LegacyMapComparator:
+		return "legacy";
+	case OpaqueSortMode::KeyDirect:
+		return "key-direct";
+	case OpaqueSortMode::KeyIndex:
+		return "key-index";
+	default:
+		return "unknown";
+	}
+}
+
+std::uint64_t Scene::ComputeOpaqueSubmissionSignature() const
+{
+	constexpr std::uint64_t kFnvOffset = 14695981039346656037ull;
+	constexpr std::uint64_t kFnvPrime = 1099511628211ull;
+	std::uint64_t signature = kFnvOffset;
+	auto hashBytes = [&](const void* data, std::size_t size) {
+		const auto* bytes =
+			static_cast<const unsigned char*>(data);
+		for (std::size_t index = 0; index < size; ++index) {
+			signature ^= bytes[index];
+			signature *= kFnvPrime;
+		}
+	};
+
+	const std::uint64_t itemCount =
+		static_cast<std::uint64_t>(m_opaqueMeshList.size());
+	hashBytes(&itemCount, sizeof(itemCount));
+	for (const MeshDrawItem& item : m_opaqueMeshList) {
+		hashBytes(
+			&item.opaqueSortKey,
+			sizeof(item.opaqueSortKey));
+		const std::uint64_t drawCount = item.mesh
+			? static_cast<std::uint64_t>(
+				item.mesh->GetDrawCount())
+			: 0;
+		hashBytes(&drawCount, sizeof(drawCount));
+		for (int column = 0; column < 4; ++column) {
+			for (int row = 0; row < 4; ++row) {
+				std::uint32_t bits = 0;
+				const float value =
+					item.modelMatrix[column][row];
+				static_assert(
+					sizeof(bits) == sizeof(value),
+					"float signature assumes 32-bit float");
+				std::memcpy(&bits, &value, sizeof(bits));
+				hashBytes(&bits, sizeof(bits));
+			}
+		}
+	}
+	return signature;
 }
 
 unsigned int Scene::BindImageBasedLighting(Shader& shader, unsigned int firstTextureUnit) const
