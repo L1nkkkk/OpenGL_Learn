@@ -17,6 +17,8 @@
 #include <array>
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
+#include <cmath>
 #include <windows.h>
 #include <commdlg.h>
 
@@ -28,6 +30,8 @@
 #include "Model.h"
 #include "Profiler.h"
 #include "SceneStateIO.h"
+#include "EditorSceneManager.h"
+#include "EditorMotionTimeline.h"
 
 class MyGui {
 public:
@@ -54,11 +58,46 @@ public:
 		return false;
 	}
 
+	static bool PickSceneFileWithDialog(
+		std::string& outPath,
+		bool saveDialog)
+	{
+		char fileBuffer[4096] = { 0 };
+		std::error_code error;
+		const std::string initialDirectory =
+			std::filesystem::absolute("saved", error).string();
+
+		OPENFILENAMEA ofn = {};
+		ofn.lStructSize = sizeof(ofn);
+		ofn.lpstrFile = fileBuffer;
+		ofn.nMaxFile = static_cast<DWORD>(sizeof(fileBuffer));
+		ofn.lpstrFilter =
+			"OpenGL Learn Scene (*.json)\0*.json\0All Files (*.*)\0*.*\0";
+		ofn.nFilterIndex = 1;
+		ofn.lpstrDefExt = "json";
+		ofn.lpstrInitialDir =
+			error ? nullptr : initialDirectory.c_str();
+		ofn.Flags =
+			OFN_EXPLORER |
+			OFN_NOCHANGEDIR |
+			OFN_PATHMUSTEXIST;
+
+		const BOOL accepted = saveDialog
+			? (ofn.Flags |= OFN_OVERWRITEPROMPT, GetSaveFileNameA(&ofn))
+			: (ofn.Flags |= OFN_FILEMUSTEXIST, GetOpenFileNameA(&ofn));
+		if (accepted == TRUE) {
+			outPath = fileBuffer;
+			return true;
+		}
+		return false;
+	}
+
 	void Init(GLFWwindow* window) {
 		IMGUI_CHECKVERSION();
 		ImGui::CreateContext();
 		ImGuiIO& io = ImGui::GetIO(); (void)io;
 		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+		LoadEditorFonts(io);
 		ApplyEditorStyle();
 		ImGui_ImplGlfw_InitForOpenGL(window, true);
 		ImGui_ImplOpenGL3_Init("#version 330 core");
@@ -92,14 +131,22 @@ public:
 		ImGui::Begin("MainDockSpace", nullptr, window_flags);
 		ImGui::PopStyleVar(3);
 
-		ImGuiID dockspace_id = ImGui::GetID("MainDockSpaceID");
+		DrawEditorToolbar();
+		ImGui::Separator();
+		ImGuiID dockspace_id = ImGui::GetID("MainDockSpaceID_2026");
+		BuildDefaultLayout(dockspace_id, m_requestLayoutReset);
+		m_requestLayoutReset = false;
 		ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f));
-		BuildDefaultLayout(dockspace_id);
 		ImGui::End();
 	}
 
 	void Begin() {
-		ImGui::Begin("Renderer");
+		m_rendererPanelVisible = ImGui::Begin("Renderer");
+		if (m_rendererPanelVisible) {
+			DrawPanelHeader(
+				"Renderer",
+				"Pipeline, shadow cache, post processing and render targets");
+		}
 	}
 
 	void End() {
@@ -137,32 +184,67 @@ public:
 		auto& shaderManager = ShaderManager::GetInstance();
 		auto& materialManager = XmlMaterialManager::GetInstance();
 
-		ImGui::Text("Viewport  %d x %d", properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
-		ImGui::Text("Auto Reload");
-		ImGui::SameLine();
-		ImGui::Checkbox("Shaders##auto_reload_shaders", &properties.AUTO_RELOAD_SHADERS);
-		ImGui::SameLine();
-		ImGui::Checkbox("Materials##auto_reload_materials", &properties.AUTO_RELOAD_MATERIALS);
+		DrawPanelHeader(
+			"Workspace",
+			"Project health, live reload and editor-wide actions");
 
-		if (ImGui::Button("Reload Shaders")) {
+		const float gap = ImGui::GetStyle().ItemSpacing.x;
+		const float cardWidth =
+			(std::max)(120.0f, (ImGui::GetContentRegionAvail().x - gap) * 0.5f);
+		const std::string viewportValue =
+			std::to_string(properties.SCREEN_WIDTH) + " x " +
+			std::to_string(properties.SCREEN_HEIGHT);
+		DrawMetricCard(
+			"overview_resolution",
+			"RENDER SIZE",
+			viewportValue.c_str(),
+			ImVec4(0.31f, 0.73f, 0.68f, 1.0f),
+			cardWidth);
+		ImGui::SameLine();
+		DrawMetricCard(
+			"overview_pipeline",
+			"ACTIVE PIPELINE",
+			properties.DEFER_RENDERING ? "Deferred" : "Forward",
+			ImVec4(0.45f, 0.62f, 0.95f, 1.0f),
+			cardWidth);
+
+		ImGui::Spacing();
+		ImGui::SeparatorText("Live Reload");
+		ImGui::Checkbox(
+			"Shaders##auto_reload_shaders",
+			&properties.AUTO_RELOAD_SHADERS);
+		ImGui::SameLine();
+		ImGui::Checkbox(
+			"Materials##auto_reload_materials",
+			&properties.AUTO_RELOAD_MATERIALS);
+
+		if (ImGui::Button("Reload shaders", ImVec2(140.0f, 0.0f))) {
 			shaderManager.ReloadAllShaders();
 		}
 		ImGui::SameLine();
-		if (ImGui::Button("Reload Materials")) {
+		if (ImGui::Button("Reload materials", ImVec2(140.0f, 0.0f))) {
 			materialManager.ReloadAllFiles();
 		}
 
-		ImGui::Separator();
-		ImGui::Text("Shader reloads: %d", shaderManager.GetReloadCount());
-		ImGui::TextColored(
-			shaderManager.WasLastReloadSuccessful() ? ImVec4(0.55f, 0.85f, 0.55f, 1.0f) : ImVec4(0.95f, 0.45f, 0.45f, 1.0f),
-			"%s",
-			shaderManager.GetLastReloadMessage().empty() ? "Shaders idle" : shaderManager.GetLastReloadMessage().c_str());
-		ImGui::Text("Material reloads: %d", materialManager.GetReloadCount());
-		ImGui::TextColored(
-			materialManager.WasLastReloadSuccessful() ? ImVec4(0.55f, 0.85f, 0.55f, 1.0f) : ImVec4(0.95f, 0.45f, 0.45f, 1.0f),
-			"%s",
-			materialManager.GetLastReloadMessage().empty() ? "Materials idle" : materialManager.GetLastReloadMessage().c_str());
+		ImGui::Spacing();
+		ImGui::SeparatorText("Status");
+		DrawStatusRow(
+			"Shaders",
+			shaderManager.WasLastReloadSuccessful(),
+			shaderManager.GetLastReloadMessage().empty()
+				? "Idle"
+				: shaderManager.GetLastReloadMessage().c_str(),
+			shaderManager.GetReloadCount());
+		DrawStatusRow(
+			"Materials",
+			materialManager.WasLastReloadSuccessful(),
+			materialManager.GetLastReloadMessage().empty()
+				? "Idle"
+				: materialManager.GetLastReloadMessage().c_str(),
+			materialManager.GetReloadCount());
+		ImGui::TextDisabled(
+			"UI font: %s",
+			m_editorFontDescription.c_str());
 
 		ImGui::End();
 	}
@@ -173,9 +255,12 @@ public:
 			return;
 		}
 
+		DrawPanelHeader(
+			"Profiler",
+			"Frame pacing, render submission and memory diagnostics");
 		auto& profiler = PerformanceProfiler::GetInstance();
 		bool enabled = profiler.IsEnabled();
-		if (ImGui::Checkbox("Capture enabled", &enabled)) {
+		if (ImGui::Checkbox("Capture", &enabled)) {
 			profiler.SetEnabled(enabled);
 		}
 
@@ -193,7 +278,7 @@ public:
 		}
 
 		ImGui::SameLine();
-		if (ImGui::Button("Reset stats")) {
+		if (ImGui::Button("Reset")) {
 			profiler.ResetStatistics();
 		}
 
@@ -202,168 +287,242 @@ public:
 			? 1000.0 / summary.averageCpuFrameMs
 			: 0.0;
 
-		ImGui::Separator();
-		ImGui::Text("CPU Frame: %.3f ms   Average: %.3f ms (%.1f FPS)",
-			summary.cpuFrameMs,
-			summary.averageCpuFrameMs,
-			averageFps);
-		ImGui::Text("CPU P95: %.3f ms   P99: %.3f ms",
-			summary.cpuP95Ms,
-			summary.cpuP99Ms);
-		if (profiler.IsGpuTimingSupported()) {
-			ImGui::Text("GPU Frame: %.3f ms   Average: %.3f ms",
-				summary.gpuFrameMs,
-				summary.averageGpuFrameMs);
-		}
-
-		const auto& cpuHistory = profiler.GetCpuFrameHistory();
-		if (!cpuHistory.empty()) {
-			float maxValue = 16.67f;
-			for (float value : cpuHistory) {
-				maxValue = (std::max)(maxValue, value);
-			}
-			ImGui::PlotLines(
-				"CPU frame history",
-				cpuHistory.data(),
-				static_cast<int>(cpuHistory.size()),
-				0,
-				nullptr,
-				0.0f,
-				maxValue * 1.15f,
-				ImVec2(-1.0f, 70.0f));
-		}
-
-		const auto& gpuHistory = profiler.GetGpuFrameHistory();
-		if (!gpuHistory.empty()) {
-			float maxValue = 16.67f;
-			for (float value : gpuHistory) {
-				maxValue = (std::max)(maxValue, value);
-			}
-			ImGui::PlotLines(
-				"GPU frame history",
-				gpuHistory.data(),
-				static_cast<int>(gpuHistory.size()),
-				0,
-				nullptr,
-				0.0f,
-				maxValue * 1.15f,
-				ImVec2(-1.0f, 70.0f));
-		}
-
 		auto drawZoneTable = [](const char* id, const std::vector<ProfilerZoneStats>& zones) {
 			if (zones.empty()) {
 				ImGui::TextDisabled("No samples yet.");
 				return;
 			}
 
-			ImGui::Columns(4, id, true);
-			ImGui::TextUnformatted("Zone");
-			ImGui::NextColumn();
-			ImGui::TextUnformatted("Latest");
-			ImGui::NextColumn();
-			ImGui::TextUnformatted("Average");
-			ImGui::NextColumn();
-			ImGui::TextUnformatted("Peak");
-			ImGui::NextColumn();
-			ImGui::Separator();
-
-			for (const auto& zone : zones) {
-				ImGui::TextUnformatted(zone.name.c_str());
-				ImGui::NextColumn();
-				ImGui::Text("%.3f ms", zone.latestMs);
-				ImGui::NextColumn();
-				ImGui::Text("%.3f ms", zone.averageMs);
-				ImGui::NextColumn();
-				ImGui::Text("%.3f ms", zone.peakMs);
-				ImGui::NextColumn();
+			const ImGuiTableFlags flags =
+				ImGuiTableFlags_BordersInnerH |
+				ImGuiTableFlags_RowBg |
+				ImGuiTableFlags_SizingStretchProp;
+			if (ImGui::BeginTable(id, 4, flags)) {
+				ImGui::TableSetupColumn("Zone", ImGuiTableColumnFlags_WidthStretch, 2.2f);
+				ImGui::TableSetupColumn("Latest");
+				ImGui::TableSetupColumn("Average");
+				ImGui::TableSetupColumn("Peak");
+				ImGui::TableHeadersRow();
+				for (const auto& zone : zones) {
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					ImGui::TextUnformatted(zone.name.c_str());
+					ImGui::TableSetColumnIndex(1);
+					ImGui::Text("%.3f ms", zone.latestMs);
+					ImGui::TableSetColumnIndex(2);
+					ImGui::Text("%.3f ms", zone.averageMs);
+					ImGui::TableSetColumnIndex(3);
+					ImGui::Text("%.3f ms", zone.peakMs);
+				}
+				ImGui::EndTable();
 			}
-			ImGui::Columns(1);
 		};
 
-		if (ImGui::CollapsingHeader("CPU Zones", ImGuiTreeNodeFlags_DefaultOpen)) {
-			drawZoneTable("cpu_profile_zones", profiler.GetCpuZoneStats());
+		char cpuValue[32] = {};
+		char gpuValue[32] = {};
+		char fpsValue[32] = {};
+		std::snprintf(cpuValue, sizeof(cpuValue), "%.2f ms", summary.cpuFrameMs);
+		if (profiler.IsGpuTimingSupported()) {
+			std::snprintf(
+				gpuValue,
+				sizeof(gpuValue),
+				"%.2f ms",
+				summary.gpuFrameMs);
 		}
-		if (ImGui::CollapsingHeader("GPU Zones", ImGuiTreeNodeFlags_DefaultOpen)) {
-			drawZoneTable("gpu_profile_zones", profiler.GetGpuZoneStats());
+		else {
+			std::snprintf(gpuValue, sizeof(gpuValue), "N/A");
 		}
+		std::snprintf(fpsValue, sizeof(fpsValue), "%.1f", averageFps);
+		const float metricGap = ImGui::GetStyle().ItemSpacing.x;
+		const float metricWidth =
+			(std::max)(
+				105.0f,
+				(ImGui::GetContentRegionAvail().x - metricGap * 2.0f) / 3.0f);
+		ImGui::Spacing();
+		DrawMetricCard(
+			"profiler_cpu",
+			"CPU FRAME",
+			cpuValue,
+			ImVec4(0.31f, 0.73f, 0.68f, 1.0f),
+			metricWidth);
+		ImGui::SameLine();
+		DrawMetricCard(
+			"profiler_gpu",
+			"GPU FRAME",
+			gpuValue,
+			ImVec4(0.45f, 0.62f, 0.95f, 1.0f),
+			metricWidth);
+		ImGui::SameLine();
+		DrawMetricCard(
+			"profiler_fps",
+			"AVERAGE FPS",
+			fpsValue,
+			ImVec4(0.91f, 0.72f, 0.33f, 1.0f),
+			metricWidth);
 
 		const auto& renderStats = profiler.GetRenderStats();
-		if (ImGui::CollapsingHeader("Render Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Text("Scene draw calls: %llu", static_cast<unsigned long long>(renderStats.drawCalls));
-			ImGui::Text("Submitted triangles: %llu", static_cast<unsigned long long>(renderStats.submittedTriangles));
-			ImGui::Text("Submitted vertices: %llu", static_cast<unsigned long long>(renderStats.submittedVertices));
-			ImGui::Text("Shader binds: %llu", static_cast<unsigned long long>(renderStats.shaderBinds));
-			ImGui::Text("Uniform updates: %llu", static_cast<unsigned long long>(renderStats.uniformUpdates));
-			ImGui::Text("Uniform location queries / cache hits: %llu / %llu",
-				static_cast<unsigned long long>(renderStats.uniformLocationQueries),
-				static_cast<unsigned long long>(renderStats.uniformLocationCacheHits));
-			ImGui::Text("Material binds / cache hits: %llu / %llu",
-				static_cast<unsigned long long>(renderStats.materialBinds),
-				static_cast<unsigned long long>(renderStats.materialBindCacheHits));
-			ImGui::Text("Render state changes / cache hits: %llu / %llu",
-				static_cast<unsigned long long>(renderStats.renderStateChanges),
-				static_cast<unsigned long long>(renderStats.renderStateCacheHits));
-			ImGui::Text("Render state driver queries: %llu",
-				static_cast<unsigned long long>(renderStats.renderStateQueries));
-			ImGui::Text("Texture state changes / cache hits: %llu / %llu",
-				static_cast<unsigned long long>(renderStats.textureStateChanges),
-				static_cast<unsigned long long>(renderStats.textureStateCacheHits));
-			ImGui::Text("VAO binds / cache hits: %llu / %llu",
-				static_cast<unsigned long long>(renderStats.vertexArrayBinds),
-				static_cast<unsigned long long>(renderStats.vertexArrayBindCacheHits));
-			ImGui::Text("Framebuffer binds / cache hits: %llu / %llu",
-				static_cast<unsigned long long>(renderStats.framebufferBinds),
-				static_cast<unsigned long long>(renderStats.framebufferBindCacheHits));
-			ImGui::Text("Filesystem checks: %llu", static_cast<unsigned long long>(renderStats.fileSystemChecks));
-			ImGui::Text("Asset browser cache hits / misses: %llu / %llu",
-				static_cast<unsigned long long>(renderStats.assetBrowserCacheHits),
-				static_cast<unsigned long long>(renderStats.assetBrowserCacheMisses));
-			ImGui::Text("Models: %llu active / %llu visible / %llu culled",
-				static_cast<unsigned long long>(renderStats.activeModels),
-				static_cast<unsigned long long>(renderStats.visibleModels),
-				static_cast<unsigned long long>(renderStats.culledModels));
-			ImGui::Text("Meshes: %llu opaque / %llu transparent",
-				static_cast<unsigned long long>(renderStats.opaqueMeshes),
-				static_cast<unsigned long long>(renderStats.transparentMeshes));
-			ImGui::Text("Frustum-culled meshes: %llu",
-				static_cast<unsigned long long>(renderStats.culledMeshes));
-			ImGui::Text("ImGui draw calls: %llu", static_cast<unsigned long long>(renderStats.uiDrawCalls));
-			ImGui::Text("ImGui vertices / indices: %llu / %llu",
-				static_cast<unsigned long long>(renderStats.uiVertices),
-				static_cast<unsigned long long>(renderStats.uiIndices));
-		}
-
-		if (ImGui::CollapsingHeader("Memory Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
-			const auto& memoryStats = profiler.GetMemoryStats();
-			constexpr double kBytesPerMiB = 1024.0 * 1024.0;
-			ImGui::Text("Process working set: %.2f MiB",
-				static_cast<double>(memoryStats.processWorkingSetBytes) / kBytesPerMiB);
-			ImGui::Text("Process private bytes: %.2f MiB",
-				static_cast<double>(memoryStats.processPrivateBytes) / kBytesPerMiB);
-
-			static const char* categoryNames[] = {
-				"Textures",
-				"Mesh CPU",
-				"Mesh GPU",
-				"Render targets"
-			};
-			ImGui::Columns(4, "memory_categories", true);
-			ImGui::TextUnformatted("Category"); ImGui::NextColumn();
-			ImGui::TextUnformatted("Current"); ImGui::NextColumn();
-			ImGui::TextUnformatted("Peak"); ImGui::NextColumn();
-			ImGui::TextUnformatted("Resources"); ImGui::NextColumn();
-			ImGui::Separator();
-			for (std::size_t i = 0; i < memoryStats.categories.size(); ++i) {
-				const auto& category = memoryStats.categories[i];
-				ImGui::TextUnformatted(categoryNames[i]); ImGui::NextColumn();
-				ImGui::Text("%.2f MiB", static_cast<double>(category.currentBytes) / kBytesPerMiB); ImGui::NextColumn();
-				ImGui::Text("%.2f MiB", static_cast<double>(category.peakBytes) / kBytesPerMiB); ImGui::NextColumn();
-				ImGui::Text("%llu", static_cast<unsigned long long>(category.resourceCount)); ImGui::NextColumn();
+		if (ImGui::BeginTabBar("##profiler_tabs")) {
+			if (ImGui::BeginTabItem("Frame")) {
+				const auto& cpuHistory = profiler.GetCpuFrameHistory();
+				if (!cpuHistory.empty()) {
+					const float maxValue =
+						(std::max)(16.67f, *std::max_element(
+							cpuHistory.begin(), cpuHistory.end()));
+					ImGui::PlotLines(
+						"CPU frame",
+						cpuHistory.data(),
+						static_cast<int>(cpuHistory.size()),
+						0,
+						nullptr,
+						0.0f,
+						maxValue * 1.15f,
+						ImVec2(-1.0f, 82.0f));
+				}
+				const auto& gpuHistory = profiler.GetGpuFrameHistory();
+				if (!gpuHistory.empty()) {
+					const float maxValue =
+						(std::max)(16.67f, *std::max_element(
+							gpuHistory.begin(), gpuHistory.end()));
+					ImGui::PlotLines(
+						"GPU frame",
+						gpuHistory.data(),
+						static_cast<int>(gpuHistory.size()),
+						0,
+						nullptr,
+						0.0f,
+						maxValue * 1.15f,
+						ImVec2(-1.0f, 82.0f));
+				}
+				ImGui::TextDisabled(
+					"CPU average %.3f ms  |  P95 %.3f ms  |  P99 %.3f ms",
+					summary.averageCpuFrameMs,
+					summary.cpuP95Ms,
+					summary.cpuP99Ms);
+				ImGui::EndTabItem();
 			}
-			ImGui::Columns(1);
-			ImGui::Text("Texture cache hits / misses: %llu / %llu",
-				static_cast<unsigned long long>(memoryStats.textureCacheHits),
-				static_cast<unsigned long long>(memoryStats.textureCacheMisses));
+			if (ImGui::BeginTabItem("Zones")) {
+				ImGui::SeparatorText("CPU");
+				drawZoneTable("cpu_profile_zones", profiler.GetCpuZoneStats());
+				ImGui::SeparatorText("GPU");
+				drawZoneTable("gpu_profile_zones", profiler.GetGpuZoneStats());
+				ImGui::EndTabItem();
+			}
+			if (ImGui::BeginTabItem("Render")) {
+				if (ImGui::BeginTable(
+					"render_stats",
+					2,
+					ImGuiTableFlags_RowBg |
+						ImGuiTableFlags_BordersInnerH |
+						ImGuiTableFlags_SizingStretchProp)) {
+					auto row = [](const char* label, const char* value) {
+						ImGui::TableNextRow();
+						ImGui::TableSetColumnIndex(0);
+						ImGui::TextDisabled("%s", label);
+						ImGui::TableSetColumnIndex(1);
+						ImGui::TextUnformatted(value);
+					};
+					char value[128] = {};
+					std::snprintf(value, sizeof(value), "%llu",
+						static_cast<unsigned long long>(renderStats.drawCalls));
+					row("Scene draw calls", value);
+					std::snprintf(value, sizeof(value), "%llu",
+						static_cast<unsigned long long>(renderStats.submittedTriangles));
+					row("Submitted triangles", value);
+					std::snprintf(value, sizeof(value), "%llu / %llu / %llu",
+						static_cast<unsigned long long>(renderStats.activeModels),
+						static_cast<unsigned long long>(renderStats.visibleModels),
+						static_cast<unsigned long long>(renderStats.culledModels));
+					row("Models active / visible / culled", value);
+					std::snprintf(value, sizeof(value), "%llu / %llu",
+						static_cast<unsigned long long>(renderStats.opaqueMeshes),
+						static_cast<unsigned long long>(renderStats.transparentMeshes));
+					row("Meshes opaque / transparent", value);
+					std::snprintf(value, sizeof(value), "%llu / %llu",
+						static_cast<unsigned long long>(renderStats.materialBinds),
+						static_cast<unsigned long long>(renderStats.materialBindCacheHits));
+					row("Material binds / cache hits", value);
+					std::snprintf(value, sizeof(value), "%llu / %llu",
+						static_cast<unsigned long long>(renderStats.renderStateChanges),
+						static_cast<unsigned long long>(renderStats.renderStateCacheHits));
+					row("Render state changes / cache hits", value);
+					std::snprintf(value, sizeof(value), "%llu / %llu",
+						static_cast<unsigned long long>(renderStats.textureStateChanges),
+						static_cast<unsigned long long>(renderStats.textureStateCacheHits));
+					row("Texture changes / cache hits", value);
+					std::snprintf(value, sizeof(value), "%llu / %llu",
+						static_cast<unsigned long long>(renderStats.framebufferBinds),
+						static_cast<unsigned long long>(renderStats.framebufferBindCacheHits));
+					row("Framebuffer binds / cache hits", value);
+					std::snprintf(value, sizeof(value), "%llu",
+						static_cast<unsigned long long>(renderStats.uiDrawCalls));
+					row("ImGui draw calls", value);
+					ImGui::EndTable();
+				}
+				ImGui::EndTabItem();
+			}
+			if (ImGui::BeginTabItem("Memory")) {
+				const auto& memoryStats = profiler.GetMemoryStats();
+				constexpr double kBytesPerMiB = 1024.0 * 1024.0;
+				ImGui::Text(
+					"Working set  %.2f MiB",
+					static_cast<double>(
+						memoryStats.processWorkingSetBytes) / kBytesPerMiB);
+				ImGui::SameLine();
+				ImGui::TextDisabled(
+					"Private  %.2f MiB",
+					static_cast<double>(
+						memoryStats.processPrivateBytes) / kBytesPerMiB);
+				static const char* categoryNames[] = {
+					"Textures",
+					"Mesh CPU",
+					"Mesh GPU",
+					"Render targets"
+				};
+				if (ImGui::BeginTable(
+					"memory_categories",
+					4,
+					ImGuiTableFlags_RowBg |
+						ImGuiTableFlags_BordersInnerH |
+						ImGuiTableFlags_SizingStretchProp)) {
+					ImGui::TableSetupColumn("Category");
+					ImGui::TableSetupColumn("Current");
+					ImGui::TableSetupColumn("Peak");
+					ImGui::TableSetupColumn("Resources");
+					ImGui::TableHeadersRow();
+					for (std::size_t i = 0;
+						i < memoryStats.categories.size();
+						++i) {
+						const auto& category = memoryStats.categories[i];
+						ImGui::TableNextRow();
+						ImGui::TableSetColumnIndex(0);
+						ImGui::TextUnformatted(categoryNames[i]);
+						ImGui::TableSetColumnIndex(1);
+						ImGui::Text(
+							"%.2f MiB",
+							static_cast<double>(
+								category.currentBytes) / kBytesPerMiB);
+						ImGui::TableSetColumnIndex(2);
+						ImGui::Text(
+							"%.2f MiB",
+							static_cast<double>(
+								category.peakBytes) / kBytesPerMiB);
+						ImGui::TableSetColumnIndex(3);
+						ImGui::Text(
+							"%llu",
+							static_cast<unsigned long long>(
+								category.resourceCount));
+					}
+					ImGui::EndTable();
+				}
+				ImGui::TextDisabled(
+					"Texture cache hits / misses: %llu / %llu",
+					static_cast<unsigned long long>(
+						memoryStats.textureCacheHits),
+					static_cast<unsigned long long>(
+						memoryStats.textureCacheMisses));
+				ImGui::EndTabItem();
+			}
+			ImGui::EndTabBar();
 		}
 
 		ImGui::End();
@@ -429,10 +588,16 @@ public:
 	}
 
 	void Anti_Aliasing_UI() {
+		if (!m_rendererPanelVisible ||
+			!ImGui::CollapsingHeader("Anti-aliasing")) {
+			return;
+		}
 		AntiAliasManager& AnitAliasMgr = AntiAliasManager::GetInstance();
 		static int selectedOptionAA = 0;
 		int optionAACount = sizeof(AntiAliasManager::optionsAA) / sizeof(AntiAliasManager::optionsAA[0]);
-		if (ImGui::Combo("Anti-aliasing", &selectedOptionAA, AntiAliasManager::optionsAA, optionAACount)) {
+		ImGui::TextDisabled(
+			"Window-level multisampling. Restart may be required for format changes.");
+		if (ImGui::Combo("Mode##anti_aliasing", &selectedOptionAA, AntiAliasManager::optionsAA, optionAACount)) {
 			switch (selectedOptionAA) {
 			case AntiAliasManager::Default:
 				AnitAliasMgr.AntiAliasByType(AntiAliasManager::Default);
@@ -445,6 +610,9 @@ public:
 	}
 
 	void System_UI() {
+		if (!m_rendererPanelVisible) {
+			return;
+		}
 		if (SceneStateIO::HasPendingAsyncLoads()) {
 			const int pending = SceneStateIO::GetPendingAsyncLoadCount();
 			const int total = SceneStateIO::GetTotalAsyncLoadCount();
@@ -453,58 +621,162 @@ public:
 			ImGui::ProgressBar(total > 0 ? (float)done / (float)total : 0.0f, ImVec2(-1.0f, 0.0f));
 			ImGui::Separator();
 		}
-		ImGui::Checkbox("Auto Reload Shaders", &properties.AUTO_RELOAD_SHADERS);
-		ImGui::Checkbox("Auto Reload Materials", &properties.AUTO_RELOAD_MATERIALS);
-		ImGui::DragFloat("Hot Reload Poll Interval", &properties.HOT_RELOAD_POLL_INTERVAL, 0.05f, 0.05f, 2.0f, "%.2f s");
-		ImGui::Checkbox("Defer Rendering", &properties.DEFER_RENDERING);
-		ImGui::Checkbox("Frustum Culling", &properties.FRUSTUM_CULLING);
-		if (!properties.DEFER_RENDERING) {
-			ImGui::Checkbox("Forward Normal Buffer", &properties.FORWARD_NORMAL_BUFFER);
-		}
-		if (properties.DEFER_RENDERING) {
-			ImGui::Checkbox("SSAO", &properties.SSAO);
-			if (properties.SSAO) {
-				ImGui::Indent();
-				ImGui::DragFloat("SSAO radius", &properties.SSAO_RADIUS, 0.01f, 0.05f, 2.0f, "%.3f");
-				ImGui::DragFloat("SSAO bias", &properties.SSAO_BIAS, 0.001f, 0.0f, 0.2f, "%.4f");
-				ImGui::DragInt("SSAO kernel", &properties.SSAO_KERNEL_SIZE, 1.0f, 8, 64);
-				ImGui::Unindent();
+		if (ImGui::CollapsingHeader(
+			"Render Pipeline",
+			ImGuiTreeNodeFlags_DefaultOpen)) {
+			ImGui::TextDisabled(
+				"Choose the lighting path and submission behavior.");
+			const float buttonGap = ImGui::GetStyle().ItemSpacing.x;
+			const float buttonWidth =
+				(ImGui::GetContentRegionAvail().x - buttonGap) * 0.5f;
+			DrawSelectionButton(
+				"Forward",
+				!properties.DEFER_RENDERING,
+				ImVec2(buttonWidth, 32.0f));
+			if (ImGui::IsItemClicked()) {
+				properties.DEFER_RENDERING = false;
 			}
-			ImGui::Checkbox("Light Volume", &properties.LIGHT_VOLUME);
-			if (properties.LIGHT_VOLUME) {
-				ImGui::Indent();
-				ImGui::DragFloat("Light volume radius scale", &properties.LIGHT_VOLUME_RADIUS_SCALE, 0.02f, 0.1f, 8.0f, "%.2f");
-				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-					ImGui::SetTooltip("Scales the stencil sphere radius after attenuation-based solve.");
+			ImGui::SameLine();
+			DrawSelectionButton(
+				"Deferred",
+				properties.DEFER_RENDERING,
+				ImVec2(buttonWidth, 32.0f));
+			if (ImGui::IsItemClicked()) {
+				properties.DEFER_RENDERING = true;
+			}
+
+			ImGui::Checkbox("Frustum culling", &properties.FRUSTUM_CULLING);
+			if (!properties.DEFER_RENDERING) {
+				ImGui::Checkbox(
+					"Forward normal buffer",
+					&properties.FORWARD_NORMAL_BUFFER);
+			}
+			else {
+				ImGui::Checkbox("SSAO", &properties.SSAO);
+				if (properties.SSAO) {
+					ImGui::Indent();
+					ImGui::DragFloat(
+						"Radius##ssao",
+						&properties.SSAO_RADIUS,
+						0.01f,
+						0.05f,
+						2.0f,
+						"%.3f");
+					ImGui::DragFloat(
+						"Bias##ssao",
+						&properties.SSAO_BIAS,
+						0.001f,
+						0.0f,
+						0.2f,
+						"%.4f");
+					ImGui::DragInt(
+						"Kernel##ssao",
+						&properties.SSAO_KERNEL_SIZE,
+						1.0f,
+						8,
+						64);
+					ImGui::Unindent();
 				}
-				ImGui::DragFloat("Light volume cutoff scale", &properties.LIGHT_VOLUME_CUTOFF_SCALE, 0.02f, 0.05f, 20.0f, "%.2f");
-				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-					ImGui::SetTooltip("Higher = tighter cutoff vs diffuse intensity (smaller effective volume).");
+				ImGui::Checkbox("Light volumes", &properties.LIGHT_VOLUME);
+				if (properties.LIGHT_VOLUME) {
+					ImGui::Indent();
+					ImGui::DragFloat(
+						"Radius scale##light_volume",
+						&properties.LIGHT_VOLUME_RADIUS_SCALE,
+						0.02f,
+						0.1f,
+						8.0f,
+						"%.2f");
+					ImGui::DragFloat(
+						"Cutoff scale##light_volume",
+						&properties.LIGHT_VOLUME_CUTOFF_SCALE,
+						0.02f,
+						0.05f,
+						20.0f,
+						"%.2f");
+					ImGui::Unindent();
 				}
-				ImGui::Unindent();
 			}
 		}
-		ImGui::Checkbox("Debug Mode", &properties.DEBUG_MODE);
+
+		if (ImGui::CollapsingHeader("Editor & Hot Reload")) {
+			ImGui::Checkbox(
+				"Auto reload shaders",
+				&properties.AUTO_RELOAD_SHADERS);
+			ImGui::Checkbox(
+				"Auto reload materials",
+				&properties.AUTO_RELOAD_MATERIALS);
+			ImGui::DragFloat(
+				"Poll interval",
+				&properties.HOT_RELOAD_POLL_INTERVAL,
+				0.05f,
+				0.05f,
+				2.0f,
+				"%.2f s");
+			ImGui::Checkbox("Debug mode", &properties.DEBUG_MODE);
+		}
 	}
 
 	void Gamma_UI() {
-		ImGui::Checkbox("HDR", &properties.USE_HDR);
-		if (properties.USE_HDR) {
-			ImGui::DragFloat("hdr exposure", &properties.HDR_EXPOSURE, 0.00f, 0.01f, 100.0f, "%.2f");
+		if (!m_rendererPanelVisible ||
+			!ImGui::CollapsingHeader(
+				"Post Processing",
+				ImGuiTreeNodeFlags_DefaultOpen)) {
+			return;
 		}
-		ImGui::Checkbox("gammaCorrection", &properties.GAMMA_CORRECTION);
+		ImGui::Checkbox("HDR output", &properties.USE_HDR);
+		if (properties.USE_HDR) {
+			ImGui::DragFloat(
+				"Exposure",
+				&properties.HDR_EXPOSURE,
+				0.01f,
+				0.01f,
+				100.0f,
+				"%.2f");
+		}
+		ImGui::Checkbox(
+			"Gamma correction",
+			&properties.GAMMA_CORRECTION);
 		if (properties.GAMMA_CORRECTION) {
-			ImGui::DragFloat("gamma Value", &properties.GAMMA_VALUE, 0.01f, 1.0f, 2.6f, "%.2f");
+			ImGui::DragFloat(
+				"Gamma",
+				&properties.GAMMA_VALUE,
+				0.01f,
+				1.0f,
+				2.6f,
+				"%.2f");
 		}
 		ImGui::Checkbox("Bloom", &properties.BLOOM);
-		ImGui::DragFloat("bloom threshold", &properties.BLOOM_THRESHOLD, 0.01f, 0.0f, 10.0f, "%.2f");
-		ImGui::DragInt("bloom blur iterations", &properties.BLOOM_BLUR_ITERATIONS, 1.0f, 1, 20);
+		if (properties.BLOOM) {
+			ImGui::Indent();
+			ImGui::DragFloat(
+				"Threshold##bloom",
+				&properties.BLOOM_THRESHOLD,
+				0.01f,
+				0.0f,
+				10.0f,
+				"%.2f");
+			ImGui::DragInt(
+				"Blur iterations##bloom",
+				&properties.BLOOM_BLUR_ITERATIONS,
+				1.0f,
+				1,
+				20);
+			ImGui::Unindent();
+		}
 	}
 
 	// Scene 面板：可单独停靠到 DockSpace 中
-	void Scene_UI(Scene& scene) {
+	void Scene_UI(
+		Scene& scene,
+		Camera& camera,
+		EditorSceneManager& sceneManager)
+	{
 		if (ImGui::Begin("Scene")) {
+			DrawSceneBrowserContent(scene, camera, sceneManager);
+			ImGui::Separator();
 			scene.SetSceneGui();
+			DrawSceneReplacementPopup(scene, camera, sceneManager);
 		}
 		ImGui::End();
 	}
@@ -655,10 +927,16 @@ public:
 	}
 
 	void Framebuffers_UI() {
+		if (!m_rendererPanelVisible ||
+			!ImGui::CollapsingHeader("Render Target Debug")) {
+			return;
+		}
 		auto& framebuffersMgr = FramebuffersManager::GetInstance();
 		static int selectedOption = FBO::Default_FrameRenderType;
 		int optionCount = sizeof(FBO::optionFrame) / sizeof(FBO::optionFrame[0]);
-		if (ImGui::Combo("FrameType", &selectedOption, FBO::optionFrame, optionCount)) {
+		ImGui::TextDisabled(
+			"Inspect intermediate color and depth attachments in the viewport.");
+		if (ImGui::Combo("Display type", &selectedOption, FBO::optionFrame, optionCount)) {
 			switch (selectedOption) {
 			case FBO::FrameRenderType::Default_FrameRenderType:
 				framebuffersMgr.useType = FBO::FrameRenderType::Default_FrameRenderType;
@@ -726,25 +1004,77 @@ public:
 	}
 
 	void Shadow_UI() {
-		static int selectedOption = ShadowProperty::Default;
+		if (!m_rendererPanelVisible ||
+			!ImGui::CollapsingHeader(
+				"Shadows & Cache",
+				ImGuiTreeNodeFlags_DefaultOpen)) {
+			return;
+		}
+		int selectedOption = static_cast<int>(properties.SHADOW_TYPE);
 		int optionCount = sizeof(ShadowProperty::ShadowTypeStrs) / sizeof(ShadowProperty::ShadowTypeStrs[0]);
-		if (ImGui::CollapsingHeader("Shadow Settings")) {
-			if (ImGui::Combo("ShadowType", &selectedOption, ShadowProperty::ShadowTypeStrs, optionCount)) {
-				switch (selectedOption) {
-				case ShadowProperty::Default:
-					properties.SHADOW_TYPE = ShadowProperty::Default;
-					break;
-				case ShadowProperty::PCF:
-					properties.SHADOW_TYPE = ShadowProperty::PCF;
-					break;
-				case ShadowProperty::PCSS:
-					properties.SHADOW_TYPE = ShadowProperty::PCSS;
-					break;
-				}
+		if (ImGui::Combo(
+			"Filter",
+			&selectedOption,
+			ShadowProperty::ShadowTypeStrs,
+			optionCount)) {
+			switch (selectedOption) {
+			case ShadowProperty::Default:
+				properties.SHADOW_TYPE = ShadowProperty::Default;
+				break;
+			case ShadowProperty::PCF:
+				properties.SHADOW_TYPE = ShadowProperty::PCF;
+				break;
+			case ShadowProperty::PCSS:
+				properties.SHADOW_TYPE = ShadowProperty::PCSS;
+				break;
 			}
 		}
-		ImGui::DragInt("shadow samples", &properties.SHADOW_PCF_SAMPLE_NUM, 1.0, 16, 512);
-		ImGui::DragInt("shadow rings", &properties.SHADOW_PCF_RING_NUM, 1.0, 5, 20);
+		ImGui::DragInt(
+			"Filter samples",
+			&properties.SHADOW_PCF_SAMPLE_NUM,
+			1.0f,
+			1,
+			64);
+
+		bool cacheEnabled = !properties.SHADOW_CACHE_DISABLED;
+		if (ImGui::Checkbox("Shadow cache enabled", &cacheEnabled)) {
+			properties.SHADOW_CACHE_DISABLED = !cacheEnabled;
+		}
+		ImGui::BeginDisabled(!cacheEnabled);
+		ImGui::Checkbox(
+			"Per-light dirty cache",
+			&properties.SHADOW_PER_LIGHT_CACHE);
+		ImGui::BeginDisabled(!properties.SHADOW_PER_LIGHT_CACHE);
+		ImGui::Checkbox(
+			"Spatial caster cache",
+			&properties.SHADOW_SPATIAL_CASTER_CACHE);
+		ImGui::Checkbox(
+			"Point per-face cache",
+			&properties.POINT_SHADOW_PER_FACE_CACHE);
+		ImGui::BeginDisabled(
+			!properties.POINT_SHADOW_PER_FACE_CACHE);
+		ImGui::Checkbox(
+			"Force all Point faces (audit)",
+			&properties.POINT_SHADOW_FORCE_ALL_FACES_REQUIRED);
+		ImGui::EndDisabled();
+		ImGui::EndDisabled();
+		ImGui::EndDisabled();
+		const ImVec4 cacheColor =
+			cacheEnabled && properties.SHADOW_PER_LIGHT_CACHE
+				? ImVec4(0.31f, 0.78f, 0.59f, 1.0f)
+				: ImVec4(0.91f, 0.60f, 0.30f, 1.0f);
+		ImGui::TextColored(
+			cacheColor,
+			"%s",
+			!cacheEnabled
+				? "CACHE BYPASSED"
+				: (properties.SHADOW_PER_LIGHT_CACHE
+					? (properties.POINT_SHADOW_PER_FACE_CACHE
+						? "PER-LIGHT + POINT FACE CACHE"
+						: "PER-LIGHT REVISION CACHE")
+					: "GLOBAL REVISION CACHE"));
+		ImGui::TextDisabled(
+			"Sampling: stable Vogel disk. Timeline panel shows hit/update decisions.");
 	}
 
 	// 绘制单个材质的 Shader / Render State / Properties（供 Materials Inspector 与 Model Materials 共用）
@@ -827,7 +1157,8 @@ public:
 							Texture newTex{};
 							newTex.type = tex.type;
 							newTex.path = file.c_str();
-							const bool srgb = tex.type == "texture_diffuse" || tex.type == "albedo" || tex.type == "baseColor";
+							const bool srgb = tex.type == "texture_diffuse" || tex.type == "albedo" ||
+								tex.type == "baseColor" || tex.type == "texture_emissive";
 							newTex.textureID = TextureFromFile(file.c_str(), dir, false, srgb);
 							newTex.textureGammaID = newTex.textureID;
 							tex = newTex;
@@ -1132,12 +1463,988 @@ public:
 	}
 
 	// 旧的独立 Viewport 窗口保留为兼容（UnityLayout 会用内嵌 ViewportContent）
+	void UpdateMotionTimelinePreview(
+		Scene& scene,
+		Camera& camera,
+		float deltaSeconds)
+	{
+		m_motionTimeline.Update(scene, camera, deltaSeconds);
+	}
+
+	void RecordMotionTimelineTelemetry(const Scene& scene)
+	{
+		m_motionTimeline.RecordAfterRender(scene);
+	}
+
+	bool IsMotionTimelinePlaying() const
+	{
+		return m_motionTimeline.IsPlaying();
+	}
+
+	void RestoreTemporaryEditorState(Scene& scene, Camera& camera)
+	{
+		if (m_motionTimeline.IsThreeLightTestRigActive()) {
+			m_motionTimeline.RestoreThreeLightTestRig(scene, camera);
+		}
+		else if (m_motionTimeline.IsCaptured()) {
+			m_motionTimeline.StopAndRestore(scene, camera);
+		}
+	}
+
+	void MotionTimeline_UI(Scene& scene, Camera& camera)
+	{
+		if (!ImGui::Begin("Motion Timeline")) {
+			ImGui::End();
+			return;
+		}
+
+		ImGui::TextColored(
+			ImVec4(0.88f, 0.91f, 0.95f, 1.0f),
+			"Motion Timeline");
+		ImGui::SameLine();
+		ImGui::TextDisabled(
+			"Deterministic preview for per-light shadow-cache workloads");
+		ImGui::Separator();
+
+		const BenchmarkMotionProfile profile =
+			m_motionTimeline.GetProfile();
+		const std::uint32_t trackMask =
+			BenchmarkMotionTimeline::TrackMask(profile);
+		DrawTrackBadge(
+			"POINT LIGHT",
+			BenchmarkMotionTimeline::HasTrack(
+				trackMask,
+				BenchmarkMotionTrack::Point),
+			ImVec4(0.93f, 0.68f, 0.30f, 1.0f));
+		ImGui::SameLine();
+		DrawTrackBadge(
+			"CASTER",
+			BenchmarkMotionTimeline::HasTrack(
+				trackMask,
+				BenchmarkMotionTrack::Caster),
+			ImVec4(0.38f, 0.78f, 0.61f, 1.0f));
+		ImGui::SameLine();
+		DrawTrackBadge(
+			"CAMERA",
+			BenchmarkMotionTimeline::HasTrack(
+				trackMask,
+				BenchmarkMotionTrack::Camera),
+			ImVec4(0.48f, 0.64f, 0.96f, 1.0f));
+
+		ImGui::SameLine();
+		const bool captured = m_motionTimeline.IsCaptured();
+		const bool playing = m_motionTimeline.IsPlaying();
+		ImGui::TextColored(
+			playing
+				? ImVec4(0.38f, 0.82f, 0.62f, 1.0f)
+				: (captured
+					? ImVec4(0.93f, 0.72f, 0.34f, 1.0f)
+					: ImVec4(0.52f, 0.56f, 0.62f, 1.0f)),
+			"  %s",
+			playing ? "PLAYING" : (captured ? "READY" : "NOT CAPTURED"));
+
+		ImGui::Spacing();
+		if (ImGui::BeginTable(
+			"motion_timeline_layout",
+			2,
+			ImGuiTableFlags_Resizable |
+				ImGuiTableFlags_BordersInnerV |
+				ImGuiTableFlags_SizingStretchProp)) {
+			ImGui::TableSetupColumn(
+				"Controls",
+				ImGuiTableColumnFlags_WidthStretch,
+				0.85f);
+			ImGui::TableSetupColumn(
+				"Telemetry",
+				ImGuiTableColumnFlags_WidthStretch,
+				1.15f);
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+
+			ImGui::SeparatorText("Quick A/B/C Reproduction");
+			bool testRigActive =
+				m_motionTimeline.IsThreeLightTestRigActive();
+			bool testRigReady =
+				m_motionTimeline.IsThreeLightTestRigReady(scene);
+			if (ImGui::Button(
+				testRigActive
+					? "Restore original lighting"
+					: "Prepare 3-light test",
+				ImVec2(-1.0f, 30.0f))) {
+				if (testRigActive) {
+					m_motionTimeline.RestoreThreeLightTestRig(
+						scene,
+						camera);
+				}
+				else {
+					m_motionTimeline.PrepareThreeLightTestRig(
+						scene,
+						camera);
+				}
+				testRigActive =
+					m_motionTimeline.IsThreeLightTestRigActive();
+				testRigReady =
+					m_motionTimeline.IsThreeLightTestRigReady(scene);
+			}
+
+			const float comparisonGap =
+				ImGui::GetStyle().ItemSpacing.x;
+			const float comparisonButtonWidth =
+				(ImGui::GetContentRegionAvail().x -
+					comparisonGap * 2.0f) /
+				3.0f;
+			const bool noCacheMode =
+				properties.SHADOW_CACHE_DISABLED;
+			const bool perLightMode =
+				!properties.SHADOW_CACHE_DISABLED &&
+				properties.SHADOW_PER_LIGHT_CACHE &&
+				!properties.POINT_SHADOW_PER_FACE_CACHE;
+			const bool perFaceMode =
+				!properties.SHADOW_CACHE_DISABLED &&
+				properties.SHADOW_PER_LIGHT_CACHE &&
+				properties.POINT_SHADOW_PER_FACE_CACHE;
+			DrawSelectionButton(
+				"A  Cache off",
+				noCacheMode,
+				ImVec2(comparisonButtonWidth, 30.0f));
+			if (ImGui::IsItemClicked()) {
+				m_motionTimeline.SetShadowComparisonMode(
+					scene,
+					EditorMotionTimelineController::
+						ShadowComparisonMode::GlobalDirty);
+			}
+			ImGui::SameLine();
+			DrawSelectionButton(
+				"B  Per-light cache",
+				perLightMode,
+				ImVec2(comparisonButtonWidth, 30.0f));
+			if (ImGui::IsItemClicked()) {
+				m_motionTimeline.SetShadowComparisonMode(
+					scene,
+					EditorMotionTimelineController::
+						ShadowComparisonMode::PerLight);
+			}
+			ImGui::SameLine();
+			DrawSelectionButton(
+				"C  Per-face cache",
+				perFaceMode,
+				ImVec2(comparisonButtonWidth, 30.0f));
+			if (ImGui::IsItemClicked()) {
+				m_motionTimeline.SetShadowComparisonMode(
+					scene,
+					EditorMotionTimelineController::
+						ShadowComparisonMode::PerFace);
+			}
+
+			const auto countShadowLights = [](const auto& lights) {
+				return static_cast<std::size_t>(std::count_if(
+					lights.begin(),
+					lights.end(),
+					[](const auto& light) {
+						return light.m_active && light.useShadowMap;
+					}));
+			};
+			const std::size_t directionalShadowCount =
+				countShadowLights(scene.lightSource.directionLights);
+			const std::size_t pointShadowCount =
+				countShadowLights(scene.lightSource.pointLights);
+			const std::size_t spotShadowCount =
+				countShadowLights(scene.lightSource.spotLights);
+			ImGui::TextColored(
+				testRigReady
+					? ImVec4(0.35f, 0.80f, 0.59f, 1.0f)
+					: ImVec4(0.94f, 0.69f, 0.31f, 1.0f),
+				testRigReady ? "READY" : "SCENE NOT READY");
+			ImGui::SameLine();
+			ImGui::TextDisabled(
+				"  shadow lights  D:%llu  P:%llu  S:%llu",
+				static_cast<unsigned long long>(
+					directionalShadowCount),
+				static_cast<unsigned long long>(pointShadowCount),
+				static_cast<unsigned long long>(spotShadowCount));
+			if (testRigReady) {
+				ImGui::TextWrapped(
+					"Select Cache 3-way phases for the formal trajectory: "
+					"Point + Camera, Local Caster + Camera, then Camera-only. "
+					"A redraws globally; B isolates lights; C also reuses "
+					"unchanged Point faces.");
+			}
+			else {
+				ImGui::TextWrapped(
+					"Use Prepare so the preview has exactly one shadow-casting "
+					"Directional, Point, and Spot light.");
+			}
+			ImGui::PushStyleColor(
+				ImGuiCol_Text,
+				ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+			ImGui::TextWrapped(
+				"%s",
+				m_motionTimeline.GetTestRigStatusText().c_str());
+			ImGui::PopStyleColor();
+			ImGui::Spacing();
+
+			ImGui::SeparatorText("Workload");
+			static const char* profileNames[] = {
+				"Point light",
+				"Shadow caster",
+				"Camera control",
+				"Point + camera",
+				"Mixed tracks",
+				"Cache 3-way phases"
+			};
+			int profileIndex =
+				(std::max)(
+					0,
+					static_cast<int>(profile) -
+						static_cast<int>(BenchmarkMotionProfile::Point));
+			if (ImGui::Combo(
+				"Profile",
+				&profileIndex,
+				profileNames,
+				IM_ARRAYSIZE(profileNames))) {
+				m_motionTimeline.ChangeProfile(
+					scene,
+					camera,
+					static_cast<BenchmarkMotionProfile>(
+						static_cast<int>(BenchmarkMotionProfile::Point) +
+						profileIndex));
+			}
+
+			const bool pointTrackActive =
+				BenchmarkMotionTimeline::HasTrack(
+					trackMask,
+					BenchmarkMotionTrack::Point);
+			if (pointTrackActive &&
+				!scene.lightSource.pointLights.empty()) {
+				const int selectedPoint =
+					(std::min)(
+						m_motionTimeline.GetPointLightIndex(),
+						static_cast<int>(
+							scene.lightSource.pointLights.size()) - 1);
+				const std::string preview =
+					"Point Light " + std::to_string(selectedPoint);
+				if (ImGui::BeginCombo(
+					"Point target",
+					preview.c_str())) {
+					for (std::size_t index = 0;
+						index < scene.lightSource.pointLights.size();
+						++index) {
+						const bool selected =
+							static_cast<int>(index) == selectedPoint;
+						const std::string label =
+							"Point Light " + std::to_string(index);
+						if (ImGui::Selectable(label.c_str(), selected)) {
+							m_motionTimeline.ChangePointLightIndex(
+								scene,
+								camera,
+								static_cast<int>(index));
+						}
+						if (selected) {
+							ImGui::SetItemDefaultFocus();
+						}
+					}
+					ImGui::EndCombo();
+				}
+				PointLight& selectedLight =
+					scene.lightSource.pointLights[
+						static_cast<std::size_t>(selectedPoint)];
+				if (!selectedLight.useShadowMap) {
+					ImGui::TextColored(
+						ImVec4(0.94f, 0.69f, 0.31f, 1.0f),
+						"Target shadow is disabled.");
+					ImGui::SameLine();
+					if (ImGui::SmallButton("Enable##timeline_point_shadow")) {
+						selectedLight.useShadowMap = true;
+					}
+				}
+			}
+			else if (pointTrackActive) {
+				ImGui::TextColored(
+					ImVec4(0.94f, 0.48f, 0.40f, 1.0f),
+					"No point light is available.");
+			}
+
+			const auto& models = scene.modelSource.GetModels();
+			const bool casterTrackActive =
+				BenchmarkMotionTimeline::HasTrack(
+					trackMask,
+					BenchmarkMotionTrack::Caster);
+			if (casterTrackActive && !models.empty()) {
+				const int selectedCaster =
+					(std::min)(
+						m_motionTimeline.GetCasterIndex(),
+						static_cast<int>(models.size()) - 1);
+				const std::string casterName =
+					models[static_cast<std::size_t>(selectedCaster)]
+						? models[static_cast<std::size_t>(selectedCaster)]
+							->GetName()
+						: std::string("Missing model");
+				if (ImGui::BeginCombo(
+					"Caster target",
+					casterName.c_str())) {
+					for (std::size_t index = 0;
+						index < models.size();
+						++index) {
+						const bool selected =
+							static_cast<int>(index) == selectedCaster;
+						const std::string label =
+							models[index]
+								? models[index]->GetName()
+								: ("Model " + std::to_string(index));
+						if (ImGui::Selectable(label.c_str(), selected)) {
+							m_motionTimeline.ChangeCasterIndex(
+								scene,
+								camera,
+								static_cast<int>(index));
+						}
+						if (selected) {
+							ImGui::SetItemDefaultFocus();
+						}
+					}
+					ImGui::EndCombo();
+				}
+			}
+			else if (casterTrackActive) {
+				ImGui::TextDisabled("No caster model is available.");
+			}
+
+			BenchmarkMotionTimelineConfig config =
+				m_motionTimeline.GetConfig();
+			if (ImGui::CollapsingHeader("Timing & Scale")) {
+				int fixedFps = config.fixedFramesPerSecond;
+				if (ImGui::DragInt(
+					"Fixed rate",
+					&fixedFps,
+					1.0f,
+					1,
+					240,
+					"%d FPS")) {
+					m_motionTimeline.SetFixedFramesPerSecond(
+						scene,
+						camera,
+						fixedFps);
+				}
+				int cycleFrames = config.cycleFrames;
+				if (ImGui::DragInt(
+					"Cycle",
+					&cycleFrames,
+					1.0f,
+					2,
+					3600,
+					"%d frames")) {
+					m_motionTimeline.SetCycleFrames(
+						scene,
+						camera,
+						cycleFrames);
+				}
+				float sceneRadius = config.sceneRadius;
+				if (ImGui::DragFloat(
+					"Scene radius",
+					&sceneRadius,
+					0.05f,
+					0.01f,
+					100000.0f,
+					"%.2f")) {
+					m_motionTimeline.SetSceneRadius(
+						scene,
+						camera,
+						sceneRadius);
+				}
+				ImGui::SameLine();
+				if (ImGui::SmallButton("Estimate")) {
+					m_motionTimeline.UseEstimatedSceneRadius(scene, camera);
+				}
+				float playbackSpeed = m_motionTimeline.GetPlaybackSpeed();
+				if (ImGui::SliderFloat(
+					"Playback",
+					&playbackSpeed,
+					0.1f,
+					4.0f,
+					"%.1fx")) {
+					m_motionTimeline.SetPlaybackSpeed(playbackSpeed);
+				}
+				bool looping = m_motionTimeline.IsLooping();
+				if (ImGui::Checkbox("Loop cycle", &looping)) {
+					m_motionTimeline.SetLooping(looping);
+				}
+			}
+			else {
+				ImGui::TextDisabled(
+					"%d FPS  /  %d frames  /  radius %.2f",
+					config.fixedFramesPerSecond,
+					config.cycleFrames,
+					config.sceneRadius);
+			}
+
+			ImGui::SeparatorText("Transport");
+			if (ImGui::Button("Capture base", ImVec2(112.0f, 30.0f))) {
+				m_motionTimeline.CaptureBaseState(scene, camera);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button(
+				playing ? "Pause" : "Play",
+				ImVec2(72.0f, 30.0f))) {
+				if (playing) {
+					m_motionTimeline.Pause();
+				}
+				else {
+					m_motionTimeline.Play(scene, camera);
+				}
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Restore", ImVec2(72.0f, 30.0f))) {
+				m_motionTimeline.StopAndRestore(scene, camera);
+			}
+
+			if (ImGui::Button("|<##timeline_start")) {
+				m_motionTimeline.ResetToStart(scene, camera);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("<##timeline_previous")) {
+				m_motionTimeline.SetFrame(
+					scene,
+					camera,
+					m_motionTimeline.GetFrame() - 1);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button(">##timeline_next")) {
+				m_motionTimeline.SetFrame(
+					scene,
+					camera,
+					m_motionTimeline.GetFrame() + 1);
+			}
+
+			int timelineFrame = m_motionTimeline.GetFrame();
+			if (ImGui::SliderInt(
+				"Frame",
+				&timelineFrame,
+				0,
+				(std::max)(
+					1,
+					m_motionTimeline.GetConfig().cycleFrames - 1))) {
+				m_motionTimeline.SetFrame(
+					scene,
+					camera,
+					timelineFrame);
+			}
+			const double durationSeconds =
+				static_cast<double>(
+					m_motionTimeline.GetConfig().cycleFrames) /
+				static_cast<double>(
+					m_motionTimeline.GetConfig().fixedFramesPerSecond);
+			ImGui::TextDisabled(
+				"Frame %d / %d  |  %.2f s cycle",
+				m_motionTimeline.GetFrame(),
+				m_motionTimeline.GetConfig().cycleFrames - 1,
+				durationSeconds);
+			DrawTimelineTrajectoryPreview(m_motionTimeline);
+
+			ImGui::TableSetColumnIndex(1);
+			ImGui::SeparatorText("Shadow Cache Account");
+			const EditorMotionFrameTelemetry& currentTelemetry =
+				m_motionTimeline.GetLatestTelemetry();
+			const EditorMotionFrameTelemetry& telemetry =
+				m_motionTimeline.GetLatestMotionStepTelemetry();
+			const bool hasMotionStep = telemetry.motionSampleApplied;
+			const char* decision = hasMotionStep
+				? "NO SHADOW WORK"
+				: "WAITING FOR MOTION STEP";
+			ImVec4 decisionColor(0.55f, 0.58f, 0.64f, 1.0f);
+			if (hasMotionStep &&
+				(telemetry.shadowResourceFailureCount > 0 ||
+				telemetry.conservativeShadowFallbackCount > 0)) {
+				decision = "CONSERVATIVE FALLBACK";
+				decisionColor = ImVec4(0.95f, 0.40f, 0.36f, 1.0f);
+			}
+			else if (hasMotionStep &&
+				telemetry.updatedLightCount > 0) {
+				decision = "CACHE MISS  /  SHADOW REDRAW";
+				decisionColor = ImVec4(0.94f, 0.69f, 0.31f, 1.0f);
+			}
+			else if (hasMotionStep &&
+				(telemetry.lightCacheHitCount > 0 ||
+				telemetry.cacheHitCount > 0)) {
+				decision = "CACHE HIT  /  SHADOW MAP REUSED";
+				decisionColor = ImVec4(0.35f, 0.80f, 0.59f, 1.0f);
+			}
+			ImGui::TextColored(decisionColor, "%s", decision);
+			ImGui::SameLine();
+			ImGui::TextDisabled(
+				"  %s",
+				properties.SHADOW_CACHE_DISABLED
+					? "cache disabled"
+					: (properties.SHADOW_PER_LIGHT_CACHE
+						? (properties.POINT_SHADOW_PER_FACE_CACHE
+							? "per-light + point per-face cache"
+							: "per-light cache")
+						: "global cache"));
+
+			char updatedLightsValue[32] = {};
+			char cacheHitsValue[32] = {};
+			char submissionsValue[32] = {};
+			char shadowCpuValue[32] = {};
+			std::snprintf(
+				updatedLightsValue,
+				sizeof(updatedLightsValue),
+				"%llu",
+				static_cast<unsigned long long>(
+					telemetry.updatedLightCount));
+			std::snprintf(
+				cacheHitsValue,
+				sizeof(cacheHitsValue),
+				"%llu",
+				static_cast<unsigned long long>(
+					telemetry.lightCacheHitCount));
+			std::snprintf(
+				submissionsValue,
+				sizeof(submissionsValue),
+				"%llu",
+				static_cast<unsigned long long>(
+					telemetry.pointShadowSubmissionPassCount));
+			std::snprintf(
+				shadowCpuValue,
+				sizeof(shadowCpuValue),
+				"%.3f ms",
+				telemetry.shadowUpdateCpuMilliseconds);
+			const float telemetryGap = ImGui::GetStyle().ItemSpacing.x;
+			const float telemetryCardWidth =
+				(std::max)(
+					104.0f,
+					(ImGui::GetContentRegionAvail().x - telemetryGap) *
+						0.5f);
+			DrawMetricCard(
+				"timeline_updated_lights",
+				"UPDATED LIGHTS",
+				updatedLightsValue,
+				ImVec4(0.94f, 0.69f, 0.31f, 1.0f),
+				telemetryCardWidth);
+			ImGui::SameLine();
+			DrawMetricCard(
+				"timeline_cache_hits",
+				"CACHE HITS",
+				cacheHitsValue,
+				ImVec4(0.35f, 0.80f, 0.59f, 1.0f),
+				telemetryCardWidth);
+			DrawMetricCard(
+				"timeline_point_submissions",
+				"POINT SUBMITS",
+				submissionsValue,
+				ImVec4(0.48f, 0.64f, 0.96f, 1.0f),
+				telemetryCardWidth);
+			ImGui::SameLine();
+			DrawMetricCard(
+				"timeline_shadow_cpu",
+				"SHADOW CPU",
+				shadowCpuValue,
+				ImVec4(0.83f, 0.50f, 0.91f, 1.0f),
+				telemetryCardWidth);
+
+			if (ImGui::BeginTable(
+				"timeline_light_breakdown",
+				4,
+				ImGuiTableFlags_RowBg |
+					ImGuiTableFlags_BordersInnerH |
+					ImGuiTableFlags_SizingStretchSame)) {
+				ImGui::TableSetupColumn("Directional");
+				ImGui::TableSetupColumn("Point");
+				ImGui::TableSetupColumn("Spot");
+				ImGui::TableSetupColumn("Submits");
+				ImGui::TableHeadersRow();
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::Text(
+					"%llu",
+					static_cast<unsigned long long>(
+						telemetry.directionalLightUpdateCount));
+				ImGui::TableSetColumnIndex(1);
+				ImGui::Text(
+					"%llu",
+					static_cast<unsigned long long>(
+						telemetry.pointLightUpdateCount));
+				ImGui::TableSetColumnIndex(2);
+				ImGui::Text(
+					"%llu",
+					static_cast<unsigned long long>(
+						telemetry.spotLightUpdateCount));
+				ImGui::TableSetColumnIndex(3);
+				ImGui::Text(
+					"%llu",
+					static_cast<unsigned long long>(
+						telemetry.pointShadowSubmissionPassCount));
+				ImGui::EndTable();
+			}
+			if (ImGui::BeginTable(
+				"timeline_point_face_breakdown",
+				4,
+				ImGuiTableFlags_RowBg |
+					ImGuiTableFlags_BordersInnerH |
+					ImGuiTableFlags_SizingStretchSame)) {
+				ImGui::TableSetupColumn("Required");
+				ImGui::TableSetupColumn("Rendered");
+				ImGui::TableSetupColumn("Face hits");
+				ImGui::TableSetupColumn("Deferred");
+				ImGui::TableHeadersRow();
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::Text(
+					"%llu",
+					static_cast<unsigned long long>(
+						telemetry.pointShadowRequiredFaceCount));
+				ImGui::TableSetColumnIndex(1);
+				ImGui::Text(
+					"%llu",
+					static_cast<unsigned long long>(
+						telemetry.pointShadowRenderedFaceCount));
+				ImGui::TableSetColumnIndex(2);
+				ImGui::Text(
+					"%llu",
+					static_cast<unsigned long long>(
+						telemetry.pointShadowFaceCacheHitCount));
+				ImGui::TableSetColumnIndex(3);
+				ImGui::Text(
+					"%llu",
+					static_cast<unsigned long long>(
+						telemetry.pointShadowDeferredFaceCount));
+				ImGui::EndTable();
+			}
+			ImGui::TextDisabled(
+				"Current render: %llu updated light(s), %llu light cache hit(s)",
+				static_cast<unsigned long long>(
+					currentTelemetry.updatedLightCount),
+				static_cast<unsigned long long>(
+					currentTelemetry.lightCacheHitCount));
+
+			DrawTimelineHistoryPlot(
+				"Shadow update CPU (ms)",
+				m_motionTimeline.GetShadowCpuHistory(),
+				ImVec4(0.83f, 0.50f, 0.91f, 1.0f),
+				0.25f);
+			DrawTimelineHistoryPlot(
+				"Updated shadow lights",
+				m_motionTimeline.GetUpdatedLightHistory(),
+				ImVec4(0.94f, 0.69f, 0.31f, 1.0f),
+				3.0f);
+
+			ImGui::Spacing();
+			ImGui::TextWrapped(
+				"%s",
+				m_motionTimeline.GetStatusText().c_str());
+			ImGui::TextDisabled(
+				"Preview is diagnostic only. Use "
+				"tools/Test-PointShadowCache3Way.ps1 for isolated "
+				"1920x1080 A/B/C measurements.");
+			ImGui::EndTable();
+		}
+
+		ImGui::End();
+	}
+
 	void Viewport_UI(unsigned int textureID) {
 		ImGui::Begin("Viewport", nullptr, ImGuiWindowFlags_MenuBar);
 		ViewportContent(textureID);
 		ImGui::End();
 	}
 private:
+	enum class SceneUiReplacementAction {
+		None,
+		NewScene,
+		OpenScene,
+		LoadClassicScene
+	};
+
+	void QueueSceneReplacement(
+		SceneUiReplacementAction action,
+		const std::string& path = std::string(),
+		std::size_t classicSceneIndex = 0,
+		const ClassicSceneLoadOptions& options = {})
+	{
+		m_sceneReplacementAction = action;
+		m_sceneReplacementPath = path;
+		m_sceneReplacementClassicIndex = classicSceneIndex;
+		m_sceneReplacementOptions = options;
+		ImGui::OpenPopup("Replace Current Scene##scene_browser_replace");
+	}
+
+	void ExecuteSceneReplacement(EditorSceneManager& sceneManager)
+	{
+		switch (m_sceneReplacementAction) {
+		case SceneUiReplacementAction::NewScene:
+			sceneManager.RequestNewScene();
+			break;
+		case SceneUiReplacementAction::OpenScene:
+			sceneManager.RequestOpenScene(m_sceneReplacementPath);
+			break;
+		case SceneUiReplacementAction::LoadClassicScene:
+			sceneManager.RequestLoadClassicScene(
+				m_sceneReplacementClassicIndex,
+				m_sceneReplacementOptions);
+			break;
+		default:
+			break;
+		}
+		m_sceneReplacementAction = SceneUiReplacementAction::None;
+		m_sceneReplacementPath.clear();
+		ImGui::CloseCurrentPopup();
+	}
+
+	void DrawSceneBrowserContent(
+		Scene& scene,
+		Camera& camera,
+		EditorSceneManager& sceneManager)
+	{
+		if (!ImGui::CollapsingHeader(
+			"Scene Browser",
+			ImGuiTreeNodeFlags_DefaultOpen)) {
+			return;
+		}
+
+		ImGui::TextUnformatted("Current");
+		ImGui::SameLine();
+		ImGui::TextColored(
+			ImVec4(0.35f, 0.85f, 0.78f, 1.0f),
+			"%s",
+			sceneManager.GetCurrentSceneName().c_str());
+		if (!sceneManager.GetCurrentDocumentPath().empty()) {
+			ImGui::TextDisabled(
+				"%s",
+				sceneManager.GetCurrentDocumentPath().c_str());
+		}
+		ImGui::TextDisabled(
+			"%llu model(s), %llu light(s)",
+			static_cast<unsigned long long>(
+				scene.modelSource.GetModels().size()),
+			static_cast<unsigned long long>(
+				scene.lightSource.pointLights.size() +
+				scene.lightSource.directionLights.size() +
+				scene.lightSource.spotLights.size()));
+
+		const bool busy = sceneManager.IsBusy();
+		const bool temporaryTestRigActive =
+			m_motionTimeline.IsThreeLightTestRigActive();
+		ImGui::BeginDisabled(busy);
+		if (ImGui::Button("New")) {
+			QueueSceneReplacement(SceneUiReplacementAction::NewScene);
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Open...")) {
+			std::string path;
+			if (PickSceneFileWithDialog(path, false)) {
+				QueueSceneReplacement(
+					SceneUiReplacementAction::OpenScene,
+					path);
+			}
+		}
+		ImGui::SameLine();
+		ImGui::BeginDisabled(temporaryTestRigActive);
+		if (ImGui::Button("Save")) {
+			if (sceneManager.GetCurrentDocumentPath().empty()) {
+				std::string path;
+				if (PickSceneFileWithDialog(path, true)) {
+					sceneManager.SaveAs(scene, camera, path);
+				}
+			}
+			else {
+				sceneManager.SaveCurrent(scene, camera);
+			}
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Save As...")) {
+			std::string path;
+			if (PickSceneFileWithDialog(path, true)) {
+				sceneManager.SaveAs(scene, camera, path);
+			}
+		}
+		ImGui::EndDisabled();
+		ImGui::EndDisabled();
+		if (temporaryTestRigActive) {
+			ImGui::TextColored(
+				ImVec4(0.94f, 0.69f, 0.31f, 1.0f),
+				"Restore the temporary three-light test before saving.");
+		}
+
+		if (SceneStateIO::HasPendingAsyncLoads()) {
+			const int pending = SceneStateIO::GetPendingAsyncLoadCount();
+			const int total = SceneStateIO::GetTotalAsyncLoadCount();
+			const int completed = total >= pending ? total - pending : 0;
+			const float progress = total > 0
+				? static_cast<float>(completed) / static_cast<float>(total)
+				: 0.0f;
+			ImGui::ProgressBar(progress, ImVec2(-1.0f, 0.0f));
+		}
+		if (!sceneManager.GetStatusText().empty()) {
+			ImVec4 statusColor(0.75f, 0.78f, 0.82f, 1.0f);
+			switch (sceneManager.GetStatusKind()) {
+			case EditorSceneManager::StatusKind::Success:
+				statusColor = ImVec4(0.35f, 0.85f, 0.48f, 1.0f);
+				break;
+			case EditorSceneManager::StatusKind::Warning:
+				statusColor = ImVec4(1.0f, 0.78f, 0.25f, 1.0f);
+				break;
+			case EditorSceneManager::StatusKind::Error:
+				statusColor = ImVec4(1.0f, 0.35f, 0.35f, 1.0f);
+				break;
+			default:
+				break;
+			}
+			ImGui::PushStyleColor(ImGuiCol_Text, statusColor);
+			ImGui::TextWrapped(
+				"%s",
+				sceneManager.GetStatusText().c_str());
+			ImGui::PopStyleColor();
+			if (ImGui::IsItemHovered()) {
+				ImGui::BeginTooltip();
+				ImGui::TextColored(
+					statusColor,
+					"%s",
+					sceneManager.GetStatusText().c_str());
+				ImGui::EndTooltip();
+			}
+		}
+
+		ImGui::SeparatorText("Classic Test Scenes");
+		const auto& classicScenes = sceneManager.GetClassicScenes();
+		if (classicScenes.empty()) {
+			ImGui::TextDisabled("No classic scenes found.");
+			if (ImGui::Button("Reload Catalog")) {
+				sceneManager.ReloadClassicSceneCatalog();
+			}
+			return;
+		}
+
+		if (m_selectedClassicScene >= classicScenes.size()) {
+			m_selectedClassicScene = 0;
+		}
+		const ClassicSceneDescriptor& selectedScene =
+			classicScenes[m_selectedClassicScene];
+		if (ImGui::BeginCombo(
+			"Scene",
+			selectedScene.displayName.c_str())) {
+			for (std::size_t index = 0;
+				index < classicScenes.size();
+				++index) {
+				const bool selected = index == m_selectedClassicScene;
+				std::string label = classicScenes[index].displayName;
+				if (!classicScenes[index].available) {
+					label += " (missing)";
+				}
+				if (ImGui::Selectable(label.c_str(), selected)) {
+					m_selectedClassicScene = index;
+				}
+				if (selected) {
+					ImGui::SetItemDefaultFocus();
+				}
+			}
+			ImGui::EndCombo();
+		}
+
+		const ClassicSceneDescriptor& details =
+			classicScenes[m_selectedClassicScene];
+		ImGui::TextWrapped("%s", details.category.c_str());
+		ImGui::Text(
+			"Expected triangles: %llu",
+			static_cast<unsigned long long>(details.expectedTriangles));
+		ImGui::TextColored(
+			details.available
+				? ImVec4(0.35f, 0.85f, 0.48f, 1.0f)
+				: ImVec4(1.0f, 0.35f, 0.35f, 1.0f),
+			details.available ? "Installed" : "Asset missing");
+		if (ImGui::IsItemHovered()) {
+			ImGui::BeginTooltip();
+			ImGui::TextWrapped("%s", details.modelPath.c_str());
+			ImGui::EndTooltip();
+		}
+
+		const char* renderPresets[] = {
+			"PBR Forward",
+			"Phong Forward",
+			"PBR Deferred",
+			"Phong Deferred"
+		};
+		ImGui::Combo(
+			"Render preset",
+			&m_sceneRenderPreset,
+			renderPresets,
+			IM_ARRAYSIZE(renderPresets));
+		ImGui::Checkbox(
+			"Directional shadows",
+			&m_sceneDirectionalShadows);
+
+		ImGui::BeginDisabled(busy || !details.available);
+		if (ImGui::Button("Load Selected Scene", ImVec2(-1.0f, 0.0f))) {
+			ClassicSceneLoadOptions options;
+			options.renderPreset =
+				static_cast<ClassicSceneRenderPreset>(m_sceneRenderPreset);
+			options.enableDirectionalShadows =
+				m_sceneDirectionalShadows;
+			QueueSceneReplacement(
+				SceneUiReplacementAction::LoadClassicScene,
+				std::string(),
+				m_selectedClassicScene,
+				options);
+		}
+		ImGui::EndDisabled();
+
+		if (ImGui::SmallButton("Refresh installed scenes")) {
+			sceneManager.RefreshClassicSceneAvailability();
+		}
+		if (ImGui::TreeNode("Credits and license")) {
+			ImGui::TextWrapped("License: %s", details.license.c_str());
+			ImGui::TextWrapped("Credit: %s", details.credit.c_str());
+			ImGui::TreePop();
+		}
+	}
+
+	void DrawSceneReplacementPopup(
+		Scene& scene,
+		Camera& camera,
+		EditorSceneManager& sceneManager)
+	{
+		if (!ImGui::BeginPopupModal(
+			"Replace Current Scene##scene_browser_replace",
+			nullptr,
+			ImGuiWindowFlags_AlwaysAutoResize)) {
+			return;
+		}
+
+		ImGui::TextUnformatted(
+			"This replaces the current models, lights, and camera.");
+		ImGui::TextUnformatted("Save the current scene first?");
+		ImGui::Separator();
+
+		if (ImGui::Button("Save and Continue")) {
+			if (m_motionTimeline.IsThreeLightTestRigActive()) {
+				m_motionTimeline.RestoreThreeLightTestRig(scene, camera);
+			}
+			bool saved = false;
+			if (sceneManager.GetCurrentDocumentPath().empty()) {
+				std::string path;
+				if (PickSceneFileWithDialog(path, true)) {
+					saved = sceneManager.SaveAs(scene, camera, path);
+				}
+			}
+			else {
+				saved = sceneManager.SaveCurrent(scene, camera);
+			}
+			if (saved) {
+				ExecuteSceneReplacement(sceneManager);
+			}
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Continue Without Saving")) {
+			if (m_motionTimeline.IsThreeLightTestRigActive()) {
+				m_motionTimeline.RestoreThreeLightTestRig(scene, camera);
+			}
+			ExecuteSceneReplacement(sceneManager);
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel")) {
+			m_sceneReplacementAction = SceneUiReplacementAction::None;
+			m_sceneReplacementPath.clear();
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
+	}
+
 	struct AssetBrowserNode {
 		std::string path;
 		std::string name;
@@ -1277,47 +2584,455 @@ private:
 		ImGui::PopID();
 	}
 
+	void DrawEditorToolbar() {
+		ImGui::PushStyleColor(
+			ImGuiCol_ChildBg,
+			ImVec4(0.065f, 0.075f, 0.095f, 1.0f));
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f, 7.0f));
+		ImGui::BeginChild(
+			"##editor_toolbar",
+			ImVec2(0.0f, 44.0f),
+			false,
+			ImGuiWindowFlags_NoScrollbar |
+				ImGuiWindowFlags_NoScrollWithMouse);
+		ImGui::PopStyleVar();
+		ImGui::PopStyleColor();
+
+		ImGui::TextColored(
+			ImVec4(0.34f, 0.82f, 0.75f, 1.0f),
+			"OPENGL LEARN");
+		ImGui::SameLine();
+		ImGui::TextDisabled("/ RENDER LAB");
+
+		const auto& profiler = PerformanceProfiler::GetInstance();
+		const auto& summary = profiler.GetFrameSummary();
+		const double averageFps = summary.averageCpuFrameMs > 0.0
+			? 1000.0 / summary.averageCpuFrameMs
+			: 0.0;
+		const float rightSectionWidth = 575.0f;
+		if (ImGui::GetContentRegionAvail().x > rightSectionWidth) {
+			ImGui::SameLine(
+				ImGui::GetWindowContentRegionMax().x -
+				rightSectionWidth);
+		}
+		else {
+			ImGui::SameLine();
+		}
+
+		DrawTrackBadge(
+			properties.DEFER_RENDERING ? "DEFERRED" : "FORWARD",
+			true,
+			ImVec4(0.40f, 0.62f, 0.96f, 1.0f));
+		ImGui::SameLine();
+		ImGui::TextDisabled("M: camera look");
+		ImGui::SameLine();
+		ImGui::TextDisabled(
+			"CPU %.2f ms",
+			summary.cpuFrameMs);
+		ImGui::SameLine();
+		if (profiler.IsGpuTimingSupported()) {
+			ImGui::TextDisabled(
+				"GPU %.2f ms",
+				summary.gpuFrameMs);
+			ImGui::SameLine();
+		}
+		ImGui::TextColored(
+			averageFps >= 55.0
+				? ImVec4(0.39f, 0.82f, 0.62f, 1.0f)
+				: ImVec4(0.94f, 0.69f, 0.31f, 1.0f),
+			"%.0f FPS",
+			averageFps);
+		ImGui::SameLine();
+		if (ImGui::Button("Reset layout")) {
+			m_requestLayoutReset = true;
+		}
+		ImGui::EndChild();
+	}
+
+	static void DrawPanelHeader(
+		const char* title,
+		const char* subtitle)
+	{
+		ImGui::TextColored(
+			ImVec4(0.88f, 0.91f, 0.95f, 1.0f),
+			"%s",
+			title);
+		if (subtitle && subtitle[0] != '\0') {
+			ImGui::TextDisabled("%s", subtitle);
+		}
+		ImGui::Separator();
+		ImGui::Spacing();
+	}
+
+	static void DrawMetricCard(
+		const char* id,
+		const char* label,
+		const char* value,
+		const ImVec4& accent,
+		float requestedWidth)
+	{
+		const float width =
+			(std::max)(
+				1.0f,
+				(std::min)(
+					requestedWidth,
+					ImGui::GetContentRegionAvail().x));
+		ImGui::PushStyleColor(
+			ImGuiCol_ChildBg,
+			ImVec4(0.105f, 0.12f, 0.15f, 1.0f));
+		ImGui::PushStyleColor(
+			ImGuiCol_Border,
+			ImVec4(accent.x, accent.y, accent.z, 0.32f));
+		ImGui::BeginChild(
+			id,
+			ImVec2(width, 62.0f),
+			true,
+			ImGuiWindowFlags_NoScrollbar);
+		ImGui::TextDisabled("%s", label);
+		ImGui::TextColored(accent, "%s", value);
+		ImGui::EndChild();
+		ImGui::PopStyleColor(2);
+	}
+
+	static void DrawStatusRow(
+		const char* label,
+		bool healthy,
+		const char* message,
+		int count)
+	{
+		const ImVec4 color = healthy
+			? ImVec4(0.36f, 0.80f, 0.59f, 1.0f)
+			: ImVec4(0.94f, 0.43f, 0.39f, 1.0f);
+		ImGui::Bullet();
+		ImGui::SameLine();
+		ImGui::TextColored(color, "%s", label);
+		ImGui::SameLine();
+		ImGui::TextDisabled("x%d", count);
+		ImGui::SameLine();
+		ImGui::TextWrapped("%s", message);
+	}
+
+	static void DrawSelectionButton(
+		const char* label,
+		bool selected,
+		const ImVec2& size)
+	{
+		if (selected) {
+			ImGui::PushStyleColor(
+				ImGuiCol_Button,
+				ImVec4(0.18f, 0.43f, 0.46f, 1.0f));
+			ImGui::PushStyleColor(
+				ImGuiCol_ButtonHovered,
+				ImVec4(0.22f, 0.51f, 0.54f, 1.0f));
+		}
+		else {
+			ImGui::PushStyleColor(
+				ImGuiCol_Button,
+				ImVec4(0.12f, 0.14f, 0.17f, 1.0f));
+			ImGui::PushStyleColor(
+				ImGuiCol_ButtonHovered,
+				ImVec4(0.17f, 0.20f, 0.24f, 1.0f));
+		}
+		ImGui::Button(label, size);
+		ImGui::PopStyleColor(2);
+	}
+
+	static void DrawTrackBadge(
+		const char* label,
+		bool active,
+		const ImVec4& color)
+	{
+		const ImVec2 textSize = ImGui::CalcTextSize(label);
+		const ImVec2 size(textSize.x + 14.0f, textSize.y + 8.0f);
+		const ImVec2 minimum = ImGui::GetCursorScreenPos();
+		ImGui::InvisibleButton(label, size);
+		const ImVec2 maximum(minimum.x + size.x, minimum.y + size.y);
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+		const ImU32 background = active
+			? ImGui::ColorConvertFloat4ToU32(
+				ImVec4(color.x, color.y, color.z, 0.22f))
+			: IM_COL32(57, 62, 72, 120);
+		const ImU32 border = active
+			? ImGui::ColorConvertFloat4ToU32(
+				ImVec4(color.x, color.y, color.z, 0.72f))
+			: IM_COL32(84, 90, 102, 150);
+		const ImU32 text = active
+			? ImGui::ColorConvertFloat4ToU32(color)
+			: IM_COL32(135, 141, 153, 220);
+		drawList->AddRectFilled(minimum, maximum, background, 4.0f);
+		drawList->AddRect(minimum, maximum, border, 4.0f);
+		drawList->AddText(
+			ImVec2(minimum.x + 7.0f, minimum.y + 4.0f),
+			text,
+			label);
+	}
+
+	static void DrawTimelineTrajectoryPreview(
+		const EditorMotionTimelineController& timeline)
+	{
+		const float width =
+			(std::max)(1.0f, ImGui::GetContentRegionAvail().x);
+		const ImVec2 size(width, 92.0f);
+		ImGui::InvisibleButton("##timeline_trajectory", size);
+		const ImVec2 minimum = ImGui::GetItemRectMin();
+		const ImVec2 maximum = ImGui::GetItemRectMax();
+		const ImVec2 center(
+			(minimum.x + maximum.x) * 0.5f,
+			(minimum.y + maximum.y) * 0.5f);
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+		drawList->AddRectFilled(
+			minimum,
+			maximum,
+			IM_COL32(20, 24, 31, 255),
+			5.0f);
+		drawList->AddRect(
+			minimum,
+			maximum,
+			IM_COL32(55, 66, 79, 220),
+			5.0f);
+		for (int tick = 1; tick < 4; ++tick) {
+			const float x =
+				minimum.x +
+				(maximum.x - minimum.x) *
+					(static_cast<float>(tick) / 4.0f);
+			drawList->AddLine(
+				ImVec2(x, minimum.y + 7.0f),
+				ImVec2(x, maximum.y - 7.0f),
+				IM_COL32(51, 58, 70, 115));
+		}
+		drawList->AddLine(
+			ImVec2(minimum.x + 8.0f, center.y),
+			ImVec2(maximum.x - 8.0f, center.y),
+			IM_COL32(51, 58, 70, 135));
+
+		const std::uint32_t mask = BenchmarkMotionTimeline::TrackMask(
+			timeline.GetProfile());
+		const double phase =
+			timeline.GetConfig().cycleFrames > 0
+				? static_cast<double>(timeline.GetFrame()) /
+					static_cast<double>(timeline.GetConfig().cycleFrames)
+				: 0.0;
+		const double angle = phase * 6.28318530717958647692;
+		auto drawOrbit = [&](
+			BenchmarkMotionTrack track,
+			const ImVec4& color,
+			float radiusX,
+			float radiusY,
+			double phaseOffset) {
+			if (!BenchmarkMotionTimeline::HasTrack(mask, track)) {
+				return;
+			}
+			std::array<ImVec2, 65> points{};
+			for (std::size_t index = 0; index < points.size(); ++index) {
+				const double pathAngle =
+					static_cast<double>(index) /
+						static_cast<double>(points.size() - 1) *
+						6.28318530717958647692 +
+					phaseOffset;
+				points[index] = ImVec2(
+					center.x +
+						radiusX *
+							static_cast<float>(std::cos(pathAngle)),
+					center.y +
+						radiusY *
+							static_cast<float>(std::sin(pathAngle)));
+			}
+			const ImU32 packed =
+				ImGui::ColorConvertFloat4ToU32(color);
+			drawList->AddPolyline(
+				points.data(),
+				static_cast<int>(points.size()),
+				packed,
+				false,
+				1.5f);
+			const ImVec2 marker(
+				center.x +
+					radiusX *
+						static_cast<float>(
+							std::cos(angle + phaseOffset)),
+				center.y +
+					radiusY *
+						static_cast<float>(
+							std::sin(angle + phaseOffset)));
+			drawList->AddCircleFilled(marker, 4.0f, packed);
+			drawList->AddCircle(
+				marker,
+				6.0f,
+				ImGui::ColorConvertFloat4ToU32(
+					ImVec4(color.x, color.y, color.z, 0.38f)));
+		};
+
+		const float availableRadiusX =
+			(std::max)(18.0f, (maximum.x - minimum.x) * 0.35f);
+		drawOrbit(
+			BenchmarkMotionTrack::Point,
+			ImVec4(0.93f, 0.68f, 0.30f, 1.0f),
+			availableRadiusX,
+			26.0f,
+			0.0);
+		drawOrbit(
+			BenchmarkMotionTrack::Caster,
+			ImVec4(0.38f, 0.78f, 0.61f, 1.0f),
+			availableRadiusX * 0.62f,
+			17.0f,
+			1.57079632679489661923);
+		drawOrbit(
+			BenchmarkMotionTrack::Camera,
+			ImVec4(0.48f, 0.64f, 0.96f, 1.0f),
+			availableRadiusX * 0.82f,
+			22.0f,
+			3.14159265358979323846);
+		drawList->AddText(
+			ImVec2(minimum.x + 8.0f, minimum.y + 7.0f),
+			IM_COL32(139, 149, 164, 220),
+			"NORMALIZED TRACK PREVIEW");
+	}
+
+	static void DrawTimelineHistoryPlot(
+		const char* label,
+		const std::vector<float>& values,
+		const ImVec4& color,
+		float minimumMaximum)
+	{
+		if (values.empty()) {
+			ImGui::TextDisabled("%s: waiting for samples", label);
+			return;
+		}
+		const float maximum =
+			(std::max)(
+				minimumMaximum,
+				*std::max_element(values.begin(), values.end()) * 1.15f);
+		ImGui::PushStyleColor(ImGuiCol_PlotLines, color);
+		ImGui::PlotLines(
+			label,
+			values.data(),
+			static_cast<int>(values.size()),
+			0,
+			nullptr,
+			0.0f,
+			maximum,
+			ImVec2(-1.0f, 54.0f));
+		ImGui::PopStyleColor();
+	}
+
+	void LoadEditorFonts(ImGuiIO& io)
+	{
+		constexpr float kEditorFontSize = 16.0f;
+		const std::filesystem::path latinFont =
+			"C:\\Windows\\Fonts\\segoeui.ttf";
+		const std::filesystem::path chineseFont =
+			"C:\\Windows\\Fonts\\msyh.ttc";
+		std::error_code error;
+
+		ImFont* editorFont = nullptr;
+		if (std::filesystem::is_regular_file(latinFont, error)) {
+			ImFontConfig latinConfig;
+			latinConfig.OversampleH = 3;
+			latinConfig.OversampleV = 2;
+			latinConfig.PixelSnapH = false;
+			latinConfig.RasterizerMultiply = 1.05f;
+			std::snprintf(
+				latinConfig.Name,
+				IM_ARRAYSIZE(latinConfig.Name),
+				"Segoe UI %.0fpx",
+				kEditorFontSize);
+			editorFont = io.Fonts->AddFontFromFileTTF(
+				latinFont.string().c_str(),
+				kEditorFontSize,
+				&latinConfig);
+		}
+
+		error.clear();
+		if (editorFont &&
+			std::filesystem::is_regular_file(chineseFont, error)) {
+			ImFontConfig chineseConfig;
+			chineseConfig.MergeMode = true;
+			chineseConfig.OversampleH = 2;
+			chineseConfig.OversampleV = 1;
+			chineseConfig.PixelSnapH = false;
+			chineseConfig.RasterizerMultiply = 1.05f;
+			std::snprintf(
+				chineseConfig.Name,
+				IM_ARRAYSIZE(chineseConfig.Name),
+				"Microsoft YaHei fallback %.0fpx",
+				kEditorFontSize);
+			io.Fonts->AddFontFromFileTTF(
+				chineseFont.string().c_str(),
+				kEditorFontSize,
+				&chineseConfig,
+				io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
+		}
+
+		if (editorFont) {
+			io.FontDefault = editorFont;
+			m_editorFontDescription =
+				"Segoe UI 16 px + Microsoft YaHei Chinese fallback";
+		}
+		else {
+			io.Fonts->AddFontDefault();
+			m_editorFontDescription =
+				"Dear ImGui default (system editor font unavailable)";
+		}
+	}
+
 	void ApplyEditorStyle() {
 		ImGui::StyleColorsDark();
 		ImGuiStyle& style = ImGui::GetStyle();
-		style.WindowRounding = 6.0f;
-		style.ChildRounding = 6.0f;
-		style.FrameRounding = 5.0f;
-		style.GrabRounding = 5.0f;
-		style.ScrollbarRounding = 8.0f;
+		style.WindowRounding = 5.0f;
+		style.ChildRounding = 5.0f;
+		style.FrameRounding = 4.0f;
+		style.GrabRounding = 4.0f;
+		style.ScrollbarRounding = 6.0f;
 		style.TabRounding = 4.0f;
-		style.WindowPadding = ImVec2(10.0f, 10.0f);
-		style.FramePadding = ImVec2(10.0f, 6.0f);
-		style.ItemSpacing = ImVec2(8.0f, 8.0f);
-		style.IndentSpacing = 14.0f;
+		style.PopupRounding = 5.0f;
+		style.WindowPadding = ImVec2(12.0f, 11.0f);
+		style.FramePadding = ImVec2(9.0f, 6.0f);
+		style.CellPadding = ImVec2(8.0f, 6.0f);
+		style.ItemSpacing = ImVec2(8.0f, 7.0f);
+		style.ItemInnerSpacing = ImVec2(6.0f, 5.0f);
+		style.IndentSpacing = 16.0f;
+		style.WindowBorderSize = 1.0f;
+		style.ChildBorderSize = 1.0f;
 
 		ImVec4* colors = style.Colors;
-		colors[ImGuiCol_WindowBg] = ImVec4(0.08f, 0.09f, 0.11f, 1.0f);
-		colors[ImGuiCol_ChildBg] = ImVec4(0.11f, 0.12f, 0.15f, 1.0f);
-		colors[ImGuiCol_PopupBg] = ImVec4(0.10f, 0.11f, 0.14f, 0.98f);
-		colors[ImGuiCol_Header] = ImVec4(0.18f, 0.28f, 0.30f, 1.0f);
-		colors[ImGuiCol_HeaderHovered] = ImVec4(0.24f, 0.40f, 0.42f, 1.0f);
-		colors[ImGuiCol_HeaderActive] = ImVec4(0.30f, 0.50f, 0.52f, 1.0f);
-		colors[ImGuiCol_Button] = ImVec4(0.18f, 0.34f, 0.36f, 1.0f);
-		colors[ImGuiCol_ButtonHovered] = ImVec4(0.24f, 0.45f, 0.47f, 1.0f);
-		colors[ImGuiCol_ButtonActive] = ImVec4(0.30f, 0.54f, 0.56f, 1.0f);
-		colors[ImGuiCol_FrameBg] = ImVec4(0.13f, 0.15f, 0.18f, 1.0f);
-		colors[ImGuiCol_FrameBgHovered] = ImVec4(0.18f, 0.21f, 0.25f, 1.0f);
-		colors[ImGuiCol_FrameBgActive] = ImVec4(0.21f, 0.25f, 0.29f, 1.0f);
-		colors[ImGuiCol_TitleBg] = ImVec4(0.10f, 0.12f, 0.14f, 1.0f);
-		colors[ImGuiCol_TitleBgActive] = ImVec4(0.12f, 0.15f, 0.18f, 1.0f);
-		colors[ImGuiCol_Tab] = ImVec4(0.13f, 0.18f, 0.20f, 1.0f);
-		colors[ImGuiCol_TabHovered] = ImVec4(0.23f, 0.35f, 0.37f, 1.0f);
-		colors[ImGuiCol_TabActive] = ImVec4(0.18f, 0.28f, 0.30f, 1.0f);
-		colors[ImGuiCol_DockingPreview] = ImVec4(0.31f, 0.68f, 0.64f, 0.45f);
+		colors[ImGuiCol_Text] = ImVec4(0.88f, 0.91f, 0.95f, 1.0f);
+		colors[ImGuiCol_TextDisabled] = ImVec4(0.49f, 0.54f, 0.62f, 1.0f);
+		colors[ImGuiCol_WindowBg] = ImVec4(0.055f, 0.065f, 0.082f, 1.0f);
+		colors[ImGuiCol_ChildBg] = ImVec4(0.075f, 0.088f, 0.11f, 1.0f);
+		colors[ImGuiCol_PopupBg] = ImVec4(0.07f, 0.082f, 0.105f, 0.99f);
+		colors[ImGuiCol_Border] = ImVec4(0.18f, 0.22f, 0.28f, 0.78f);
+		colors[ImGuiCol_Separator] = ImVec4(0.18f, 0.23f, 0.29f, 0.85f);
+		colors[ImGuiCol_Header] = ImVec4(0.12f, 0.24f, 0.27f, 1.0f);
+		colors[ImGuiCol_HeaderHovered] = ImVec4(0.16f, 0.34f, 0.37f, 1.0f);
+		colors[ImGuiCol_HeaderActive] = ImVec4(0.20f, 0.42f, 0.44f, 1.0f);
+		colors[ImGuiCol_Button] = ImVec4(0.12f, 0.28f, 0.31f, 1.0f);
+		colors[ImGuiCol_ButtonHovered] = ImVec4(0.17f, 0.40f, 0.42f, 1.0f);
+		colors[ImGuiCol_ButtonActive] = ImVec4(0.22f, 0.49f, 0.50f, 1.0f);
+		colors[ImGuiCol_CheckMark] = ImVec4(0.34f, 0.82f, 0.75f, 1.0f);
+		colors[ImGuiCol_SliderGrab] = ImVec4(0.31f, 0.72f, 0.68f, 1.0f);
+		colors[ImGuiCol_SliderGrabActive] = ImVec4(0.41f, 0.87f, 0.80f, 1.0f);
+		colors[ImGuiCol_FrameBg] = ImVec4(0.095f, 0.115f, 0.145f, 1.0f);
+		colors[ImGuiCol_FrameBgHovered] = ImVec4(0.14f, 0.17f, 0.21f, 1.0f);
+		colors[ImGuiCol_FrameBgActive] = ImVec4(0.17f, 0.21f, 0.26f, 1.0f);
+		colors[ImGuiCol_TitleBg] = ImVec4(0.065f, 0.078f, 0.098f, 1.0f);
+		colors[ImGuiCol_TitleBgActive] = ImVec4(0.09f, 0.115f, 0.145f, 1.0f);
+		colors[ImGuiCol_Tab] = ImVec4(0.08f, 0.12f, 0.15f, 1.0f);
+		colors[ImGuiCol_TabHovered] = ImVec4(0.15f, 0.30f, 0.33f, 1.0f);
+		colors[ImGuiCol_TabActive] = ImVec4(0.12f, 0.24f, 0.27f, 1.0f);
+		colors[ImGuiCol_TableRowBgAlt] = ImVec4(0.10f, 0.12f, 0.15f, 0.55f);
+		colors[ImGuiCol_DockingPreview] = ImVec4(0.34f, 0.82f, 0.75f, 0.42f);
 	}
 
-	void BuildDefaultLayout(ImGuiID dockspaceId) {
-		if (m_layoutInitialized) {
+	void BuildDefaultLayout(ImGuiID dockspaceId, bool forceReset) {
+		if (m_layoutInitialized && !forceReset) {
 			return;
 		}
 
 		m_layoutInitialized = true;
+		if (!forceReset &&
+			ImGui::DockBuilderGetNode(dockspaceId) != nullptr) {
+			return;
+		}
 		ImGui::DockBuilderRemoveNode(dockspaceId);
 		ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
 		ImGui::DockBuilderSetNodeSize(dockspaceId, ImGui::GetMainViewport()->Size);
@@ -1325,20 +3040,29 @@ private:
 		ImGuiID left = 0;
 		ImGuiID right = 0;
 		ImGuiID bottom = 0;
-		ImGuiID lowerLeft = 0;
+		ImGuiID overview = 0;
+		ImGuiID timeline = 0;
+		ImGuiID diagnostics = 0;
 		ImGuiID center = dockspaceId;
 
-		ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.23f, &left, &center);
-		ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.28f, &right, &center);
-		ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, 0.26f, &bottom, &center);
-		ImGui::DockBuilderSplitNode(left, ImGuiDir_Down, 0.45f, &lowerLeft, &left);
+		ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.20f, &left, &center);
+		ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.27f, &right, &center);
+		ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, 0.42f, &bottom, &center);
+		ImGui::DockBuilderSplitNode(left, ImGuiDir_Down, 0.34f, &overview, &left);
+		ImGui::DockBuilderSplitNode(
+			bottom,
+			ImGuiDir_Right,
+			0.38f,
+			&diagnostics,
+			&timeline);
 
-		ImGui::DockBuilderDockWindow("Overview", left);
-		ImGui::DockBuilderDockWindow("Renderer", left);
-		ImGui::DockBuilderDockWindow("Scene", lowerLeft);
-		ImGui::DockBuilderDockWindow("Assets", bottom);
-		ImGui::DockBuilderDockWindow("Profiler", bottom);
+		ImGui::DockBuilderDockWindow("Scene", left);
+		ImGui::DockBuilderDockWindow("Overview", overview);
 		ImGui::DockBuilderDockWindow("Viewport", center);
+		ImGui::DockBuilderDockWindow("Motion Timeline", timeline);
+		ImGui::DockBuilderDockWindow("Assets", diagnostics);
+		ImGui::DockBuilderDockWindow("Profiler", diagnostics);
+		ImGui::DockBuilderDockWindow("Renderer", right);
 		ImGui::DockBuilderDockWindow("Materials Inspector", right);
 		ImGui::DockBuilderDockWindow("Model Materials", right);
 		ImGui::DockBuilderDockWindow("Materials XML Editor", right);
@@ -1380,8 +3104,20 @@ private:
 	int m_viewportReadWidth = 0;
 	int m_viewportReadHeight = 0;
 	bool m_layoutInitialized = false;
+	bool m_requestLayoutReset = false;
+	bool m_rendererPanelVisible = true;
 	bool m_assetBrowserCacheInitialized = false;
+	std::string m_editorFontDescription;
+	EditorMotionTimelineController m_motionTimeline;
 	std::array<AssetBrowserCategory, 3> m_assetBrowserCategories{};
+	SceneUiReplacementAction m_sceneReplacementAction =
+		SceneUiReplacementAction::None;
+	std::string m_sceneReplacementPath;
+	std::size_t m_sceneReplacementClassicIndex = 0;
+	ClassicSceneLoadOptions m_sceneReplacementOptions;
+	std::size_t m_selectedClassicScene = 0;
+	int m_sceneRenderPreset = 0;
+	bool m_sceneDirectionalShadows = true;
 	bool m_hasPickedPixel = false;
 	int m_pickedX = 0;
 	int m_pickedY = 0;

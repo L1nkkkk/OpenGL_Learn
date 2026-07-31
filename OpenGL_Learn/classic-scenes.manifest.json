@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "assetRoot": "classic-scenes",
+  "packages": [
+    {
+      "id": "sponza",
+      "downloadUrl": "https://casual-effects.com/g3d/data10/common/model/crytek_sponza/sponza.zip",
+      "sourcePage": "https://casual-effects.com/data",
+      "archiveName": "sponza.zip",
+      "archiveBytes": 80113441,
+      "sha256": "DA005CBEE0BE2DF2ABC8513F3CEB61BCB6F69AAC112BABCD9C00169A27C2770C",
+      "extractDirectory": "sponza",
+      "sentinel": "sponza.obj",
+      "license": "Crytek public research/radiosity donation; attribution retained in copyright.txt",
+      "credit": "Frank Meinl and Crytek; original scene by Marko Dabrovic; archive corrections by Morgan McGuire"
+    },
+    {
+      "id": "san-miguel",
+      "downloadUrl": "https://casual-effects.com/g3d/data10/research/model/San_Miguel/San_Miguel.zip",
+      "sourcePage": "https://casual-effects.com/data",
+      "archiveName": "san-miguel.zip",
+      "archiveBytes": 535519642,
+      "sha256": "85874077735808150E679B3C71D70A37A270CB8833F4911325AA1099DA3F7D4A",
+      "extractDirectory": "san-miguel",
+      "sentinel": "san-miguel-low-poly.obj",
+      "license": "Free for research and educational use with attribution",
+      "credit": "Guillermo M. Leal Llaguno; 2017 archive improvements by Morgan McGuire, Guedis Cardenas, Michael Mara, and Nicholas Hull"
+    },
+    {
+      "id": "bistro",
+      "downloadUrl": "https://developer.nvidia.com/downloads/bistro",
+      "sourcePage": "https://developer.nvidia.com/orca/amazon-lumberyard-bistro",
+      "archiveName": "bistro-official.zip",
+      "archiveBytes": 894377473,
+      "sha256": "0D50E3C724C6C5DA19F8EB99AD3F53E36FEC37FFA2DF9621F9CCF0603F3934E1",
+      "extractDirectory": "bistro",
+      "archiveRoot": "Bistro_v5_2",
+      "sentinel": "BistroExterior.fbx",
+      "license": "Creative Commons Attribution 4.0 International",
+      "credit": "Amazon Lumberyard, 2017; distributed by NVIDIA ORCA"
+    }
+  ],
+  "scenes": [
+    {
+      "id": "sponza",
+      "displayName": "Crytek Sponza",
+      "packageId": "sponza",
+      "modelPath": "sponza/sponza.obj",
+      "camera": [-6.0, -1.5, 0.0],
+      "target": [6.0, -0.8, 0.0],
+      "up": [0.0, 1.0, 0.0],
+      "normalizedRadius": 15.0,
+      "fov": 55.0,
+      "expectedTriangles": 262267,
+      "category": "Classic global-illumination test scene"
+    },
+    {
+      "id": "bistro-exterior",
+      "displayName": "Amazon Lumberyard Bistro Exterior",
+      "packageId": "bistro",
+      "modelPath": "bistro/BistroExterior.obj",
+      "camera": [-1.15, -1.6, -5.4],
+      "target": [0.0, -1.0, 2.0],
+      "up": [0.0, 1.0, 0.0],
+      "normalizedRadius": 15.0,
+      "fov": 60.0,
+      "expectedTriangles": 2832120,
+      "category": "Game-production exterior scene"
+    },
+    {
+      "id": "bistro-interior",
+      "displayName": "Amazon Lumberyard Bistro Interior",
+      "packageId": "bistro",
+      "modelPath": "bistro/BistroInterior.obj",
+      "camera": [0.6, -1.92, -0.07],
+      "target": [5.0, -1.9, -2.6],
+      "up": [0.0, 1.0, 0.0],
+      "normalizedRadius": 15.0,
+      "fov": 70.0,
+      "expectedTriangles": 1046609,
+      "category": "Game-production interior scene"
+    },
+    {
+      "id": "san-miguel",
+      "displayName": "San Miguel 2.1 (low-poly)",
+      "packageId": "san-miguel",
+      "modelPath": "san-miguel/san-miguel-low-poly.obj",
+      "camera": [1.5, -1.2, 3.5],
+      "target": [1.5, -0.7, -1.0],
+      "up": [0.0, 1.0, 0.0],
+      "normalizedRadius": 15.0,
+      "fov": 60.0,
+      "expectedTriangles": 5617451,
+      "category": "Large research and path-tracing test scene"
+    }
+  ]
+}

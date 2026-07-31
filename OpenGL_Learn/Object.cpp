@@ -18,6 +18,7 @@ glm::mat4 BaseObject::getModelMatrix() {
 	m_cachedRotation = rotation;
 	m_cachedScale = scale;
 	m_transformCacheValid = true;
+	++m_transformRevision;
 	return modelMatrix;
 }
 
@@ -27,4 +28,5 @@ void BaseObject::setModelMatrix(glm::mat4 matrix) {
 	m_cachedRotation = rotation;
 	m_cachedScale = scale;
 	m_transformCacheValid = true;
+	++m_transformRevision;
 }

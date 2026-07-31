@@ -352,3 +352,54 @@ CPU Frame median 的 A 范围为 1.6077–1.6258 ms，B 为 1.2472–1.3301 ms�
 - 外部工具新增、删除或重命名资产后，Assets Browser 不会自动轮询刷新；用户需要聚焦 Assets 窗口并按 F5。避免自动轮询是消除稳定帧磁盘访问的有意取舍。
 - 当前正式结果覆盖默认折叠根节点。目录完全展开时旧实现预期会产生更多重复访问，但在建立可重复的展开状态 fixture 前不作精确收益声明。
 - 缓存重建仍在主线程执行。当前资产规模很小；大目录的首次展开如果出现可见卡顿，应另行比较后台扫描或分帧构建，不能直接以更多复杂度替换。
+
+## P3: share imported material instances
+
+### Goal and problem
+
+PBR Backpack 的 80 个 mesh 使用同一个 Assimp material index，但旧导入路径为每个 mesh 创建独立 Material。MaterialBatchScope 按指针识别材质，因而每帧产生 80 次 material bind miss、3828 次 uniform update 和 484 次 texture-state change。
+
+### Implementation and method
+
+- Model 在一次 Assimp 导入期间按 material index 复用 shared Material；geometry、draw 顺序和材质内容不变。
+- 最终二进制提供仅限 benchmark 的 --benchmark-unshared-imported-materials 控制开关，用于恢复旧行为。
+- Release x64、1440 × 900、builtin/backpack-pbr、Forward、相同相机和灯光。
+- A/B 各执行一次不计入结果的完整运行，再按 A/B/B/A/A/B 启动六个新进程；每次 300 帧 warm-up、1200 帧 sample。
+- 六个 JSON 均 capture.valid == true，draw calls 固定为 82，submitted vertices 固定为 206,643。
+- 原始 JSON：benchmark-results/pbr-ibl/material-sharing。
+
+### Per-run results
+
+| Order | Variant | CPU median (ms) | CPU P95 (ms) | Forward CPU median (ms) | Forward CPU P95 (ms) | Uniform updates |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | A - unshared | 1.8316 | 3.1560 | 0.6429 | 0.9432 | 3828 |
+| 2 | B - shared | 1.3149 | 2.7199 | 0.2030 | 0.3024 | 162 |
+| 3 | B - shared | 1.2983 | 2.6008 | 0.2001 | 0.3005 | 162 |
+| 4 | A - unshared | 2.0282 | 4.1679 | 0.7033 | 1.0178 | 3828 |
+| 5 | A - unshared | 1.8616 | 3.2450 | 0.6744 | 0.9555 | 3828 |
+| 6 | B - shared | 1.3543 | 2.7616 | 0.2098 | 0.3148 | 162 |
+
+### Average result
+
+| Metric | A average | B average | Absolute delta | Relative delta | Assessment |
+| --- | ---: | ---: | ---: | ---: | --- |
+| CPU Frame median | 1.9071 ms | 1.3225 ms | **-0.5846 ms** | **-30.66%** | improvement |
+| CPU Frame P95 | 3.5230 ms | 2.6941 ms | **-0.8289 ms** | **-23.53%** | improvement |
+| Forward CPU median | 0.6735 ms | 0.2043 ms | **-0.4692 ms** | **-69.67%** | direct improvement |
+| Forward CPU P95 | 0.9722 ms | 0.3059 ms | **-0.6663 ms** | **-68.53%** | direct improvement |
+| Uniform updates | 3828 | 162 | **-3666** | **-95.77%** | expected |
+| Material bind misses / hits | 80 / 0 | 2 / 78 | **-78 / +78** | — | expected |
+| Texture-state changes | 484 | 16 | **-468** | **-96.69%** | expected |
+| GPU Frame median | 0.2022 ms | 0.1988 ms | -0.0035 ms | -1.71% | no material change |
+| GPU Frame P95 | 0.4523 ms | 0.4638 ms | +0.0115 ms | +2.53% | noise |
+| Load ready | 1324.10 ms | 1340.57 ms | +16.46 ms | +1.24% | noise |
+| Private bytes | 692.05 MiB | 691.90 MiB | -0.15 MiB | -0.02% | unchanged |
+
+### Correctness and decision
+
+- Release x64 构建、PBR smoke 和 resource smoke 均通过。
+- Forward / Deferred PBR 截图归一化 RGB MAE 为 0.000585；材质共享没有改变像素输出。
+- PBR smoke 退出后 Texture、Mesh CPU、Mesh GPU、Render target current bytes 全部为 0。
+- FBO 生命周期保持 2 → 4 → 6 → 8 → 2。
+
+**Retained.** 直接目标 zone、完整 CPU Frame median/P95 和提交计数均有大幅且同方向的改善；GPU、加载与内存没有实质回退。PBR 功能成本、旧场景回归和 rejected 按需 shader 实验见 PBR_IBL.md。

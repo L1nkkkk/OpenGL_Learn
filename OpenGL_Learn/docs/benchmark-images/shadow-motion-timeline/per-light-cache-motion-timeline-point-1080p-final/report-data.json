@@ -1,0 +1,742 @@
+{
+  "schemaVersion": 1,
+  "manifest": "benchmark-results/shadow-optimizations/per-light-cache-motion-timeline-point-1080p-final-manifest.json",
+  "source": {
+    "gitHead": "36a601af13babc35b4d234d41fade2b7893ce6ca",
+    "gitDirty": true,
+    "sha256": "1f4856f37a7eebbde7b276daad6eb8aa95a28d5651f4220d7574b8707efbc376"
+  },
+  "executables": {
+    "A": {
+      "fileName": "OpenGL_Learn.exe",
+      "sha256": "c067f2808939649df83183e425114a6d4191df67ce3a4d4be8a9dcdcf84c34ae"
+    },
+    "B": {
+      "fileName": "OpenGL_Learn.exe",
+      "sha256": "c067f2808939649df83183e425114a6d4191df67ce3a4d4be8a9dcdcf84c34ae"
+    }
+  },
+  "machine": {
+    "os": "Microsoft Windows NT 10.0.26200.0",
+    "cpu": [
+      "12th Gen Intel(R) Core(TM) i7-12700KF"
+    ],
+    "gpu": [
+      {
+        "name": "GameViewer Virtual Display Adapter",
+        "driverVersion": "15.6.5.199"
+      },
+      {
+        "name": "MuMu Virtual Display Adapter",
+        "driverVersion": "20.36.41.498"
+      },
+      {
+        "name": "NVIDIA GeForce RTX 5060 Ti",
+        "driverVersion": "32.0.15.9186"
+      }
+    ]
+  },
+  "configuration": "Release x64",
+  "resolution": [
+    1920,
+    1080
+  ],
+  "opengl": {
+    "vendor": "NVIDIA Corporation",
+    "renderer": "NVIDIA GeForce RTX 5060 Ti/PCIe/SSE2",
+    "version": "3.3.0 NVIDIA 591.86"
+  },
+  "statistics": "每轮独立进程先计算 Median/P95/P99，再对各轮统计值取算术平均",
+  "sections": [
+    {
+      "profile": "point",
+      "scene": "sponza",
+      "tracks": [
+        "point"
+      ],
+      "metrics": {
+        "wallMilliseconds": {
+          "label": "帧时间",
+          "unit": "ms",
+          "lowerIsBetter": true,
+          "A": {
+            "median": 3.910966666666667,
+            "p95": 4.800654999999999,
+            "p99": 5.6721553333333325
+          },
+          "B": {
+            "median": 3.6522666666666663,
+            "p95": 4.390721666666666,
+            "p99": 5.240899
+          },
+          "processValues": {
+            "A": [
+              {
+                "median": 3.91815,
+                "p95": 4.87528,
+                "p99": 5.664935999999999
+              },
+              {
+                "median": 4.01585,
+                "p95": 4.830745,
+                "p99": 5.796364999999999
+              },
+              {
+                "median": 3.7988999999999997,
+                "p95": 4.695939999999998,
+                "p99": 5.555164999999999
+              }
+            ],
+            "B": [
+              {
+                "median": 3.4729,
+                "p95": 4.289165,
+                "p99": 5.569444999999999
+              },
+              {
+                "median": 3.71435,
+                "p95": 4.424009999999999,
+                "p99": 4.752905000000001
+              },
+              {
+                "median": 3.7695499999999997,
+                "p95": 4.458989999999999,
+                "p99": 5.400347
+              }
+            ]
+          },
+          "medianDeltaPercent": -6.614732930477562
+        },
+        "shadowGpuMilliseconds": {
+          "label": "Shadow Update GPU",
+          "unit": "ms",
+          "lowerIsBetter": true,
+          "A": {
+            "median": 0.7904746666666665,
+            "p95": 0.9456869333333332,
+            "p99": 1.0699466666666666
+          },
+          "B": {
+            "median": 0.6245440000000001,
+            "p95": 0.7891727999999999,
+            "p99": 0.9062797866666665
+          },
+          "processValues": {
+            "A": [
+              {
+                "median": 0.795392,
+                "p95": 0.9530575999999997,
+                "p99": 1.06602624
+              },
+              {
+                "median": 0.78992,
+                "p95": 0.9412240000000001,
+                "p99": 1.08914528
+              },
+              {
+                "median": 0.7861119999999999,
+                "p95": 0.9427791999999998,
+                "p99": 1.05466848
+              }
+            ],
+            "B": [
+              {
+                "median": 0.627248,
+                "p95": 0.766392,
+                "p99": 0.8892883199999999
+              },
+              {
+                "median": 0.624048,
+                "p95": 0.8405808,
+                "p99": 0.9463129599999999
+              },
+              {
+                "median": 0.622336,
+                "p95": 0.7605456,
+                "p99": 0.8832380799999999
+              }
+            ]
+          },
+          "medianDeltaPercent": -20.991269380760226
+        },
+        "shadowCpuMilliseconds": {
+          "label": "Shadow Update CPU",
+          "unit": "ms",
+          "lowerIsBetter": true,
+          "A": {
+            "median": 0.3194166666666667,
+            "p95": 0.4267433333333333,
+            "p99": 0.5357693333333332
+          },
+          "B": {
+            "median": 0.18418333333333334,
+            "p95": 0.25049166666666656,
+            "p99": 0.33371499999999993
+          },
+          "processValues": {
+            "A": [
+              {
+                "median": 0.3237,
+                "p95": 0.41191999999999995,
+                "p99": 0.524118
+              },
+              {
+                "median": 0.31585,
+                "p95": 0.409105,
+                "p99": 0.514706
+              },
+              {
+                "median": 0.3187,
+                "p95": 0.459205,
+                "p99": 0.5684839999999998
+              }
+            ],
+            "B": [
+              {
+                "median": 0.18455,
+                "p95": 0.23433999999999988,
+                "p99": 0.317814
+              },
+              {
+                "median": 0.18464999999999998,
+                "p95": 0.250225,
+                "p99": 0.32323899999999994
+              },
+              {
+                "median": 0.18335,
+                "p95": 0.26690999999999976,
+                "p99": 0.3600919999999999
+              }
+            ]
+          },
+          "medianDeltaPercent": -42.33759457344117
+        },
+        "updatedLights": {
+          "label": "更新灯数",
+          "unit": "盏/帧",
+          "lowerIsBetter": true,
+          "A": {
+            "median": 3.0,
+            "p95": 3.0,
+            "p99": 3.0
+          },
+          "B": {
+            "median": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "processValues": {
+            "A": [
+              {
+                "median": 3.0,
+                "p95": 3.0,
+                "p99": 3.0
+              },
+              {
+                "median": 3.0,
+                "p95": 3.0,
+                "p99": 3.0
+              },
+              {
+                "median": 3.0,
+                "p95": 3.0,
+                "p99": 3.0
+              }
+            ],
+            "B": [
+              {
+                "median": 1.0,
+                "p95": 1.0,
+                "p99": 1.0
+              },
+              {
+                "median": 1.0,
+                "p95": 1.0,
+                "p99": 1.0
+              },
+              {
+                "median": 1.0,
+                "p95": 1.0,
+                "p99": 1.0
+              }
+            ]
+          },
+          "medianDeltaPercent": -66.66666666666667
+        },
+        "pointSubmissions": {
+          "label": "Point 提交次数",
+          "unit": "次/帧",
+          "lowerIsBetter": true,
+          "A": {
+            "median": 6.0,
+            "p95": 6.0,
+            "p99": 6.0
+          },
+          "B": {
+            "median": 6.0,
+            "p95": 6.0,
+            "p99": 6.0
+          },
+          "processValues": {
+            "A": [
+              {
+                "median": 6.0,
+                "p95": 6.0,
+                "p99": 6.0
+              },
+              {
+                "median": 6.0,
+                "p95": 6.0,
+                "p99": 6.0
+              },
+              {
+                "median": 6.0,
+                "p95": 6.0,
+                "p99": 6.0
+              }
+            ],
+            "B": [
+              {
+                "median": 6.0,
+                "p95": 6.0,
+                "p99": 6.0
+              },
+              {
+                "median": 6.0,
+                "p95": 6.0,
+                "p99": 6.0
+              },
+              {
+                "median": 6.0,
+                "p95": 6.0,
+                "p99": 6.0
+              }
+            ]
+          },
+          "medianDeltaPercent": 0.0
+        },
+        "lightCacheHits": {
+          "label": "Per-Light Cache Hit",
+          "unit": "次/帧",
+          "lowerIsBetter": false,
+          "A": {
+            "median": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "B": {
+            "median": 2.0,
+            "p95": 2.0,
+            "p99": 2.0
+          },
+          "processValues": {
+            "A": [
+              {
+                "median": 0.0,
+                "p95": 0.0,
+                "p99": 0.0
+              },
+              {
+                "median": 0.0,
+                "p95": 0.0,
+                "p99": 0.0
+              },
+              {
+                "median": 0.0,
+                "p95": 0.0,
+                "p99": 0.0
+              }
+            ],
+            "B": [
+              {
+                "median": 2.0,
+                "p95": 2.0,
+                "p99": 2.0
+              },
+              {
+                "median": 2.0,
+                "p95": 2.0,
+                "p99": 2.0
+              },
+              {
+                "median": 2.0,
+                "p95": 2.0,
+                "p99": 2.0
+              }
+            ]
+          },
+          "medianDeltaPercent": null
+        }
+      },
+      "imageMetrics": {
+        "schemaVersion": 1,
+        "before": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\per-light-cache-motion-timeline-point-1080p-final-point-1920x1080\\formal\\sponza\\A1.ppm",
+        "after": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\per-light-cache-motion-timeline-point-1080p-final-point-1920x1080\\formal\\sponza\\B1.ppm",
+        "resolution": [
+          1920,
+          1080
+        ],
+        "rgbMeanAbsoluteDifference": 1.2797042685386915e-07,
+        "rgbRootMeanSquareDifference": 0.00015171090679031113,
+        "maximumChannelDelta": 60,
+        "exactChangedPixelCount": 2,
+        "exactChangedPixelRatio": 9.645061728395062e-07,
+        "changedPixelRatio": 9.645061728395062e-07,
+        "luminanceMeanAbsoluteDifference": 1.2670963447107237e-07,
+        "meanDarkening": 0.0,
+        "meanBrightening": 1.2670963447107237e-07,
+        "darkenedPixelRatio": 0.0,
+        "brightenedPixelRatio": 9.645061728395062e-07
+      },
+      "chart": "timeline-point-sponza.png",
+      "csv": "csv/point-sponza.csv",
+      "comparison": "captures/point-sponza-comparison.png",
+      "difference": "captures/point-sponza-difference.png"
+    },
+    {
+      "profile": "point",
+      "scene": "san-miguel",
+      "tracks": [
+        "point"
+      ],
+      "metrics": {
+        "wallMilliseconds": {
+          "label": "帧时间",
+          "unit": "ms",
+          "lowerIsBetter": true,
+          "A": {
+            "median": 11.13585,
+            "p95": 12.378728333333333,
+            "p99": 13.284245333333333
+          },
+          "B": {
+            "median": 9.240733333333333,
+            "p95": 10.714104999999998,
+            "p99": 11.929087999999998
+          },
+          "processValues": {
+            "A": [
+              {
+                "median": 11.2087,
+                "p95": 12.839414999999999,
+                "p99": 14.11378
+              },
+              {
+                "median": 10.9998,
+                "p95": 12.030009999999999,
+                "p99": 12.945851
+              },
+              {
+                "median": 11.19905,
+                "p95": 12.266760000000001,
+                "p99": 12.793104999999999
+              }
+            ],
+            "B": [
+              {
+                "median": 9.571850000000001,
+                "p95": 10.981815,
+                "p99": 12.197979999999998
+              },
+              {
+                "median": 9.0054,
+                "p95": 10.259324999999999,
+                "p99": 11.178619
+              },
+              {
+                "median": 9.14495,
+                "p95": 10.901175,
+                "p99": 12.410664999999998
+              }
+            ]
+          },
+          "medianDeltaPercent": -17.018159068833242
+        },
+        "shadowGpuMilliseconds": {
+          "label": "Shadow Update GPU",
+          "unit": "ms",
+          "lowerIsBetter": true,
+          "A": {
+            "median": 5.011082666666667,
+            "p95": 5.731413866666666,
+            "p99": 6.117949013333333
+          },
+          "B": {
+            "median": 2.7569920000000003,
+            "p95": 3.399703466666667,
+            "p99": 3.55302272
+          },
+          "processValues": {
+            "A": [
+              {
+                "median": 5.009456,
+                "p95": 5.799736,
+                "p99": 6.5243888
+              },
+              {
+                "median": 5.013488,
+                "p95": 5.6798432000000005,
+                "p99": 5.894183999999999
+              },
+              {
+                "median": 5.010304,
+                "p95": 5.714662399999999,
+                "p99": 5.93527424
+              }
+            ],
+            "B": [
+              {
+                "median": 2.767424,
+                "p95": 3.3908112,
+                "p99": 3.55245504
+              },
+              {
+                "median": 2.712064,
+                "p95": 3.3922032,
+                "p99": 3.55647456
+              },
+              {
+                "median": 2.791488,
+                "p95": 3.416096,
+                "p99": 3.5501385599999997
+              }
+            ]
+          },
+          "medianDeltaPercent": -44.98210898935479
+        },
+        "shadowCpuMilliseconds": {
+          "label": "Shadow Update CPU",
+          "unit": "ms",
+          "lowerIsBetter": true,
+          "A": {
+            "median": 2.4854166666666666,
+            "p95": 2.964113333333333,
+            "p99": 3.746925333333333
+          },
+          "B": {
+            "median": 1.2402666666666666,
+            "p95": 1.8239649999999996,
+            "p99": 2.208711333333333
+          },
+          "processValues": {
+            "A": [
+              {
+                "median": 2.50845,
+                "p95": 3.2212549999999993,
+                "p99": 4.595567
+              },
+              {
+                "median": 2.46465,
+                "p95": 2.9268199999999998,
+                "p99": 3.673888999999999
+              },
+              {
+                "median": 2.48315,
+                "p95": 2.744265,
+                "p99": 2.9713199999999995
+              }
+            ],
+            "B": [
+              {
+                "median": 1.25385,
+                "p95": 1.8792149999999994,
+                "p99": 2.2802969999999996
+              },
+              {
+                "median": 1.21535,
+                "p95": 1.6057499999999996,
+                "p99": 1.9359789999999997
+              },
+              {
+                "median": 1.2516,
+                "p95": 1.98693,
+                "p99": 2.409858
+              }
+            ]
+          },
+          "medianDeltaPercent": -50.09823973176865
+        },
+        "updatedLights": {
+          "label": "更新灯数",
+          "unit": "盏/帧",
+          "lowerIsBetter": true,
+          "A": {
+            "median": 3.0,
+            "p95": 3.0,
+            "p99": 3.0
+          },
+          "B": {
+            "median": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "processValues": {
+            "A": [
+              {
+                "median": 3.0,
+                "p95": 3.0,
+                "p99": 3.0
+              },
+              {
+                "median": 3.0,
+                "p95": 3.0,
+                "p99": 3.0
+              },
+              {
+                "median": 3.0,
+                "p95": 3.0,
+                "p99": 3.0
+              }
+            ],
+            "B": [
+              {
+                "median": 1.0,
+                "p95": 1.0,
+                "p99": 1.0
+              },
+              {
+                "median": 1.0,
+                "p95": 1.0,
+                "p99": 1.0
+              },
+              {
+                "median": 1.0,
+                "p95": 1.0,
+                "p99": 1.0
+              }
+            ]
+          },
+          "medianDeltaPercent": -66.66666666666667
+        },
+        "pointSubmissions": {
+          "label": "Point 提交次数",
+          "unit": "次/帧",
+          "lowerIsBetter": true,
+          "A": {
+            "median": 6.0,
+            "p95": 6.0,
+            "p99": 6.0
+          },
+          "B": {
+            "median": 6.0,
+            "p95": 6.0,
+            "p99": 6.0
+          },
+          "processValues": {
+            "A": [
+              {
+                "median": 6.0,
+                "p95": 6.0,
+                "p99": 6.0
+              },
+              {
+                "median": 6.0,
+                "p95": 6.0,
+                "p99": 6.0
+              },
+              {
+                "median": 6.0,
+                "p95": 6.0,
+                "p99": 6.0
+              }
+            ],
+            "B": [
+              {
+                "median": 6.0,
+                "p95": 6.0,
+                "p99": 6.0
+              },
+              {
+                "median": 6.0,
+                "p95": 6.0,
+                "p99": 6.0
+              },
+              {
+                "median": 6.0,
+                "p95": 6.0,
+                "p99": 6.0
+              }
+            ]
+          },
+          "medianDeltaPercent": 0.0
+        },
+        "lightCacheHits": {
+          "label": "Per-Light Cache Hit",
+          "unit": "次/帧",
+          "lowerIsBetter": false,
+          "A": {
+            "median": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "B": {
+            "median": 2.0,
+            "p95": 2.0,
+            "p99": 2.0
+          },
+          "processValues": {
+            "A": [
+              {
+                "median": 0.0,
+                "p95": 0.0,
+                "p99": 0.0
+              },
+              {
+                "median": 0.0,
+                "p95": 0.0,
+                "p99": 0.0
+              },
+              {
+                "median": 0.0,
+                "p95": 0.0,
+                "p99": 0.0
+              }
+            ],
+            "B": [
+              {
+                "median": 2.0,
+                "p95": 2.0,
+                "p99": 2.0
+              },
+              {
+                "median": 2.0,
+                "p95": 2.0,
+                "p99": 2.0
+              },
+              {
+                "median": 2.0,
+                "p95": 2.0,
+                "p99": 2.0
+              }
+            ]
+          },
+          "medianDeltaPercent": null
+        }
+      },
+      "imageMetrics": {
+        "schemaVersion": 1,
+        "before": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\per-light-cache-motion-timeline-point-1080p-final-point-1920x1080\\formal\\san-miguel\\A1.ppm",
+        "after": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\per-light-cache-motion-timeline-point-1080p-final-point-1920x1080\\formal\\san-miguel\\B1.ppm",
+        "resolution": [
+          1920,
+          1080
+        ],
+        "rgbMeanAbsoluteDifference": 1.8155410312273056e-07,
+        "rgbRootMeanSquareDifference": 0.0001454699259614952,
+        "maximumChannelDelta": 64,
+        "exactChangedPixelCount": 5,
+        "exactChangedPixelRatio": 2.4112654320987654e-06,
+        "changedPixelRatio": 2.4112654320987654e-06,
+        "luminanceMeanAbsoluteDifference": 1.3427438876785282e-07,
+        "meanDarkening": 1.304920116194626e-07,
+        "meanBrightening": 3.78237714839022e-09,
+        "darkenedPixelRatio": 1.9290123456790124e-06,
+        "brightenedPixelRatio": 0.0
+      },
+      "chart": "timeline-point-san-miguel.png",
+      "csv": "csv/point-san-miguel.csv",
+      "comparison": "captures/point-san-miguel-comparison.png",
+      "difference": "captures/point-san-miguel-difference.png"
+    }
+  ]
+}

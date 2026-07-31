@@ -26,15 +26,28 @@
 #include "Profiler.h"
 #include "PerformanceBenchmark.h"
 #include "GLStateCache.h"
+#include "ImageBasedLighting.h"
 #include "SceneStateIO.h"
+#include "EditorSceneManager.h"
+#include "BenchmarkMotionTimeline.h"
 #include <algorithm>
+#include <array>
+#include <chrono>
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <iomanip>
+#include <limits>
+#include <sstream>
+#include <vector>
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
 
 
-bool firstMouse = false;
+bool firstMouse = true;
 bool lastFrameMkeyState = false;
 
 
@@ -52,22 +65,1939 @@ glm::vec3 result = lightColor * toyColor;
 
 Timer& timer = Timer::GetInstance();
 
+struct FrameCaptureStats {
+	bool valid = false;
+	double meanLuminance = 0.0;
+	double nonBlackRatio = 0.0;
+	std::vector<unsigned char> pixels;
+};
+
+struct FrameTimingStats {
+	std::size_t sampleCount = 0;
+	double meanMilliseconds = 0.0;
+	double medianMilliseconds = 0.0;
+	double p95Milliseconds = 0.0;
+	double p99Milliseconds = 0.0;
+};
+
+struct BenchmarkTimelineFrameTelemetry {
+	int measurementFrame = 0;
+	BenchmarkMotionSample motion;
+	double wallMilliseconds = 0.0;
+	double shadowUpdateCpuMilliseconds = 0.0;
+	double cacheCheckCpuMilliseconds = 0.0;
+	double casterStateSyncCpuMilliseconds = 0.0;
+	double pointShadowFaceDemandCpuMilliseconds = 0.0;
+	double pointShadowFaceSignatureCpuMilliseconds = 0.0;
+	std::uint64_t updateCount = 0;
+	std::uint64_t cacheHitCount = 0;
+	std::uint64_t lightCacheHitCount = 0;
+	std::uint64_t updatedLightCount = 0;
+	std::uint64_t directionalLightUpdateCount = 0;
+	std::uint64_t pointLightUpdateCount = 0;
+	std::uint64_t pointShadowSubmissionPassCount = 0;
+	std::uint64_t pointShadowRequiredFaceCount = 0;
+	std::uint64_t pointShadowRenderedFaceCount = 0;
+	std::uint64_t pointShadowFaceCacheHitCount = 0;
+	std::uint64_t pointShadowDeferredFaceCount = 0;
+	std::uint8_t pointShadowRequiredFaceMask = 0;
+	std::uint8_t pointShadowUpdateFaceMask = 0;
+	std::uint64_t spotLightUpdateCount = 0;
+	std::uint64_t casterBoundsRebuildCount = 0;
+	std::uint64_t sceneTopologyRevision = 0;
+	std::uint64_t sceneTopologyInvalidationCount = 0;
+	std::uint64_t sceneTopologyModelCount = 0;
+};
+
+struct PointShadowFaceEvidence {
+	bool valid = false;
+	std::uint64_t bitwiseHash = 0;
+	std::uint64_t nonFarSampleCount = 0;
+	float minDepth = 0.0f;
+	float maxDepth = 0.0f;
+};
+
+struct PointShadowCubeEvidence {
+	bool valid = false;
+	int lightIndex = -1;
+	int width = 0;
+	int height = 0;
+	std::uint64_t sampleCountPerFace = 0;
+	std::array<PointShadowFaceEvidence, 6> faces;
+};
+
+struct ClassicSceneTestOptions {
+	bool enabled = false;
+	bool untextured = false;
+	bool shadowExperiment = false;
+	bool gpuSynchronized = false;
+	std::string modelPath;
+	std::string sceneName;
+	std::string capturePath;
+	std::string resultPath;
+	std::string shadowMode = "off";
+	std::string shadowSampling = "stable";
+	std::string shadowLights = "directional";
+	std::string shadowWorkload = "static-hit";
+	std::string shadowVariant = "default";
+	std::string renderPath = "pbr-forward";
+	glm::vec3 cameraPosition = glm::vec3(27.0f, 18.0f, 32.0f);
+	glm::vec3 cameraTarget = glm::vec3(0.0f);
+	glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+	glm::vec3 directionalLightDirection =
+		glm::vec3(-0.45f, -1.0f, -0.25f);
+	glm::vec3 pointLightPosition = glm::vec3(0.0f, 1.5f, -3.0f);
+	glm::vec3 spotLightPosition = glm::vec3(0.0f);
+	glm::vec3 spotLightDirection = glm::vec3(0.0f, -1.0f, 0.0f);
+	bool hasSpotLightPosition = false;
+	bool hasSpotLightDirection = false;
+	float spotShadowNearPlane = 0.0f;
+	float spotShadowFarPlane = 0.0f;
+	bool hasSpotShadowNearPlane = false;
+	bool hasSpotShadowFarPlane = false;
+	float normalizedRadius = 15.0f;
+	float worldScale = 1.0f;
+	float fov = 45.0f;
+	int shadowResolution = 0;
+	int width = 1440;
+	int height = 900;
+	int warmupFrames = 15;
+	int captureFrame = 60;
+	int timelineFixedFramesPerSecond = 60;
+	int timelineCycleFrames = 600;
+};
+
+bool ParseFloatArgument(const std::string& text, float& value)
+{
+	try {
+		std::size_t consumed = 0;
+		value = std::stof(text, &consumed);
+		return consumed == text.size() && std::isfinite(value);
+	}
+	catch (...) {
+		return false;
+	}
+}
+
+bool ParseIntArgument(const std::string& text, int& value)
+{
+	try {
+		std::size_t consumed = 0;
+		value = std::stoi(text, &consumed);
+		return consumed == text.size();
+	}
+	catch (...) {
+		return false;
+	}
+}
+
+bool ParseClassicSceneTestOptions(
+	int argc,
+	char** argv,
+	ClassicSceneTestOptions& options,
+	std::string& errorMessage)
+{
+	for (int i = 1; i < argc; ++i) {
+		const std::string argument = argv[i];
+		auto readString = [&](const char* optionName, std::string& value) {
+			if (argument != optionName) {
+				return false;
+			}
+			if (i + 1 >= argc) {
+				errorMessage = std::string(optionName) + " requires a value";
+				return true;
+			}
+			value = argv[++i];
+			return true;
+		};
+		auto readFloat = [&](const char* optionName, float& value) {
+			std::string text;
+			if (!readString(optionName, text)) {
+				return false;
+			}
+			if (errorMessage.empty() && !ParseFloatArgument(text, value)) {
+				errorMessage = std::string(optionName) + " requires a finite number";
+			}
+			return true;
+		};
+		auto readInt = [&](const char* optionName, int& value) {
+			std::string text;
+			if (!readString(optionName, text)) {
+				return false;
+			}
+			if (errorMessage.empty() && !ParseIntArgument(text, value)) {
+				errorMessage = std::string(optionName) + " requires an integer";
+			}
+			return true;
+		};
+		auto readVec3 = [&](const char* optionName, glm::vec3& value) {
+			if (argument != optionName) {
+				return false;
+			}
+			if (i + 3 >= argc) {
+				errorMessage = std::string(optionName) + " requires three numbers";
+				return true;
+			}
+			glm::vec3 parsed;
+			if (!ParseFloatArgument(argv[++i], parsed.x) ||
+				!ParseFloatArgument(argv[++i], parsed.y) ||
+				!ParseFloatArgument(argv[++i], parsed.z)) {
+				errorMessage = std::string(optionName) + " requires three finite numbers";
+			}
+			else {
+				value = parsed;
+			}
+			return true;
+		};
+
+		if (readString("--classic-scene-test", options.modelPath)) {
+			options.enabled = true;
+		}
+		else if (readString("--classic-scene-name", options.sceneName)) {
+		}
+		else if (readString("--classic-scene-capture", options.capturePath)) {
+		}
+		else if (readString("--classic-scene-result", options.resultPath)) {
+		}
+		else if (readString("--classic-scene-shadow-mode", options.shadowMode)) {
+			options.shadowExperiment = true;
+			options.gpuSynchronized = true;
+		}
+		else if (readString(
+			"--classic-scene-shadow-sampling",
+			options.shadowSampling)) {
+			options.shadowExperiment = true;
+			options.gpuSynchronized = true;
+		}
+		else if (readString("--classic-scene-shadow-lights", options.shadowLights)) {
+			options.shadowExperiment = true;
+			options.gpuSynchronized = true;
+		}
+		else if (readString(
+			"--classic-scene-shadow-workload",
+			options.shadowWorkload)) {
+			options.shadowExperiment = true;
+			options.gpuSynchronized = true;
+		}
+		else if (readString(
+			"--classic-scene-shadow-variant",
+			options.shadowVariant)) {
+			options.shadowExperiment = true;
+			options.gpuSynchronized = true;
+		}
+		else if (readString("--classic-scene-render-path", options.renderPath)) {
+		}
+		else if (readVec3("--classic-scene-camera", options.cameraPosition)) {
+		}
+		else if (readVec3("--classic-scene-target", options.cameraTarget)) {
+		}
+		else if (readVec3("--classic-scene-up", options.cameraUp)) {
+		}
+		else if (readVec3(
+			"--classic-scene-directional-light",
+			options.directionalLightDirection)) {
+			options.shadowExperiment = true;
+			options.gpuSynchronized = true;
+		}
+		else if (readVec3(
+			"--classic-scene-point-light",
+			options.pointLightPosition)) {
+			options.shadowExperiment = true;
+			options.gpuSynchronized = true;
+		}
+		else if (readVec3(
+			"--classic-scene-spot-light",
+			options.spotLightPosition)) {
+			options.hasSpotLightPosition = true;
+			options.shadowExperiment = true;
+			options.gpuSynchronized = true;
+		}
+		else if (readVec3(
+			"--classic-scene-spot-direction",
+			options.spotLightDirection)) {
+			options.hasSpotLightDirection = true;
+			options.shadowExperiment = true;
+			options.gpuSynchronized = true;
+		}
+		else if (readFloat(
+			"--classic-scene-spot-near-plane",
+			options.spotShadowNearPlane)) {
+			options.hasSpotShadowNearPlane = true;
+			options.shadowExperiment = true;
+			options.gpuSynchronized = true;
+		}
+		else if (readFloat(
+			"--classic-scene-spot-far-plane",
+			options.spotShadowFarPlane)) {
+			options.hasSpotShadowFarPlane = true;
+			options.shadowExperiment = true;
+			options.gpuSynchronized = true;
+		}
+		else if (readFloat("--classic-scene-radius", options.normalizedRadius)) {
+		}
+		else if (readFloat(
+			"--classic-scene-world-scale",
+			options.worldScale)) {
+		}
+		else if (readFloat("--classic-scene-fov", options.fov)) {
+		}
+		else if (readInt(
+			"--classic-scene-shadow-resolution",
+			options.shadowResolution)) {
+			options.shadowExperiment = true;
+			options.gpuSynchronized = true;
+		}
+		else if (readInt("--classic-scene-width", options.width)) {
+		}
+		else if (readInt("--classic-scene-height", options.height)) {
+		}
+		else if (readInt(
+			"--classic-scene-warmup-frames",
+			options.warmupFrames)) {
+		}
+		else if (readInt("--classic-scene-capture-frame", options.captureFrame)) {
+		}
+		else if (readInt(
+			"--classic-scene-timeline-fps",
+			options.timelineFixedFramesPerSecond)) {
+		}
+		else if (readInt(
+			"--classic-scene-timeline-cycle-frames",
+			options.timelineCycleFrames)) {
+		}
+		else if (argument == "--classic-scene-untextured") {
+			options.untextured = true;
+		}
+
+		if (!errorMessage.empty()) {
+			return false;
+		}
+	}
+
+	if (!options.enabled) {
+		return true;
+	}
+	if (options.modelPath.empty()) {
+		errorMessage = "--classic-scene-test requires a model path";
+		return false;
+	}
+	if (options.sceneName.empty()) {
+		options.sceneName = std::filesystem::path(options.modelPath).stem().string();
+	}
+	if (options.capturePath.empty()) {
+		options.capturePath =
+			"benchmark-results/classic-scenes/" + options.sceneName + ".ppm";
+	}
+	if (options.resultPath.empty()) {
+		options.resultPath =
+			"benchmark-results/classic-scenes/" + options.sceneName + ".json";
+	}
+	if (options.normalizedRadius <= 0.0f) {
+		errorMessage = "--classic-scene-radius must be greater than zero";
+		return false;
+	}
+	if (options.worldScale < 0.05f || options.worldScale > 2.0f) {
+		errorMessage =
+			"--classic-scene-world-scale must be between 0.05 and 2.0";
+		return false;
+	}
+	if (options.shadowResolution != 0 &&
+		(options.shadowResolution < 128 ||
+			options.shadowResolution > 4096)) {
+		errorMessage =
+			"--classic-scene-shadow-resolution must be 0 or between 128 and 4096";
+		return false;
+	}
+	if (options.width < 64 || options.width > 16384) {
+		errorMessage =
+			"--classic-scene-width must be between 64 and 16384";
+		return false;
+	}
+	if (options.height < 64 || options.height > 16384) {
+		errorMessage =
+			"--classic-scene-height must be between 64 and 16384";
+		return false;
+	}
+	if (options.fov < 1.0f || options.fov > 120.0f) {
+		errorMessage = "--classic-scene-fov must be between 1 and 120 degrees";
+		return false;
+	}
+	if (options.shadowMode != "off" &&
+		options.shadowMode != "hard" &&
+		options.shadowMode != "pcf" &&
+		options.shadowMode != "pcss") {
+		errorMessage =
+			"--classic-scene-shadow-mode must be off, hard, pcf, or pcss";
+		return false;
+	}
+	if (options.shadowSampling != "legacy" &&
+		options.shadowSampling != "stable") {
+		errorMessage =
+			"--classic-scene-shadow-sampling must be legacy or stable";
+		return false;
+	}
+	if (options.shadowLights != "directional" &&
+		options.shadowLights != "point" &&
+		options.shadowLights != "spot" &&
+		options.shadowLights != "all") {
+		errorMessage =
+			"--classic-scene-shadow-lights must be directional, point, spot, or all";
+		return false;
+	}
+	if (options.shadowWorkload != "static-hit" &&
+		options.shadowWorkload != "force-update" &&
+		options.shadowWorkload != "move-directional" &&
+		options.shadowWorkload != "move-point" &&
+		options.shadowWorkload != "move-spot" &&
+		options.shadowWorkload != "move-caster" &&
+		options.shadowWorkload != "move-local-caster" &&
+		options.shadowWorkload != "change-caster-material" &&
+		options.shadowWorkload != "reload-shadow-2d" &&
+		options.shadowWorkload != "reload-shadow-point" &&
+		options.shadowWorkload != "resize-point-shadow" &&
+		options.shadowWorkload != "replace-point-shadow-target" &&
+		options.shadowWorkload != "toggle-caster" &&
+		options.shadowWorkload != "timeline-point" &&
+		options.shadowWorkload != "timeline-point-camera" &&
+		options.shadowWorkload != "timeline-caster" &&
+		options.shadowWorkload != "timeline-camera" &&
+		options.shadowWorkload != "timeline-mixed" &&
+		options.shadowWorkload != "timeline-cache-3way" &&
+		options.shadowWorkload != "deferred-face-required" &&
+		options.shadowWorkload != "replace-model-aba") {
+		errorMessage =
+			"--classic-scene-shadow-workload must be static-hit, force-update, "
+			"move-directional, move-point, move-spot, move-caster, "
+			"move-local-caster, "
+			"change-caster-material, reload-shadow-2d, "
+			"reload-shadow-point, resize-point-shadow, "
+			"replace-point-shadow-target, toggle-caster, timeline-point, "
+			"timeline-point-camera, timeline-caster, timeline-camera, "
+			"timeline-mixed, timeline-cache-3way, "
+			"deferred-face-required, or replace-model-aba";
+		return false;
+	}
+	if (options.shadowVariant.empty()) {
+		errorMessage = "--classic-scene-shadow-variant must not be empty";
+		return false;
+	}
+	if (options.renderPath != "pbr-forward" &&
+		options.renderPath != "phong-forward" &&
+		options.renderPath != "pbr-deferred" &&
+		options.renderPath != "phong-deferred" &&
+		options.renderPath != "phong-deferred-volume") {
+		errorMessage =
+			"--classic-scene-render-path must be pbr-forward, phong-forward, "
+			"pbr-deferred, phong-deferred, or phong-deferred-volume";
+		return false;
+	}
+	if (options.warmupFrames < 1) {
+		errorMessage = "--classic-scene-warmup-frames must be at least 1";
+		return false;
+	}
+	if (options.captureFrame <= options.warmupFrames) {
+		errorMessage =
+			"--classic-scene-capture-frame must be greater than the warm-up frame count";
+		return false;
+	}
+	if (options.timelineFixedFramesPerSecond < 1 ||
+		options.timelineFixedFramesPerSecond > 1000) {
+		errorMessage =
+			"--classic-scene-timeline-fps must be between 1 and 1000";
+		return false;
+	}
+	if (options.timelineCycleFrames < 4 ||
+		options.timelineCycleFrames > 36000) {
+		errorMessage =
+			"--classic-scene-timeline-cycle-frames must be between 4 and 36000";
+		return false;
+	}
+	if (options.shadowWorkload != "static-hit" &&
+		options.shadowMode == "off") {
+		errorMessage =
+			"dynamic shadow workloads require hard, pcf, or pcss shadow mode";
+		return false;
+	}
+	if (options.shadowWorkload == "move-directional" &&
+		options.shadowLights != "directional" &&
+		options.shadowLights != "all") {
+		errorMessage =
+			"move-directional requires directional or all shadow lights";
+		return false;
+	}
+	if ((options.shadowWorkload == "move-point" ||
+			options.shadowWorkload == "move-local-caster" ||
+			options.shadowWorkload == "deferred-face-required" ||
+			options.shadowWorkload == "replace-model-aba" ||
+			options.shadowWorkload == "timeline-point" ||
+			options.shadowWorkload == "timeline-point-camera") &&
+		options.shadowLights != "point" &&
+		options.shadowLights != "all") {
+		errorMessage =
+			"point-shadow workloads require point or all shadow lights";
+		return false;
+	}
+	if ((options.shadowWorkload == "timeline-mixed" ||
+			options.shadowWorkload == "timeline-cache-3way") &&
+		options.shadowLights != "all") {
+		errorMessage =
+			"mixed timeline workloads require all shadow lights";
+		return false;
+	}
+	if ((options.shadowWorkload == "reload-shadow-point" ||
+			options.shadowWorkload == "resize-point-shadow" ||
+			options.shadowWorkload == "replace-point-shadow-target") &&
+		options.shadowLights != "point" &&
+		options.shadowLights != "all") {
+		errorMessage =
+			"point-shadow cache validation requires point or all shadow lights";
+		return false;
+	}
+	if (options.shadowWorkload == "move-spot" &&
+		options.shadowLights != "spot" &&
+		options.shadowLights != "all") {
+		errorMessage = "move-spot requires spot or all shadow lights";
+		return false;
+	}
+	if (glm::length(options.cameraTarget - options.cameraPosition) < 0.001f) {
+		errorMessage = "classic scene camera and target must differ";
+		return false;
+	}
+	if (glm::length(options.cameraUp) < 0.001f) {
+		errorMessage = "classic scene camera up vector must be non-zero";
+		return false;
+	}
+	if (glm::length(options.directionalLightDirection) < 0.001f) {
+		errorMessage =
+			"classic scene directional light vector must be non-zero";
+		return false;
+	}
+	if (options.hasSpotLightDirection &&
+		glm::length(options.spotLightDirection) < 0.001f) {
+		errorMessage =
+			"classic scene spot light direction must be non-zero";
+		return false;
+	}
+	if (options.hasSpotShadowNearPlane !=
+		options.hasSpotShadowFarPlane) {
+		errorMessage =
+			"--classic-scene-spot-near-plane and "
+			"--classic-scene-spot-far-plane must be provided together";
+		return false;
+	}
+	if (options.hasSpotShadowNearPlane &&
+		(options.spotShadowNearPlane < 0.001f ||
+			options.spotShadowFarPlane <=
+				options.spotShadowNearPlane + 0.001f)) {
+		errorMessage =
+			"classic scene spot shadow planes require near >= 0.001 "
+			"and far > near + 0.001";
+		return false;
+	}
+	if (options.hasSpotShadowNearPlane &&
+		(options.spotShadowNearPlane * options.worldScale < 0.001f ||
+			(options.spotShadowFarPlane -
+				options.spotShadowNearPlane) *
+				options.worldScale <= 0.001f)) {
+		errorMessage =
+			"scaled classic scene spot shadow planes must preserve "
+			"near >= 0.001 and far > near + 0.001";
+		return false;
+	}
+	return true;
+}
+
+std::string EscapeJsonString(const std::string& value)
+{
+	std::ostringstream output;
+	for (const char character : value) {
+		switch (character) {
+		case '\\': output << "\\\\"; break;
+		case '"': output << "\\\""; break;
+		case '\n': output << "\\n"; break;
+		case '\r': output << "\\r"; break;
+		case '\t': output << "\\t"; break;
+		default: output << character; break;
+		}
+	}
+	return output.str();
+}
+
+FrameTimingStats CalculateFrameTimingStats(
+	const std::vector<double>& frameMilliseconds)
+{
+	FrameTimingStats stats;
+	stats.sampleCount = frameMilliseconds.size();
+	if (frameMilliseconds.empty()) {
+		return stats;
+	}
+
+	std::vector<double> sorted = frameMilliseconds;
+	std::sort(sorted.begin(), sorted.end());
+	double sum = 0.0;
+	for (double value : sorted) {
+		sum += value;
+	}
+	stats.meanMilliseconds = sum / static_cast<double>(sorted.size());
+
+	auto percentile = [&](double quantile) {
+		const double position =
+			quantile * static_cast<double>(sorted.size() - 1);
+		const std::size_t lower = static_cast<std::size_t>(std::floor(position));
+		const std::size_t upper = static_cast<std::size_t>(std::ceil(position));
+		const double weight = position - static_cast<double>(lower);
+		return sorted[lower] * (1.0 - weight) + sorted[upper] * weight;
+	};
+	stats.medianMilliseconds = percentile(0.5);
+	stats.p95Milliseconds = percentile(0.95);
+	stats.p99Milliseconds = percentile(0.99);
+	return stats;
+}
+
+void WriteJsonDoubleArray(
+	std::ostream& output,
+	const std::vector<double>& values)
+{
+	output << "[";
+	for (std::size_t index = 0; index < values.size(); ++index) {
+		if (index > 0) {
+			output << ", ";
+		}
+		output << values[index];
+	}
+	output << "]";
+}
+
+void WriteJsonDistribution(
+	std::ostream& output,
+	const std::vector<double>& values)
+{
+	const FrameTimingStats stats = CalculateFrameTimingStats(values);
+	output << "{\n"
+		<< "        \"count\": " << stats.sampleCount;
+	if (stats.sampleCount == 0) {
+		output << ",\n"
+			<< "        \"mean\": null,\n"
+			<< "        \"median\": null,\n"
+			<< "        \"p95\": null,\n"
+			<< "        \"p99\": null\n";
+	}
+	else {
+		output << ",\n"
+			<< "        \"mean\": " << stats.meanMilliseconds << ",\n"
+			<< "        \"median\": " << stats.medianMilliseconds << ",\n"
+			<< "        \"p95\": " << stats.p95Milliseconds << ",\n"
+			<< "        \"p99\": " << stats.p99Milliseconds << "\n";
+	}
+	output << "      }";
+}
+
+std::vector<std::string> GetSortedZoneNames(
+	const std::unordered_map<std::string, std::vector<double>>& zones)
+{
+	std::vector<std::string> names;
+	names.reserve(zones.size());
+	for (const auto& [name, values] : zones) {
+		(void)values;
+		names.push_back(name);
+	}
+	std::sort(names.begin(), names.end());
+	return names;
+}
+
+void WriteJsonZoneDistributions(
+	std::ostream& output,
+	const std::unordered_map<std::string, std::vector<double>>& zones)
+{
+	output << "{";
+	const std::vector<std::string> names = GetSortedZoneNames(zones);
+	for (std::size_t index = 0; index < names.size(); ++index) {
+		const std::string& name = names[index];
+		output << (index == 0 ? "\n" : ",\n")
+			<< "      \"" << EscapeJsonString(name) << "\": ";
+		WriteJsonDistribution(output, zones.at(name));
+	}
+	if (!names.empty()) {
+		output << "\n    ";
+	}
+	output << "}";
+}
+
+void WriteJsonZoneSamples(
+	std::ostream& output,
+	const std::unordered_map<std::string, std::vector<double>>& zones)
+{
+	output << "{";
+	const std::vector<std::string> names = GetSortedZoneNames(zones);
+	for (std::size_t index = 0; index < names.size(); ++index) {
+		const std::string& name = names[index];
+		output << (index == 0 ? "\n" : ",\n")
+			<< "      \"" << EscapeJsonString(name) << "\": ";
+		WriteJsonDoubleArray(output, zones.at(name));
+	}
+	if (!names.empty()) {
+		output << "\n    ";
+	}
+	output << "}";
+}
+
+std::uint64_t CounterDelta(
+	std::uint64_t before,
+	std::uint64_t after)
+{
+	return after >= before ? after - before : 0;
+}
+
+double CounterDelta(
+	double before,
+	double after)
+{
+	return after >= before ? after - before : 0.0;
+}
+
+void WriteJsonVec3(std::ostream& output, const glm::vec3& value)
+{
+	output << "["
+		<< value.x << ", "
+		<< value.y << ", "
+		<< value.z << "]";
+}
+
+void WriteJsonBenchmarkMotionTimeline(
+	std::ostream& output,
+	const BenchmarkMotionTimeline& timeline,
+	const std::vector<BenchmarkTimelineFrameTelemetry>& telemetry)
+{
+	const BenchmarkMotionProfile profile = timeline.GetProfile();
+	const BenchmarkMotionTimelineConfig& config = timeline.GetConfig();
+	const BenchmarkMotionBaseState& baseState = timeline.GetBaseState();
+	const std::uint32_t trackMask = timeline.GetTrackMask();
+	output << "{\n"
+		<< "    \"schemaVersion\": 1,\n"
+		<< "    \"enabled\": "
+		<< (profile != BenchmarkMotionProfile::None ? "true" : "false")
+		<< ",\n"
+		<< "    \"profile\": \""
+		<< BenchmarkMotionTimeline::ProfileName(profile) << "\",\n"
+		<< "    \"fixedFramesPerSecond\": "
+		<< config.fixedFramesPerSecond << ",\n"
+		<< "    \"cycleFrames\": " << config.cycleFrames << ",\n"
+		<< "    \"sceneRadius\": " << config.sceneRadius << ",\n"
+		<< "    \"trackMask\": " << trackMask << ",\n"
+		<< "    \"tracks\": [";
+	bool wroteTrack = false;
+	auto writeTrack = [&](BenchmarkMotionTrack track, const char* name) {
+		if (!BenchmarkMotionTimeline::HasTrack(trackMask, track)) {
+			return;
+		}
+		output << (wroteTrack ? ", " : "") << "\"" << name << "\"";
+		wroteTrack = true;
+	};
+	writeTrack(BenchmarkMotionTrack::Point, "point");
+	writeTrack(BenchmarkMotionTrack::Caster, "caster");
+	writeTrack(BenchmarkMotionTrack::Camera, "camera");
+	output << "],\n"
+		<< "    \"amplitudeRatios\": {\n"
+		<< "      \"pointHorizontal\": "
+		<< config.pointHorizontalRadiusRatio << ",\n"
+		<< "      \"pointVertical\": "
+		<< config.pointVerticalRadiusRatio << ",\n"
+		<< "      \"casterHorizontal\": "
+		<< config.casterHorizontalRadiusRatio << ",\n"
+		<< "      \"casterVertical\": "
+		<< config.casterVerticalRadiusRatio << ",\n"
+		<< "      \"cameraPosition\": "
+		<< config.cameraPositionRadiusRatio << ",\n"
+		<< "      \"cameraTarget\": "
+		<< config.cameraTargetRadiusRatio << "\n"
+		<< "    },\n"
+		<< "    \"baseState\": {\n"
+		<< "      \"pointPosition\": ";
+	WriteJsonVec3(output, baseState.pointPosition);
+	output << ",\n"
+		<< "      \"casterPosition\": ";
+	WriteJsonVec3(output, baseState.casterPosition);
+	output << ",\n"
+		<< "      \"cameraPosition\": ";
+	WriteJsonVec3(output, baseState.cameraPosition);
+	output << ",\n"
+		<< "      \"cameraTarget\": ";
+	WriteJsonVec3(output, baseState.cameraTarget);
+	output << ",\n"
+		<< "      \"cameraUp\": ";
+	WriteJsonVec3(output, baseState.cameraUp);
+	output << "\n"
+		<< "    },\n"
+		<< "    \"samples\": [";
+	for (std::size_t index = 0; index < telemetry.size(); ++index) {
+		const BenchmarkTimelineFrameTelemetry& frame = telemetry[index];
+		output << (index == 0 ? "\n" : ",\n")
+			<< "      {\n"
+			<< "        \"measurementFrame\": "
+			<< frame.measurementFrame << ",\n"
+			<< "        \"timelineFrame\": "
+			<< frame.motion.frameIndex << ",\n"
+			<< "        \"cycleFrame\": "
+			<< frame.motion.cycleFrame << ",\n"
+			<< "        \"fixedTimeSeconds\": "
+			<< frame.motion.fixedTimeSeconds << ",\n"
+			<< "        \"normalizedPhase\": "
+			<< frame.motion.normalizedPhase << ",\n"
+			<< "        \"wallMilliseconds\": "
+			<< frame.wallMilliseconds << ",\n"
+			<< "        \"pointPosition\": ";
+		WriteJsonVec3(output, frame.motion.pointPosition);
+		output << ",\n"
+			<< "        \"casterPosition\": ";
+		WriteJsonVec3(output, frame.motion.casterPosition);
+		output << ",\n"
+			<< "        \"cameraPosition\": ";
+		WriteJsonVec3(output, frame.motion.cameraPosition);
+		output << ",\n"
+			<< "        \"cameraTarget\": ";
+		WriteJsonVec3(output, frame.motion.cameraTarget);
+		output << ",\n"
+			<< "        \"shadow\": {\n"
+			<< "          \"updateCount\": "
+			<< frame.updateCount << ",\n"
+			<< "          \"cacheHitCount\": "
+			<< frame.cacheHitCount << ",\n"
+			<< "          \"lightCacheHitCount\": "
+			<< frame.lightCacheHitCount << ",\n"
+			<< "          \"updatedLightCount\": "
+			<< frame.updatedLightCount << ",\n"
+			<< "          \"directionalLightUpdateCount\": "
+			<< frame.directionalLightUpdateCount << ",\n"
+			<< "          \"pointLightUpdateCount\": "
+			<< frame.pointLightUpdateCount << ",\n"
+			<< "          \"pointShadowSubmissionPassCount\": "
+			<< frame.pointShadowSubmissionPassCount << ",\n"
+			<< "          \"pointShadowRequiredFaceCount\": "
+			<< frame.pointShadowRequiredFaceCount << ",\n"
+			<< "          \"pointShadowRenderedFaceCount\": "
+			<< frame.pointShadowRenderedFaceCount << ",\n"
+			<< "          \"pointShadowFaceCacheHitCount\": "
+			<< frame.pointShadowFaceCacheHitCount << ",\n"
+			<< "          \"pointShadowDeferredFaceCount\": "
+			<< frame.pointShadowDeferredFaceCount << ",\n"
+			<< "          \"pointShadowRequiredFaceMask\": "
+			<< static_cast<unsigned int>(
+				frame.pointShadowRequiredFaceMask) << ",\n"
+			<< "          \"pointShadowUpdateFaceMask\": "
+			<< static_cast<unsigned int>(
+				frame.pointShadowUpdateFaceMask) << ",\n"
+			<< "          \"spotLightUpdateCount\": "
+			<< frame.spotLightUpdateCount << ",\n"
+			<< "          \"casterBoundsRebuildCount\": "
+			<< frame.casterBoundsRebuildCount << ",\n"
+			<< "          \"sceneTopologyRevision\": "
+			<< frame.sceneTopologyRevision << ",\n"
+			<< "          \"sceneTopologyInvalidationCount\": "
+			<< frame.sceneTopologyInvalidationCount << ",\n"
+			<< "          \"sceneTopologyModelCount\": "
+			<< frame.sceneTopologyModelCount << ",\n"
+			<< "          \"cacheCheckCpuMilliseconds\": "
+			<< frame.cacheCheckCpuMilliseconds << ",\n"
+			<< "          \"casterStateSyncCpuMilliseconds\": "
+			<< frame.casterStateSyncCpuMilliseconds << ",\n"
+			<< "          \"pointShadowFaceDemandCpuMilliseconds\": "
+			<< frame.pointShadowFaceDemandCpuMilliseconds << ",\n"
+			<< "          \"pointShadowFaceSignatureCpuMilliseconds\": "
+			<< frame.pointShadowFaceSignatureCpuMilliseconds << ",\n"
+			<< "          \"updateCpuMilliseconds\": "
+			<< frame.shadowUpdateCpuMilliseconds << "\n"
+			<< "        }\n"
+			<< "      }";
+	}
+	if (!telemetry.empty()) {
+		output << "\n    ";
+	}
+	output << "]\n"
+		<< "  }";
+}
+
+std::uint64_t HashFloatBits(const std::vector<float>& samples)
+{
+	static_assert(
+		sizeof(float) == sizeof(std::uint32_t),
+		"Point shadow evidence requires 32-bit floats");
+	constexpr std::uint64_t fnvOffsetBasis = 14695981039346656037ull;
+	constexpr std::uint64_t fnvPrime = 1099511628211ull;
+	std::uint64_t hash = fnvOffsetBasis;
+	for (float sample : samples) {
+		std::uint32_t bits = 0;
+		std::memcpy(&bits, &sample, sizeof(bits));
+		for (unsigned int shift = 0; shift < 32; shift += 8) {
+			hash ^= static_cast<std::uint8_t>(bits >> shift);
+			hash *= fnvPrime;
+		}
+	}
+	return hash;
+}
+
+std::string FormatBitwiseHash(std::uint64_t hash)
+{
+	std::ostringstream output;
+	output << "0x"
+		<< std::hex
+		<< std::setfill('0')
+		<< std::setw(16)
+		<< hash;
+	return output.str();
+}
+
+PointShadowCubeEvidence CapturePointShadowCubeEvidence(Scene& scene)
+{
+	PointShadowCubeEvidence evidence;
+	PointLight* selectedLight = nullptr;
+	for (std::size_t index = 0;
+		index < scene.lightSource.pointLights.size();
+		++index) {
+		PointLight& light = scene.lightSource.pointLights[index];
+		FBO* target = light.shadowFBO;
+		const bool isCubeTarget =
+			target &&
+			target->attr.isShadowMap &&
+			target->attr.shadowType == FBOAttributes::ShadowBox &&
+			target->attr.textureAttrs.size() == 1 &&
+			target->attr.textureAttrs.front().target ==
+				GL_TEXTURE_CUBE_MAP;
+		if (light.GetActiveStatus() &&
+			light.useShadowMap &&
+			isCubeTarget &&
+			light.shadowCache.IsSampleable(target)) {
+			selectedLight = &light;
+			evidence.lightIndex = static_cast<int>(index);
+			break;
+		}
+	}
+	if (!selectedLight || !selectedLight->shadowFBO) {
+		return evidence;
+	}
+
+	const FBO* target = selectedLight->shadowFBO;
+	evidence.width = target->width;
+	evidence.height = target->height;
+	if (evidence.width <= 0 ||
+		evidence.height <= 0 ||
+		target->textureIDs.size() != 1 ||
+		target->textureIDs.front() == 0) {
+		return evidence;
+	}
+
+	const std::uint64_t sampleCount =
+		static_cast<std::uint64_t>(evidence.width) *
+		static_cast<std::uint64_t>(evidence.height);
+	if (sampleCount == 0 ||
+		sampleCount >
+			static_cast<std::uint64_t>(
+				(std::numeric_limits<std::size_t>::max)())) {
+		return evidence;
+	}
+	evidence.sampleCountPerFace = sampleCount;
+	std::vector<float> depthSamples(static_cast<std::size_t>(sampleCount));
+
+	// glGetTexImage reads through the current texture binding and pixel-pack
+	// state. Preserve every state item touched here so the evidence collection
+	// remains observational and stays outside the measured frame interval.
+	GLint previousActiveTexture = GL_TEXTURE0;
+	GLint previousCubeTexture = 0;
+	GLint previousPixelPackBuffer = 0;
+	GLint previousPackAlignment = 4;
+	GLint previousPackRowLength = 0;
+	GLint previousPackSkipPixels = 0;
+	GLint previousPackSkipRows = 0;
+	GLint previousPackImageHeight = 0;
+	GLint previousPackSkipImages = 0;
+	GLint previousPackSwapBytes = GL_FALSE;
+	GLint previousPackLsbFirst = GL_FALSE;
+	glGetIntegerv(GL_ACTIVE_TEXTURE, &previousActiveTexture);
+	glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &previousCubeTexture);
+	glGetIntegerv(
+		GL_PIXEL_PACK_BUFFER_BINDING,
+		&previousPixelPackBuffer);
+	glGetIntegerv(GL_PACK_ALIGNMENT, &previousPackAlignment);
+	glGetIntegerv(GL_PACK_ROW_LENGTH, &previousPackRowLength);
+	glGetIntegerv(GL_PACK_SKIP_PIXELS, &previousPackSkipPixels);
+	glGetIntegerv(GL_PACK_SKIP_ROWS, &previousPackSkipRows);
+	glGetIntegerv(GL_PACK_IMAGE_HEIGHT, &previousPackImageHeight);
+	glGetIntegerv(GL_PACK_SKIP_IMAGES, &previousPackSkipImages);
+	glGetIntegerv(GL_PACK_SWAP_BYTES, &previousPackSwapBytes);
+	glGetIntegerv(GL_PACK_LSB_FIRST, &previousPackLsbFirst);
+
+	glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+	glPixelStorei(GL_PACK_ALIGNMENT, 4);
+	glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+	glPixelStorei(GL_PACK_SKIP_PIXELS, 0);
+	glPixelStorei(GL_PACK_SKIP_ROWS, 0);
+	glPixelStorei(GL_PACK_IMAGE_HEIGHT, 0);
+	glPixelStorei(GL_PACK_SKIP_IMAGES, 0);
+	glPixelStorei(GL_PACK_SWAP_BYTES, GL_FALSE);
+	glPixelStorei(GL_PACK_LSB_FIRST, GL_FALSE);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, target->textureIDs.front());
+
+	bool allFacesValid = true;
+	for (std::size_t faceIndex = 0;
+		faceIndex < evidence.faces.size();
+		++faceIndex) {
+		glGetTexImage(
+			GL_TEXTURE_CUBE_MAP_POSITIVE_X +
+				static_cast<GLenum>(faceIndex),
+			0,
+			GL_DEPTH_COMPONENT,
+			GL_FLOAT,
+			depthSamples.data());
+		const GLenum readError = glGetError();
+
+		PointShadowFaceEvidence& face = evidence.faces[faceIndex];
+		face.bitwiseHash = HashFloatBits(depthSamples);
+		float minDepth = (std::numeric_limits<float>::max)();
+		float maxDepth = (std::numeric_limits<float>::lowest)();
+		bool allFinite = true;
+		for (float depth : depthSamples) {
+			if (!std::isfinite(depth)) {
+				allFinite = false;
+				continue;
+			}
+			minDepth = (std::min)(minDepth, depth);
+			maxDepth = (std::max)(maxDepth, depth);
+			if (depth < 1.0f) {
+				++face.nonFarSampleCount;
+			}
+		}
+		face.valid = readError == GL_NO_ERROR && allFinite;
+		if (face.valid) {
+			face.minDepth = minDepth;
+			face.maxDepth = maxDepth;
+		}
+		else {
+			allFacesValid = false;
+		}
+	}
+
+	glBindTexture(
+		GL_TEXTURE_CUBE_MAP,
+		static_cast<GLuint>(previousCubeTexture));
+	glPixelStorei(GL_PACK_LSB_FIRST, previousPackLsbFirst);
+	glPixelStorei(GL_PACK_SWAP_BYTES, previousPackSwapBytes);
+	glPixelStorei(GL_PACK_SKIP_IMAGES, previousPackSkipImages);
+	glPixelStorei(GL_PACK_IMAGE_HEIGHT, previousPackImageHeight);
+	glPixelStorei(GL_PACK_SKIP_ROWS, previousPackSkipRows);
+	glPixelStorei(GL_PACK_SKIP_PIXELS, previousPackSkipPixels);
+	glPixelStorei(GL_PACK_ROW_LENGTH, previousPackRowLength);
+	glPixelStorei(GL_PACK_ALIGNMENT, previousPackAlignment);
+	glBindBuffer(
+		GL_PIXEL_PACK_BUFFER,
+		static_cast<GLuint>(previousPixelPackBuffer));
+	glActiveTexture(static_cast<GLenum>(previousActiveTexture));
+
+	evidence.valid = allFacesValid;
+	return evidence;
+}
+
+void WriteJsonPointShadowCubeEvidence(
+	std::ostream& output,
+	const PointShadowCubeEvidence& evidence)
+{
+	static const std::array<const char*, 6> faceNames = {
+		"+X", "-X", "+Y", "-Y", "+Z", "-Z"
+	};
+	output << "{\n"
+		<< "      \"valid\": "
+		<< (evidence.valid ? "true" : "false") << ",\n"
+		<< "      \"lightIndex\": " << evidence.lightIndex << ",\n"
+		<< "      \"resolution\": ["
+		<< evidence.width << ", " << evidence.height << "],\n"
+		<< "      \"sampleCountPerFace\": "
+		<< evidence.sampleCountPerFace << ",\n"
+		<< "      \"faces\": [";
+	for (std::size_t index = 0; index < evidence.faces.size(); ++index) {
+		const PointShadowFaceEvidence& face = evidence.faces[index];
+		output << (index == 0 ? "\n" : ",\n")
+			<< "        {\n"
+			<< "          \"index\": " << index << ",\n"
+			<< "          \"name\": \"" << faceNames[index] << "\",\n"
+			<< "          \"valid\": "
+			<< (face.valid ? "true" : "false") << ",\n"
+			<< "          \"bitwiseHash\": \""
+			<< FormatBitwiseHash(face.bitwiseHash) << "\",\n"
+			<< "          \"nonFarSampleCount\": "
+			<< face.nonFarSampleCount << ",\n"
+			<< "          \"minDepth\": " << face.minDepth << ",\n"
+			<< "          \"maxDepth\": " << face.maxDepth << "\n"
+			<< "        }";
+	}
+	if (!evidence.faces.empty()) {
+		output << "\n      ";
+	}
+	output << "]\n"
+		<< "    }";
+}
+
+bool WriteClassicSceneResult(
+	const ClassicSceneTestOptions& options,
+	bool success,
+	double loadMilliseconds,
+	const FrameTimingStats& frameTiming,
+	std::size_t meshCount,
+	std::uint64_t vertexCount,
+	std::uint64_t triangleCount,
+	const glm::vec3& sourceCenter,
+	float sourceRadius,
+	float appliedScale,
+	const FrameCaptureStats& capture,
+	const PointShadowCubeEvidence& pointShadowCubeEvidence,
+	const MemoryStats& memory,
+	const Scene::ShadowSystemStats& shadowStats,
+	const Scene::ShadowSystemStats& measurementStartShadowStats,
+	const BenchmarkMotionTimeline& motionTimeline,
+	const std::vector<BenchmarkTimelineFrameTelemetry>& timelineTelemetry,
+	const ProfilerBenchmarkSamples& profilerSamples,
+	float actualSpotShadowNearPlane,
+	float actualSpotShadowFarPlane)
+{
+	const std::filesystem::path path(options.resultPath);
+	std::error_code directoryError;
+	if (path.has_parent_path()) {
+		std::filesystem::create_directories(path.parent_path(), directoryError);
+	}
+	if (directoryError) {
+		return false;
+	}
+
+	std::ofstream output(path, std::ios::trunc);
+	if (!output.is_open()) {
+		return false;
+	}
+	auto memoryBytes = [&](MemoryResourceType type) {
+		return memory.categories[static_cast<std::size_t>(type)].currentBytes;
+	};
+	double shadowUpdateGpuMilliseconds = 0.0;
+	for (const ProfilerZoneStats& zone :
+		PerformanceProfiler::GetInstance().GetGpuZoneStats()) {
+		if (zone.name == "Shadow Map Update" && zone.sampleCount > 0) {
+			shadowUpdateGpuMilliseconds = zone.averageMs;
+			break;
+		}
+	}
+	output << std::fixed << std::setprecision(6);
+	const char* glVendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
+	const char* glRenderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
+	const char* glVersion = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+	const std::uint64_t measuredCacheCheckCount = CounterDelta(
+		measurementStartShadowStats.cacheCheckCount,
+		shadowStats.cacheCheckCount);
+	const double measuredCacheCheckCpuMilliseconds = CounterDelta(
+		measurementStartShadowStats.totalCacheCheckCpuMilliseconds,
+		shadowStats.totalCacheCheckCpuMilliseconds);
+	const std::uint64_t measuredCasterStateSyncCount = CounterDelta(
+		measurementStartShadowStats.casterStateSyncCount,
+		shadowStats.casterStateSyncCount);
+	const double measuredCasterStateSyncCpuMilliseconds = CounterDelta(
+		measurementStartShadowStats.totalCasterStateSyncCpuMilliseconds,
+		shadowStats.totalCasterStateSyncCpuMilliseconds);
+	const std::uint64_t measuredLightCacheHitCount = CounterDelta(
+		measurementStartShadowStats.lightCacheHitCount,
+		shadowStats.lightCacheHitCount);
+	const std::uint64_t measuredDirectionalLightUpdateCount = CounterDelta(
+		measurementStartShadowStats.directionalLightUpdateCount,
+		shadowStats.directionalLightUpdateCount);
+	const std::uint64_t measuredPointLightUpdateCount = CounterDelta(
+		measurementStartShadowStats.pointLightUpdateCount,
+		shadowStats.pointLightUpdateCount);
+	const std::uint64_t measuredPointShadowLayeredUpdateCount = CounterDelta(
+		measurementStartShadowStats.pointShadowLayeredUpdateCount,
+		shadowStats.pointShadowLayeredUpdateCount);
+	const std::uint64_t measuredPointShadowSixFaceUpdateCount = CounterDelta(
+		measurementStartShadowStats.pointShadowSixFaceUpdateCount,
+		shadowStats.pointShadowSixFaceUpdateCount);
+	const std::uint64_t measuredPointShadowSubmissionPassCount = CounterDelta(
+		measurementStartShadowStats.pointShadowSubmissionPassCount,
+		shadowStats.pointShadowSubmissionPassCount);
+	const std::uint64_t measuredPointShadowFaceCullingPassCount = CounterDelta(
+		measurementStartShadowStats.pointShadowFaceCullingPassCount,
+		shadowStats.pointShadowFaceCullingPassCount);
+	const std::uint64_t measuredPointShadowRequiredFaceCount = CounterDelta(
+		measurementStartShadowStats.pointShadowRequiredFaceCount,
+		shadowStats.pointShadowRequiredFaceCount);
+	const std::uint64_t measuredPointShadowRenderedFaceCount = CounterDelta(
+		measurementStartShadowStats.pointShadowRenderedFaceCount,
+		shadowStats.pointShadowRenderedFaceCount);
+	const std::uint64_t measuredPointShadowFaceCacheHitCount = CounterDelta(
+		measurementStartShadowStats.pointShadowFaceCacheHitCount,
+		shadowStats.pointShadowFaceCacheHitCount);
+	const std::uint64_t measuredPointShadowDeferredFaceCount = CounterDelta(
+		measurementStartShadowStats.pointShadowDeferredFaceCount,
+		shadowStats.pointShadowDeferredFaceCount);
+	const std::uint64_t measuredPointShadowPartialUpdateCount = CounterDelta(
+		measurementStartShadowStats.pointShadowPartialUpdateCount,
+		shadowStats.pointShadowPartialUpdateCount);
+	const std::uint64_t measuredPointShadowFullUpdateCount = CounterDelta(
+		measurementStartShadowStats.pointShadowFullUpdateCount,
+		shadowStats.pointShadowFullUpdateCount);
+	const std::uint64_t measuredPointShadowZeroRequiredCount = CounterDelta(
+		measurementStartShadowStats.pointShadowZeroRequiredCount,
+		shadowStats.pointShadowZeroRequiredCount);
+	const std::uint64_t measuredPointShadowFaceDemandCheckCount = CounterDelta(
+		measurementStartShadowStats.pointShadowFaceDemandCheckCount,
+		shadowStats.pointShadowFaceDemandCheckCount);
+	const std::uint64_t measuredPointShadowFaceSignatureBuildCount =
+		CounterDelta(
+			measurementStartShadowStats.pointShadowFaceSignatureBuildCount,
+			shadowStats.pointShadowFaceSignatureBuildCount);
+	const double measuredPointShadowFaceDemandCpuMilliseconds = CounterDelta(
+		measurementStartShadowStats
+			.totalPointShadowFaceDemandCpuMilliseconds,
+		shadowStats.totalPointShadowFaceDemandCpuMilliseconds);
+	const double measuredPointShadowFaceSignatureCpuMilliseconds =
+		CounterDelta(
+			measurementStartShadowStats
+				.totalPointShadowFaceSignatureCpuMilliseconds,
+			shadowStats.totalPointShadowFaceSignatureCpuMilliseconds);
+	const std::uint64_t measuredSpotLightUpdateCount = CounterDelta(
+		measurementStartShadowStats.spotLightUpdateCount,
+		shadowStats.spotLightUpdateCount);
+	const std::uint64_t measuredEmptyShadowClearCount = CounterDelta(
+		measurementStartShadowStats.emptyShadowClearCount,
+		shadowStats.emptyShadowClearCount);
+	const std::uint64_t measuredShadowResourceFailureCount = CounterDelta(
+		measurementStartShadowStats.shadowResourceFailureCount,
+		shadowStats.shadowResourceFailureCount);
+	const std::uint64_t measuredConservativeShadowFallbackCount = CounterDelta(
+		measurementStartShadowStats.conservativeShadowFallbackCount,
+		shadowStats.conservativeShadowFallbackCount);
+	const std::uint64_t measuredSpotFitCount = CounterDelta(
+		measurementStartShadowStats.spotFitCount,
+		shadowStats.spotFitCount);
+	const std::uint64_t measuredSpotProjectionAwareFitCount = CounterDelta(
+		measurementStartShadowStats.spotProjectionAwareFitCount,
+		shadowStats.spotProjectionAwareFitCount);
+	const std::uint64_t measuredSpotFitFallbackCount = CounterDelta(
+		measurementStartShadowStats.spotFitFallbackCount,
+		shadowStats.spotFitFallbackCount);
+	const std::uint64_t measuredSpotFitCandidateCount = CounterDelta(
+		measurementStartShadowStats.totalSpotFitCandidateCount,
+		shadowStats.totalSpotFitCandidateCount);
+	const std::uint64_t measuredSpotFitAcceptedCount = CounterDelta(
+		measurementStartShadowStats.totalSpotFitAcceptedCount,
+		shadowStats.totalSpotFitAcceptedCount);
+	const std::uint64_t measuredSpotFitRejectedCount = CounterDelta(
+		measurementStartShadowStats.totalSpotFitRejectedCount,
+		shadowStats.totalSpotFitRejectedCount);
+	const double measuredSpotFitCpuMilliseconds = CounterDelta(
+		measurementStartShadowStats.totalSpotFitCpuMilliseconds,
+		shadowStats.totalSpotFitCpuMilliseconds);
+	const std::uint64_t measuredUpdatedLightCount =
+		measuredDirectionalLightUpdateCount +
+		measuredPointLightUpdateCount +
+		measuredSpotLightUpdateCount;
+	const std::uint64_t measuredCasterCandidateCount = CounterDelta(
+		measurementStartShadowStats.totalCasterCandidateCount,
+		shadowStats.totalCasterCandidateCount);
+	const std::uint64_t measuredCasterCulledCount = CounterDelta(
+		measurementStartShadowStats.totalCasterCulledCount,
+		shadowStats.totalCasterCulledCount);
+	const std::uint64_t measuredCasterCullingLightCount = CounterDelta(
+		measurementStartShadowStats.totalCasterCullingLightCount,
+		shadowStats.totalCasterCullingLightCount);
+	const std::uint64_t measuredCasterDrawCount = CounterDelta(
+		measurementStartShadowStats.totalCasterDrawCount,
+		shadowStats.totalCasterDrawCount);
+	const std::uint64_t measuredCasterTriangleCount = CounterDelta(
+		measurementStartShadowStats.totalCasterTriangleCount,
+		shadowStats.totalCasterTriangleCount);
+	const std::uint64_t measuredDirectionalFitCount = CounterDelta(
+		measurementStartShadowStats.directionalFitCount,
+		shadowStats.directionalFitCount);
+	const std::uint64_t measuredDirectionalLightAabbFitCount = CounterDelta(
+		measurementStartShadowStats.directionalLightAabbFitCount,
+		shadowStats.directionalLightAabbFitCount);
+	const std::uint64_t measuredDirectionalResolutionChangeCount = CounterDelta(
+		measurementStartShadowStats.directionalResolutionChangeCount,
+		shadowStats.directionalResolutionChangeCount);
+	const double measuredDirectionalFitCpuMilliseconds = CounterDelta(
+		measurementStartShadowStats.totalDirectionalFitCpuMilliseconds,
+		shadowStats.totalDirectionalFitCpuMilliseconds);
+	output << "{\n"
+		<< "  \"schemaVersion\": 19,\n"
+		<< "  \"success\": " << (success ? "true" : "false") << ",\n"
+		<< "  \"scene\": \"" << EscapeJsonString(options.sceneName) << "\",\n"
+		<< "  \"modelPath\": \"" << EscapeJsonString(options.modelPath) << "\",\n"
+		<< "  \"materialMode\": \""
+		<< (options.untextured ? "override" : "source") << "\",\n"
+		<< "  \"renderPath\": \""
+		<< EscapeJsonString(options.renderPath) << "\",\n"
+		<< "  \"capturePath\": \"" << EscapeJsonString(options.capturePath) << "\",\n"
+		<< "  \"glVendor\": \""
+		<< EscapeJsonString(glVendor ? glVendor : "") << "\",\n"
+		<< "  \"glRenderer\": \""
+		<< EscapeJsonString(glRenderer ? glRenderer : "") << "\",\n"
+		<< "  \"glVersion\": \""
+		<< EscapeJsonString(glVersion ? glVersion : "") << "\",\n"
+		<< "  \"resolution\": ["
+		<< properties.SCREEN_WIDTH << ", " << properties.SCREEN_HEIGHT << "],\n"
+		<< "  \"camera\": {\n"
+		<< "    \"position\": ["
+		<< options.cameraPosition.x << ", "
+		<< options.cameraPosition.y << ", "
+		<< options.cameraPosition.z << "],\n"
+		<< "    \"target\": ["
+		<< options.cameraTarget.x << ", "
+		<< options.cameraTarget.y << ", "
+		<< options.cameraTarget.z << "],\n"
+		<< "    \"up\": ["
+		<< options.cameraUp.x << ", "
+		<< options.cameraUp.y << ", "
+		<< options.cameraUp.z << "],\n"
+		<< "    \"fovDegrees\": " << options.fov << "\n"
+		<< "  },\n"
+		<< "  \"frameMeasurement\": \""
+		<< (options.gpuSynchronized ? "gpu-synchronized-wall" : "cpu-submission-wall")
+		<< "\",\n"
+		<< "  \"warmupFrames\": " << options.warmupFrames << ",\n"
+		<< "  \"measuredFrames\": "
+		<< (options.captureFrame - options.warmupFrames) << ",\n"
+		<< "  \"shadow\": {\n"
+		<< "    \"experiment\": " << (options.shadowExperiment ? "true" : "false") << ",\n"
+		<< "    \"mode\": \"" << EscapeJsonString(options.shadowMode) << "\",\n"
+		<< "    \"sampling\": \""
+		<< EscapeJsonString(options.shadowSampling) << "\",\n"
+		<< "    \"lights\": \"" << EscapeJsonString(options.shadowLights) << "\",\n"
+		<< "    \"workload\": \""
+		<< EscapeJsonString(options.shadowWorkload) << "\",\n"
+		<< "    \"variant\": \""
+		<< EscapeJsonString(options.shadowVariant) << "\",\n"
+		<< "    \"worldScale\": " << options.worldScale << ",\n"
+		<< "    \"requestedResolution\": "
+		<< options.shadowResolution << ",\n"
+		<< "    \"legacyCacheSignatureEnabled\": "
+		<< (properties.SHADOW_CACHE_USE_LEGACY_SIGNATURE
+			? "true"
+			: "false") << ",\n"
+		<< "    \"cacheDisabled\": "
+		<< (properties.SHADOW_CACHE_DISABLED ? "true" : "false")
+		<< ",\n"
+		<< "    \"perLightCacheEnabled\": "
+		<< (properties.SHADOW_PER_LIGHT_CACHE ? "true" : "false")
+		<< ",\n"
+		<< "    \"spatialCasterCacheEnabled\": "
+		<< (properties.SHADOW_SPATIAL_CASTER_CACHE
+			? "true"
+			: "false") << ",\n"
+		<< "    \"directionalLight\": ["
+		<< options.directionalLightDirection.x << ", "
+		<< options.directionalLightDirection.y << ", "
+		<< options.directionalLightDirection.z << "],\n"
+		<< "    \"pointLightPosition\": ["
+		<< options.pointLightPosition.x << ", "
+		<< options.pointLightPosition.y << ", "
+		<< options.pointLightPosition.z << "],\n"
+		<< "    \"spotLightPosition\": ["
+		<< (options.hasSpotLightPosition
+			? options.spotLightPosition.x
+			: options.cameraPosition.x) << ", "
+		<< (options.hasSpotLightPosition
+			? options.spotLightPosition.y
+			: options.cameraPosition.y) << ", "
+		<< (options.hasSpotLightPosition
+			? options.spotLightPosition.z
+			: options.cameraPosition.z) << "],\n"
+		<< "    \"spotLightDirection\": ["
+		<< (options.hasSpotLightDirection
+			? glm::normalize(options.spotLightDirection).x
+			: glm::normalize(
+				options.cameraTarget -
+				options.cameraPosition).x) << ", "
+		<< (options.hasSpotLightDirection
+			? glm::normalize(options.spotLightDirection).y
+			: glm::normalize(
+				options.cameraTarget -
+				options.cameraPosition).y) << ", "
+		<< (options.hasSpotLightDirection
+			? glm::normalize(options.spotLightDirection).z
+			: glm::normalize(
+				options.cameraTarget -
+				options.cameraPosition).z) << "],\n"
+		<< "    \"spotShadowNearPlane\": "
+		<< actualSpotShadowNearPlane << ",\n"
+		<< "    \"spotShadowFarPlane\": "
+		<< actualSpotShadowFarPlane << ",\n"
+		<< "    \"casterCullingEnabled\": "
+		<< (properties.SHADOW_CASTER_CULLING ? "true" : "false")
+		<< ",\n"
+		<< "    \"directionalLightAabbFitEnabled\": "
+		<< (properties.DIRECTIONAL_SHADOW_LIGHT_AABB_FIT
+			? "true"
+			: "false") << ",\n"
+		<< "    \"directionalDensityResolutionEnabled\": "
+		<< (properties.DIRECTIONAL_SHADOW_DENSITY_RESOLUTION
+			? "true"
+			: "false") << ",\n"
+		<< "    \"optimizationFlags\": "
+		<< properties.GetShadowOptimizationFlags() << ",\n"
+		<< "    \"exactEarlyOutEnabled\": "
+		<< (properties.SHADOW_EXACT_EARLY_OUT ? "true" : "false")
+		<< ",\n"
+		<< "    \"preparedPointInputsEnabled\": "
+		<< (properties.SHADOW_PREPARED_POINT_INPUTS ? "true" : "false")
+		<< ",\n"
+		<< "    \"adaptivePointSamplesEnabled\": "
+		<< (properties.SHADOW_ADAPTIVE_POINT_SAMPLES
+			? "true"
+			: "false") << ",\n"
+		<< "    \"adaptivePcssFilterEnabled\": "
+		<< (properties.SHADOW_ADAPTIVE_PCSS_FILTER
+			? "true"
+			: "false") << ",\n"
+		<< "    \"stagedPcssBlockerEnabled\": "
+		<< (properties.SHADOW_STAGED_PCSS_BLOCKER
+			? "true"
+			: "false") << ",\n"
+		<< "    \"adaptiveMinSamples\": "
+		<< properties.SHADOW_ADAPTIVE_MIN_SAMPLES << ",\n"
+		<< "    \"hardwareDepthCompareEnabled\": "
+		<< (properties.SHADOW_HARDWARE_DEPTH_COMPARE
+			? "true"
+			: "false") << ",\n"
+		<< "    \"hardwareLinearPcfEnabled\": "
+		<< (properties.SHADOW_HARDWARE_LINEAR_PCF
+			? "true"
+			: "false") << ",\n"
+		<< "    \"hardwareReducedPcfEnabled\": "
+		<< (properties.SHADOW_HARDWARE_REDUCED_PCF
+			? "true"
+			: "false") << ",\n"
+		<< "    \"texelScaledBiasEnabled\": "
+		<< (properties.SHADOW_TEXEL_SCALED_BIAS
+			? "true"
+			: "false") << ",\n"
+		<< "    \"spotRadialBiasDirectionEnabled\": "
+		<< (properties.SHADOW_SPOT_RADIAL_BIAS_DIRECTION
+			? "true"
+			: "false") << ",\n"
+		<< "    \"spotPcssLinearDepthEnabled\": "
+		<< (properties.SHADOW_SPOT_PCSS_LINEAR_DEPTH
+			? "true"
+			: "false") << ",\n"
+		<< "    \"spotPcssReducedFilterEnabled\": "
+		<< (properties.SHADOW_SPOT_PCSS_REDUCED_FILTER
+			? "true"
+			: "false") << ",\n"
+		<< "    \"spotCasterDepthFitEnabled\": "
+		<< (properties.SHADOW_SPOT_CASTER_DEPTH_FIT
+			? "true"
+			: "false") << ",\n"
+		<< "    \"bias2DMinTexels\": "
+		<< properties.SHADOW_BIAS_2D_MIN_TEXELS << ",\n"
+		<< "    \"bias2DSlopeTexels\": "
+		<< properties.SHADOW_BIAS_2D_SLOPE_TEXELS << ",\n"
+		<< "    \"biasCubeMinTexels\": "
+		<< properties.SHADOW_BIAS_CUBE_MIN_TEXELS << ",\n"
+		<< "    \"biasCubeSlopeTexels\": "
+		<< properties.SHADOW_BIAS_CUBE_SLOPE_TEXELS << ",\n"
+		<< "    \"pointShadowRenderPolicy\": \""
+		<< (properties.POINT_SHADOW_ADAPTIVE_RENDERING
+			? "adaptive"
+			: (properties.POINT_SHADOW_SIX_FACE_RENDERING
+				? "six-face"
+				: "layered")) << "\",\n"
+		<< "    \"pointShadowFaceCullingEnabled\": "
+		<< (properties.POINT_SHADOW_FACE_CULLING
+			? "true"
+			: "false") << ",\n"
+		<< "    \"pointShadowPerFaceCacheEnabled\": "
+		<< (properties.POINT_SHADOW_PER_FACE_CACHE
+			? "true"
+			: "false") << ",\n"
+		<< "    \"pointShadowForceAllFacesRequired\": "
+		<< (properties.POINT_SHADOW_FORCE_ALL_FACES_REQUIRED
+			? "true"
+			: "false") << ",\n"
+		<< "    \"updateCount\": " << shadowStats.updateCount << ",\n"
+		<< "    \"cacheHitCount\": " << shadowStats.cacheHitCount << ",\n"
+		<< "    \"measuredUpdateCount\": "
+		<< CounterDelta(
+			measurementStartShadowStats.updateCount,
+			shadowStats.updateCount) << ",\n"
+		<< "    \"measuredCacheHitCount\": "
+		<< CounterDelta(
+			measurementStartShadowStats.cacheHitCount,
+			shadowStats.cacheHitCount) << ",\n"
+		<< "    \"cacheCheckCount\": "
+		<< shadowStats.cacheCheckCount << ",\n"
+		<< "    \"measuredCacheCheckCount\": "
+		<< measuredCacheCheckCount << ",\n"
+		<< "    \"cacheMissCount\": "
+		<< shadowStats.cacheMissCount << ",\n"
+		<< "    \"measuredCacheMissCount\": "
+		<< CounterDelta(
+			measurementStartShadowStats.cacheMissCount,
+			shadowStats.cacheMissCount) << ",\n"
+		<< "    \"legacySignatureCheckCount\": "
+		<< shadowStats.legacySignatureCheckCount << ",\n"
+		<< "    \"measuredLegacySignatureCheckCount\": "
+		<< CounterDelta(
+			measurementStartShadowStats.legacySignatureCheckCount,
+			shadowStats.legacySignatureCheckCount) << ",\n"
+		<< "    \"revisionCheckCount\": "
+		<< shadowStats.revisionCheckCount << ",\n"
+		<< "    \"measuredRevisionCheckCount\": "
+		<< CounterDelta(
+			measurementStartShadowStats.revisionCheckCount,
+			shadowStats.revisionCheckCount) << ",\n"
+		<< "    \"casterStateSyncCount\": "
+		<< shadowStats.casterStateSyncCount << ",\n"
+		<< "    \"measuredCasterStateSyncCount\": "
+		<< measuredCasterStateSyncCount << ",\n"
+		<< "    \"casterBoundsRebuildCount\": "
+		<< shadowStats.casterBoundsRebuildCount << ",\n"
+		<< "    \"measuredCasterBoundsRebuildCount\": "
+		<< CounterDelta(
+			measurementStartShadowStats.casterBoundsRebuildCount,
+			shadowStats.casterBoundsRebuildCount) << ",\n"
+		<< "    \"casterRevision\": "
+		<< shadowStats.casterRevision << ",\n"
+		<< "    \"sceneTopologyRevision\": "
+		<< shadowStats.sceneTopologyRevision << ",\n"
+		<< "    \"measurementStartSceneTopologyRevision\": "
+		<< measurementStartShadowStats.sceneTopologyRevision << ",\n"
+		<< "    \"sceneTopologyInvalidationCount\": "
+		<< shadowStats.sceneTopologyInvalidationCount << ",\n"
+		<< "    \"measuredSceneTopologyInvalidationCount\": "
+		<< CounterDelta(
+			measurementStartShadowStats.sceneTopologyInvalidationCount,
+			shadowStats.sceneTopologyInvalidationCount) << ",\n"
+		<< "    \"sceneTopologyModelCount\": "
+		<< shadowStats.sceneTopologyModelCount << ",\n"
+		<< "    \"measurementStartSceneTopologyModelCount\": "
+		<< measurementStartShadowStats.sceneTopologyModelCount << ",\n"
+		<< "    \"lastCacheCheckUsedLegacySignature\": "
+		<< (shadowStats.lastCacheCheckUsedLegacySignature
+			? "true"
+			: "false") << ",\n"
+		<< "    \"lastCacheCheckCpuMilliseconds\": "
+		<< shadowStats.lastCacheCheckCpuMilliseconds << ",\n"
+		<< "    \"totalCacheCheckCpuMilliseconds\": "
+		<< shadowStats.totalCacheCheckCpuMilliseconds << ",\n"
+		<< "    \"measuredCacheCheckCpuMilliseconds\": "
+		<< measuredCacheCheckCpuMilliseconds << ",\n"
+		<< "    \"measuredAverageCacheCheckCpuMilliseconds\": "
+		<< (measuredCacheCheckCount > 0
+			? measuredCacheCheckCpuMilliseconds /
+				static_cast<double>(measuredCacheCheckCount)
+			: 0.0) << ",\n"
+		<< "    \"lastCasterStateSyncCpuMilliseconds\": "
+		<< shadowStats.lastCasterStateSyncCpuMilliseconds << ",\n"
+		<< "    \"totalCasterStateSyncCpuMilliseconds\": "
+		<< shadowStats.totalCasterStateSyncCpuMilliseconds << ",\n"
+		<< "    \"measuredCasterStateSyncCpuMilliseconds\": "
+		<< measuredCasterStateSyncCpuMilliseconds << ",\n"
+		<< "    \"measuredAverageCasterStateSyncCpuMilliseconds\": "
+		<< (measuredCasterStateSyncCount > 0
+			? measuredCasterStateSyncCpuMilliseconds /
+				static_cast<double>(measuredCasterStateSyncCount)
+			: 0.0) << ",\n"
+		<< "    \"lightCacheHitCount\": "
+		<< shadowStats.lightCacheHitCount << ",\n"
+		<< "    \"measuredLightCacheHitCount\": "
+		<< measuredLightCacheHitCount << ",\n"
+		<< "    \"directionalLightUpdateCount\": "
+		<< shadowStats.directionalLightUpdateCount << ",\n"
+		<< "    \"measuredDirectionalLightUpdateCount\": "
+		<< measuredDirectionalLightUpdateCount << ",\n"
+		<< "    \"directionalFitCount\": "
+		<< shadowStats.directionalFitCount << ",\n"
+		<< "    \"measuredDirectionalFitCount\": "
+		<< measuredDirectionalFitCount << ",\n"
+		<< "    \"directionalLightAabbFitCount\": "
+		<< shadowStats.directionalLightAabbFitCount << ",\n"
+		<< "    \"measuredDirectionalLightAabbFitCount\": "
+		<< measuredDirectionalLightAabbFitCount << ",\n"
+		<< "    \"directionalResolutionChangeCount\": "
+		<< shadowStats.directionalResolutionChangeCount << ",\n"
+		<< "    \"measuredDirectionalResolutionChangeCount\": "
+		<< measuredDirectionalResolutionChangeCount << ",\n"
+		<< "    \"totalDirectionalFitCpuMilliseconds\": "
+		<< shadowStats.totalDirectionalFitCpuMilliseconds << ",\n"
+		<< "    \"measuredDirectionalFitCpuMilliseconds\": "
+		<< measuredDirectionalFitCpuMilliseconds << ",\n"
+		<< "    \"measuredAverageDirectionalFitCpuMilliseconds\": "
+		<< (measuredDirectionalFitCount > 0
+			? measuredDirectionalFitCpuMilliseconds /
+				static_cast<double>(measuredDirectionalFitCount)
+			: 0.0) << ",\n"
+		<< "    \"lastDirectionalFitRawWidth\": "
+		<< shadowStats.lastDirectionalFitRawWidth << ",\n"
+		<< "    \"lastDirectionalFitRawHeight\": "
+		<< shadowStats.lastDirectionalFitRawHeight << ",\n"
+		<< "    \"lastDirectionalFitRawDepth\": "
+		<< shadowStats.lastDirectionalFitRawDepth << ",\n"
+		<< "    \"lastDirectionalFitWidth\": "
+		<< shadowStats.lastDirectionalFitWidth << ",\n"
+		<< "    \"lastDirectionalFitHeight\": "
+		<< shadowStats.lastDirectionalFitHeight << ",\n"
+		<< "    \"lastDirectionalFitDepth\": "
+		<< shadowStats.lastDirectionalFitDepth << ",\n"
+		<< "    \"lastDirectionalFitTexelSizeX\": "
+		<< shadowStats.lastDirectionalFitTexelSizeX << ",\n"
+		<< "    \"lastDirectionalFitTexelSizeY\": "
+		<< shadowStats.lastDirectionalFitTexelSizeY << ",\n"
+		<< "    \"lastDirectionalFitUtilization\": "
+		<< shadowStats.lastDirectionalFitUtilization << ",\n"
+		<< "    \"lastDirectionalFitReferenceTexelSize\": "
+		<< shadowStats.lastDirectionalFitReferenceTexelSize << ",\n"
+		<< "    \"lastDirectionalFitResolution\": "
+		<< shadowStats.lastDirectionalFitResolution << ",\n"
+		<< "    \"pointLightUpdateCount\": "
+		<< shadowStats.pointLightUpdateCount << ",\n"
+		<< "    \"measuredPointLightUpdateCount\": "
+		<< measuredPointLightUpdateCount << ",\n"
+		<< "    \"pointShadowLayeredUpdateCount\": "
+		<< shadowStats.pointShadowLayeredUpdateCount << ",\n"
+		<< "    \"measuredPointShadowLayeredUpdateCount\": "
+		<< measuredPointShadowLayeredUpdateCount << ",\n"
+		<< "    \"pointShadowSixFaceUpdateCount\": "
+		<< shadowStats.pointShadowSixFaceUpdateCount << ",\n"
+		<< "    \"measuredPointShadowSixFaceUpdateCount\": "
+		<< measuredPointShadowSixFaceUpdateCount << ",\n"
+		<< "    \"pointShadowSubmissionPassCount\": "
+		<< shadowStats.pointShadowSubmissionPassCount << ",\n"
+		<< "    \"measuredPointShadowSubmissionPassCount\": "
+		<< measuredPointShadowSubmissionPassCount << ",\n"
+		<< "    \"pointShadowFaceCullingPassCount\": "
+		<< shadowStats.pointShadowFaceCullingPassCount << ",\n"
+		<< "    \"measuredPointShadowFaceCullingPassCount\": "
+		<< measuredPointShadowFaceCullingPassCount << ",\n"
+		<< "    \"pointShadowRequiredFaceCount\": "
+		<< shadowStats.pointShadowRequiredFaceCount << ",\n"
+		<< "    \"measuredPointShadowRequiredFaceCount\": "
+		<< measuredPointShadowRequiredFaceCount << ",\n"
+		<< "    \"pointShadowRenderedFaceCount\": "
+		<< shadowStats.pointShadowRenderedFaceCount << ",\n"
+		<< "    \"measuredPointShadowRenderedFaceCount\": "
+		<< measuredPointShadowRenderedFaceCount << ",\n"
+		<< "    \"pointShadowFaceCacheHitCount\": "
+		<< shadowStats.pointShadowFaceCacheHitCount << ",\n"
+		<< "    \"measuredPointShadowFaceCacheHitCount\": "
+		<< measuredPointShadowFaceCacheHitCount << ",\n"
+		<< "    \"pointShadowDeferredFaceCount\": "
+		<< shadowStats.pointShadowDeferredFaceCount << ",\n"
+		<< "    \"measuredPointShadowDeferredFaceCount\": "
+		<< measuredPointShadowDeferredFaceCount << ",\n"
+		<< "    \"measuredPointShadowPartialUpdateCount\": "
+		<< measuredPointShadowPartialUpdateCount << ",\n"
+		<< "    \"measuredPointShadowFullUpdateCount\": "
+		<< measuredPointShadowFullUpdateCount << ",\n"
+		<< "    \"measuredPointShadowZeroRequiredCount\": "
+		<< measuredPointShadowZeroRequiredCount << ",\n"
+		<< "    \"measuredPointShadowFaceDemandCheckCount\": "
+		<< measuredPointShadowFaceDemandCheckCount << ",\n"
+		<< "    \"measuredPointShadowFaceSignatureBuildCount\": "
+		<< measuredPointShadowFaceSignatureBuildCount << ",\n"
+		<< "    \"measuredPointShadowFaceDemandCpuMilliseconds\": "
+		<< measuredPointShadowFaceDemandCpuMilliseconds << ",\n"
+		<< "    \"measuredAveragePointShadowFaceDemandCpuMilliseconds\": "
+		<< (measuredPointShadowFaceDemandCheckCount > 0
+			? measuredPointShadowFaceDemandCpuMilliseconds /
+				static_cast<double>(
+					measuredPointShadowFaceDemandCheckCount)
+			: 0.0) << ",\n"
+		<< "    \"measuredPointShadowFaceSignatureCpuMilliseconds\": "
+		<< measuredPointShadowFaceSignatureCpuMilliseconds << ",\n"
+		<< "    \"measuredAveragePointShadowFaceSignatureCpuMilliseconds\": "
+		<< (measuredPointShadowFaceSignatureBuildCount > 0
+			? measuredPointShadowFaceSignatureCpuMilliseconds /
+				static_cast<double>(
+					measuredPointShadowFaceSignatureBuildCount)
+			: 0.0) << ",\n"
+		<< "    \"lastPointShadowRequiredFaceMask\": "
+		<< static_cast<unsigned int>(
+			shadowStats.lastPointShadowRequiredFaceMask) << ",\n"
+		<< "    \"lastPointShadowUpdateFaceMask\": "
+		<< static_cast<unsigned int>(
+			shadowStats.lastPointShadowUpdateFaceMask) << ",\n"
+		<< "    \"spotLightUpdateCount\": "
+		<< shadowStats.spotLightUpdateCount << ",\n"
+		<< "    \"measuredSpotLightUpdateCount\": "
+		<< measuredSpotLightUpdateCount << ",\n"
+		<< "    \"emptyShadowClearCount\": "
+		<< shadowStats.emptyShadowClearCount << ",\n"
+		<< "    \"measuredEmptyShadowClearCount\": "
+		<< measuredEmptyShadowClearCount << ",\n"
+		<< "    \"shadowResourceFailureCount\": "
+		<< shadowStats.shadowResourceFailureCount << ",\n"
+		<< "    \"measuredShadowResourceFailureCount\": "
+		<< measuredShadowResourceFailureCount << ",\n"
+		<< "    \"conservativeShadowFallbackCount\": "
+		<< shadowStats.conservativeShadowFallbackCount << ",\n"
+		<< "    \"measuredConservativeShadowFallbackCount\": "
+		<< measuredConservativeShadowFallbackCount << ",\n"
+		<< "    \"spotFitCount\": "
+		<< shadowStats.spotFitCount << ",\n"
+		<< "    \"measuredSpotFitCount\": "
+		<< measuredSpotFitCount << ",\n"
+		<< "    \"spotProjectionAwareFitCount\": "
+		<< shadowStats.spotProjectionAwareFitCount << ",\n"
+		<< "    \"measuredSpotProjectionAwareFitCount\": "
+		<< measuredSpotProjectionAwareFitCount << ",\n"
+		<< "    \"spotFitFallbackCount\": "
+		<< shadowStats.spotFitFallbackCount << ",\n"
+		<< "    \"measuredSpotFitFallbackCount\": "
+		<< measuredSpotFitFallbackCount << ",\n"
+		<< "    \"measuredSpotFitCandidateCount\": "
+		<< measuredSpotFitCandidateCount << ",\n"
+		<< "    \"measuredSpotFitAcceptedCount\": "
+		<< measuredSpotFitAcceptedCount << ",\n"
+		<< "    \"measuredSpotFitRejectedCount\": "
+		<< measuredSpotFitRejectedCount << ",\n"
+		<< "    \"totalSpotFitCpuMilliseconds\": "
+		<< shadowStats.totalSpotFitCpuMilliseconds << ",\n"
+		<< "    \"measuredSpotFitCpuMilliseconds\": "
+		<< measuredSpotFitCpuMilliseconds << ",\n"
+		<< "    \"measuredAverageSpotFitCpuMilliseconds\": "
+		<< (measuredSpotFitCount > 0
+			? measuredSpotFitCpuMilliseconds /
+				static_cast<double>(measuredSpotFitCount)
+			: 0.0) << ",\n"
+		<< "    \"lastSpotFitCandidateCount\": "
+		<< shadowStats.lastSpotFitCandidateCount << ",\n"
+		<< "    \"lastSpotFitAcceptedCount\": "
+		<< shadowStats.lastSpotFitAcceptedCount << ",\n"
+		<< "    \"lastSpotFitRejectedCount\": "
+		<< shadowStats.lastSpotFitRejectedCount << ",\n"
+		<< "    \"lastSpotFitLegacyNear\": "
+		<< shadowStats.lastSpotFitLegacyNear << ",\n"
+		<< "    \"lastSpotFitLegacyFar\": "
+		<< shadowStats.lastSpotFitLegacyFar << ",\n"
+		<< "    \"lastSpotFitRawNear\": "
+		<< shadowStats.lastSpotFitRawNear << ",\n"
+		<< "    \"lastSpotFitRawFar\": "
+		<< shadowStats.lastSpotFitRawFar << ",\n"
+		<< "    \"lastSpotFitNear\": "
+		<< shadowStats.lastSpotFitNear << ",\n"
+		<< "    \"lastSpotFitFar\": "
+		<< shadowStats.lastSpotFitFar << ",\n"
+		<< "    \"lastSpotFitDepthSpanReduction\": "
+		<< shadowStats.lastSpotFitDepthSpanReduction << ",\n"
+		<< "    \"lastSpotFitDepthUtilization\": "
+		<< shadowStats.lastSpotFitDepthUtilization << ",\n"
+		<< "    \"lastSpotFitProjectionDepthScale\": "
+		<< shadowStats.lastSpotFitProjectionDepthScale << ",\n"
+		<< "    \"lastSpotFitPrecisionGain\": "
+		<< shadowStats.lastSpotFitPrecisionGain << ",\n"
+		<< "    \"lastSpotFitMinimumProjectedCoverageMargin\": "
+		<< shadowStats.lastSpotFitMinimumProjectedCoverageMargin << ",\n"
+		<< "    \"lastSpotFitLightIndex\": "
+		<< shadowStats.lastSpotFitLightIndex << ",\n"
+		<< "    \"lastSpotFitRawNearClipped\": "
+		<< (shadowStats.lastSpotFitRawNearClipped
+			? "true"
+			: "false") << ",\n"
+		<< "    \"lastSpotFitProjectionAware\": "
+		<< (shadowStats.lastSpotFitProjectionAware
+			? "true"
+			: "false") << ",\n"
+		<< "    \"measuredUpdatedLightCount\": "
+		<< measuredUpdatedLightCount << ",\n"
+		<< "    \"updatedLightCount\": " << shadowStats.updatedLightCount << ",\n"
+		<< "    \"casterCandidateCount\": "
+		<< shadowStats.casterCandidateCount << ",\n"
+		<< "    \"casterCulledCount\": "
+		<< shadowStats.casterCulledCount << ",\n"
+		<< "    \"casterCullingLightCount\": "
+		<< shadowStats.casterCullingLightCount << ",\n"
+		<< "    \"casterDrawCount\": " << shadowStats.casterDrawCount << ",\n"
+		<< "    \"casterTriangleCount\": " << shadowStats.casterTriangleCount << ",\n"
+		<< "    \"measuredCasterCandidateCount\": "
+		<< measuredCasterCandidateCount << ",\n"
+		<< "    \"measuredCasterCulledCount\": "
+		<< measuredCasterCulledCount << ",\n"
+		<< "    \"measuredCasterCullingLightCount\": "
+		<< measuredCasterCullingLightCount << ",\n"
+		<< "    \"measuredCasterDrawCount\": "
+		<< measuredCasterDrawCount << ",\n"
+		<< "    \"measuredCasterTriangleCount\": "
+		<< measuredCasterTriangleCount << ",\n"
+		<< "    \"lastUpdateCpuMilliseconds\": "
+		<< shadowStats.lastUpdateCpuMilliseconds << ",\n"
+		<< "    \"updateGpuMilliseconds\": "
+		<< shadowUpdateGpuMilliseconds << ",\n"
+		<< "    \"pointShadowCubeEvidence\": ";
+	WriteJsonPointShadowCubeEvidence(output, pointShadowCubeEvidence);
+	output << "\n"
+		<< "  },\n"
+		<< "  \"motionTimeline\": ";
+	WriteJsonBenchmarkMotionTimeline(
+		output,
+		motionTimeline,
+		timelineTelemetry);
+	output << ",\n"
+		<< "  \"loadMilliseconds\": " << loadMilliseconds << ",\n"
+		<< "  \"frameTimeMilliseconds\": {\n"
+		<< "    \"sampleCount\": " << frameTiming.sampleCount << ",\n"
+		<< "    \"mean\": " << frameTiming.meanMilliseconds << ",\n"
+		<< "    \"median\": " << frameTiming.medianMilliseconds << ",\n"
+		<< "    \"p95\": " << frameTiming.p95Milliseconds << ",\n"
+		<< "    \"p99\": " << frameTiming.p99Milliseconds << "\n"
+		<< "  },\n"
+		<< "  \"averageFrameMilliseconds\": " << frameTiming.meanMilliseconds << ",\n"
+		<< "  \"averageFps\": "
+		<< (frameTiming.meanMilliseconds > 0.0
+			? 1000.0 / frameTiming.meanMilliseconds
+			: 0.0)
+		<< ",\n"
+		<< "  \"meshCount\": " << meshCount << ",\n"
+		<< "  \"vertexCount\": " << vertexCount << ",\n"
+		<< "  \"triangleCount\": " << triangleCount << ",\n"
+		<< "  \"sourceCenter\": ["
+		<< sourceCenter.x << ", " << sourceCenter.y << ", " << sourceCenter.z << "],\n"
+		<< "  \"sourceRadius\": " << sourceRadius << ",\n"
+		<< "  \"appliedScale\": " << appliedScale << ",\n"
+		<< "  \"meanLuminance\": " << capture.meanLuminance << ",\n"
+		<< "  \"nonBlackRatio\": " << capture.nonBlackRatio << ",\n"
+		<< "  \"memoryBytes\": {\n"
+		<< "    \"processWorkingSet\": " << memory.processWorkingSetBytes << ",\n"
+		<< "    \"processPrivate\": " << memory.processPrivateBytes << ",\n"
+		<< "    \"texture\": " << memoryBytes(MemoryResourceType::Texture) << ",\n"
+		<< "    \"meshCpu\": " << memoryBytes(MemoryResourceType::MeshCpu) << ",\n"
+		<< "    \"meshGpu\": " << memoryBytes(MemoryResourceType::MeshGpu) << ",\n"
+		<< "    \"renderTarget\": " << memoryBytes(MemoryResourceType::RenderTarget) << "\n"
+		<< "  },\n"
+		<< "  \"profiler\": {\n"
+		<< "    \"gpuTimingSupported\": "
+		<< (PerformanceProfiler::GetInstance().IsGpuTimingSupported()
+			? "true"
+			: "false") << ",\n"
+		<< "    \"summary\": {\n"
+		<< "      \"wallFrame\": ";
+	WriteJsonDistribution(output, profilerSamples.wallFrameMs);
+	output << ",\n      \"cpuFrame\": ";
+	WriteJsonDistribution(output, profilerSamples.cpuFrameMs);
+	output << ",\n      \"gpuFrame\": ";
+	WriteJsonDistribution(output, profilerSamples.gpuFrameMs);
+	output << ",\n      \"cpuZones\": ";
+	WriteJsonZoneDistributions(output, profilerSamples.cpuZoneMs);
+	output << ",\n      \"gpuZones\": ";
+	WriteJsonZoneDistributions(output, profilerSamples.gpuZoneMs);
+	output << "\n    },\n"
+		<< "    \"samples\": {\n"
+		<< "      \"wallFrame\": ";
+	WriteJsonDoubleArray(output, profilerSamples.wallFrameMs);
+	output << ",\n      \"cpuFrame\": ";
+	WriteJsonDoubleArray(output, profilerSamples.cpuFrameMs);
+	output << ",\n      \"gpuFrame\": ";
+	WriteJsonDoubleArray(output, profilerSamples.gpuFrameMs);
+	output << ",\n      \"cpuZones\": ";
+	WriteJsonZoneSamples(output, profilerSamples.cpuZoneMs);
+	output << ",\n      \"gpuZones\": ";
+	WriteJsonZoneSamples(output, profilerSamples.gpuZoneMs);
+	output << "\n    }\n"
+		<< "  }\n"
+		<< "}\n";
+	return output.good();
+}
+
+FrameCaptureStats CaptureFramebufferPpm(const FBO* fbo, const std::string& outputPath)
+{
+	FrameCaptureStats stats;
+	if (!fbo || fbo->framebufferID == 0 || fbo->width <= 0 || fbo->height <= 0) {
+		return stats;
+	}
+
+	const int width = fbo->width;
+	const int height = fbo->height;
+	std::vector<unsigned char> pixels(
+		static_cast<size_t>(width) * static_cast<size_t>(height) * 3u);
+	GLenum pendingError = GL_NO_ERROR;
+	for (GLenum error = glGetError(); error != GL_NO_ERROR; error = glGetError()) {
+		pendingError = error;
+	}
+	if (pendingError != GL_NO_ERROR) {
+		std::cerr << "[ClassicScene] cleared pre-capture OpenGL error 0x"
+			<< std::hex << pendingError << std::dec << std::endl;
+	}
+	GLState::BindFramebuffer(GL_READ_FRAMEBUFFER, fbo->framebufferID);
+	glReadBuffer(GL_COLOR_ATTACHMENT0);
+	glPixelStorei(GL_PACK_ALIGNMENT, 1);
+	glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+	const GLenum readError = glGetError();
+	GLState::BindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+	if (readError != GL_NO_ERROR) {
+		std::cerr << "PBR capture glReadPixels failed with error 0x"
+			<< std::hex << readError << std::dec << std::endl;
+		return stats;
+	}
+
+	std::error_code directoryError;
+	const std::filesystem::path path(outputPath);
+	if (path.has_parent_path()) {
+		std::filesystem::create_directories(path.parent_path(), directoryError);
+	}
+	if (directoryError) {
+		return stats;
+	}
+	std::ofstream output(path, std::ios::binary | std::ios::trunc);
+	if (!output.is_open()) {
+		return stats;
+	}
+	output << "P6\n" << width << ' ' << height << "\n255\n";
+	const size_t rowBytes = static_cast<size_t>(width) * 3u;
+	for (int row = height - 1; row >= 0; --row) {
+		output.write(
+			reinterpret_cast<const char*>(pixels.data() + static_cast<size_t>(row) * rowBytes),
+			static_cast<std::streamsize>(rowBytes));
+	}
+	if (!output.good()) {
+		return stats;
+	}
+
+	double luminanceSum = 0.0;
+	std::uint64_t nonBlackPixels = 0;
+	const std::uint64_t pixelCount = static_cast<std::uint64_t>(width) * height;
+	for (size_t i = 0; i < pixels.size(); i += 3) {
+		const double red = pixels[i] / 255.0;
+		const double green = pixels[i + 1] / 255.0;
+		const double blue = pixels[i + 2] / 255.0;
+		const double luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+		luminanceSum += luminance;
+		if (luminance > 0.01) {
+			++nonBlackPixels;
+		}
+	}
+	stats.meanLuminance = pixelCount != 0 ? luminanceSum / pixelCount : 0.0;
+	stats.nonBlackRatio = pixelCount != 0
+		? static_cast<double>(nonBlackPixels) / pixelCount
+		: 0.0;
+	stats.valid = stats.meanLuminance > 0.005 && stats.nonBlackRatio > 0.01;
+	stats.pixels = std::move(pixels);
+	return stats;
+}
+
 
 void ProcessInput(GLFWwindow* window) {
-	bool currentMkeyState = glfwGetKey(window, GLFW_KEY_M) == GLFW_PRESS;
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
 		glfwSetWindowShouldClose(window, true);
 	}
-	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+	const bool keyboardCaptured =
+		ImGui::GetCurrentContext() != nullptr &&
+		ImGui::GetIO().WantCaptureKeyboard;
+	const bool currentMkeyState =
+		!keyboardCaptured &&
+		glfwGetKey(window, GLFW_KEY_M) == GLFW_PRESS;
+	if (!keyboardCaptured &&
+		glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
 		camera.UpdatePositionByDelta(timer.GetDeltaTime() *camera.cameraSpeed * camera.cameraFront);
 	}
-	if(glfwGetKey(window,GLFW_KEY_S) == GLFW_PRESS){
+	if (!keyboardCaptured &&
+		glfwGetKey(window,GLFW_KEY_S) == GLFW_PRESS){
 		camera.UpdatePositionByDelta(-timer.GetDeltaTime() * camera.cameraSpeed * camera.cameraFront);
 	}
-	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+	if (!keyboardCaptured &&
+		glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
 		camera.UpdatePositionByDelta(timer.GetDeltaTime() * camera.cameraSpeed * glm::cross(camera.cameraFront, camera.up));
 	}
-	if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+	if (!keyboardCaptured &&
+		glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
 		camera.UpdatePositionByDelta(-timer.GetDeltaTime() * camera.cameraSpeed * glm::cross(camera.cameraFront, camera.up));
 	}
 
@@ -125,6 +2055,22 @@ void SetUniformBuffer() {
 int main(int argc, char** argv) {
 	const auto applicationStart = PerformanceBenchmarkSession::Clock::now();
 	bool resourceSmokeTest = false;
+	bool pbrSmokeTest = false;
+	bool pbrSmokeFailed = false;
+	bool benchmarkPhongMaterialScene = false;
+	bool benchmarkPbrMaterialScene = false;
+	bool benchmarkUnsharedImportedMaterials = false;
+	ClassicSceneTestOptions classicSceneOptions;
+	std::string classicSceneOptionError;
+	if (!ParseClassicSceneTestOptions(
+		argc,
+		argv,
+		classicSceneOptions,
+		classicSceneOptionError)) {
+		std::cerr << "Classic scene option error: "
+			<< classicSceneOptionError << std::endl;
+		return 4;
+	}
 	PerformanceBenchmarkOptions benchmarkOptions;
 	std::string benchmarkOptionError;
 	if (!ParsePerformanceBenchmarkOptions(argc, argv, benchmarkOptions, benchmarkOptionError)) {
@@ -135,16 +2081,48 @@ int main(int argc, char** argv) {
 		if (std::string(argv[i]) == "--resource-smoke-test") {
 			resourceSmokeTest = true;
 		}
+		else if (std::string(argv[i]) == "--pbr-smoke-test") {
+			pbrSmokeTest = true;
+		}
+		else if (std::string(argv[i]) == "--benchmark-phong-material-scene") {
+			benchmarkPhongMaterialScene = true;
+		}
+		else if (std::string(argv[i]) == "--benchmark-pbr-material-scene") {
+			benchmarkPbrMaterialScene = true;
+		}
+		else if (std::string(argv[i]) == "--benchmark-unshared-imported-materials") {
+			benchmarkUnsharedImportedMaterials = true;
+		}
 	}
-	if (resourceSmokeTest && benchmarkOptions.enabled) {
-		std::cerr << "--resource-smoke-test and --performance-benchmark cannot run together" << std::endl;
+	if ((resourceSmokeTest && benchmarkOptions.enabled) ||
+		(pbrSmokeTest && (resourceSmokeTest || benchmarkOptions.enabled)) ||
+		(benchmarkPhongMaterialScene && benchmarkPbrMaterialScene) ||
+		((benchmarkPhongMaterialScene || benchmarkPbrMaterialScene) && !benchmarkOptions.enabled) ||
+		(benchmarkUnsharedImportedMaterials &&
+			(!benchmarkOptions.enabled || !benchmarkPbrMaterialScene)) ||
+		(classicSceneOptions.enabled &&
+			(resourceSmokeTest || pbrSmokeTest || benchmarkOptions.enabled ||
+				benchmarkPhongMaterialScene || benchmarkPbrMaterialScene))) {
+		std::cerr << "automated smoke modes and --performance-benchmark are mutually exclusive" << std::endl;
 		return 4;
+	}
+	const bool automatedValidation =
+		benchmarkOptions.enabled ||
+		resourceSmokeTest ||
+		pbrSmokeTest ||
+		classicSceneOptions.enabled;
+	if (classicSceneOptions.enabled) {
+		properties.SCREEN_WIDTH = classicSceneOptions.width;
+		properties.SCREEN_HEIGHT = classicSceneOptions.height;
 	}
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_SAMPLES, 4);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+	if (classicSceneOptions.enabled) {
+		glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+	}
 	
 
 	GLFWwindow* window = glfwCreateWindow(properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT, "Learn OpenGL", NULL, NULL);
@@ -154,17 +2132,17 @@ int main(int argc, char** argv) {
 		return -1;
 	}
 	glfwMakeContextCurrent(window);
-	if (benchmarkOptions.enabled) {
+	if (benchmarkOptions.enabled || classicSceneOptions.enabled) {
 		// Make the benchmark request explicit. GPU timestamp zones remain the
 		// authoritative metric if a driver-level frame limiter is still active.
 		glfwSwapInterval(0);
 	}
 	else {
-		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 	}
 	//register function after initializing window and before renderering
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-	if (!benchmarkOptions.enabled) {
+	if (!benchmarkOptions.enabled && !classicSceneOptions.enabled) {
 		glfwSetCursorPosCallback(window, mouse_callback);
 		glfwSetScrollCallback(window, scroll_callback);
 	}
@@ -181,7 +2159,7 @@ int main(int argc, char** argv) {
 
 	MyGui& mygui = MyGui::GetInstance();
 	mygui.Init(window);
-	if (benchmarkOptions.enabled || resourceSmokeTest) {
+	if (automatedValidation) {
 		// Automated runs must not modify the user's editor layout or depend on
 		// ImGui's periodic ini writes while checks are being collected.
 		ImGuiIO& io = ImGui::GetIO();
@@ -191,6 +2169,41 @@ int main(int argc, char** argv) {
 
 	ShaderManager& shaderManager = ShaderManager::GetInstance();
 	shaderManager.Init();
+	if (automatedValidation) {
+		bool invalidShaderFound = false;
+		for (const std::string& shaderName : shaderManager.GetNames()) {
+			auto shader = shaderManager.GetShaderByName(shaderName);
+			if (!shader || shader->ID == 0) {
+				std::cerr << "Automated validation: invalid shader '"
+					<< shaderName << "'" << std::endl;
+				invalidShaderFound = true;
+			}
+		}
+		const auto shadowCubeShader =
+			shaderManager.GetShader(ShaderManager::ShadowCube);
+		if (!shadowCubeShader ||
+			!shadowCubeShader->IsGeometryShader()) {
+			std::cerr
+				<< "Automated validation: shadowCube must include "
+				<< "its geometry stage"
+				<< std::endl;
+			invalidShaderFound = true;
+		}
+		const auto shadowCubeFaceShader =
+			shaderManager.GetShader(ShaderManager::ShadowCubeFace);
+		if (!shadowCubeFaceShader ||
+			shadowCubeFaceShader->ID == 0 ||
+			shadowCubeFaceShader->IsGeometryShader()) {
+			std::cerr
+				<< "Automated validation: shadowCubeFace must be a "
+				<< "linked vertex/fragment program"
+				<< std::endl;
+			invalidShaderFound = true;
+		}
+		if (invalidShaderFound) {
+			return 5;
+		}
+	}
 	Shader& debugShader = *(shaderManager.GetShader(ShaderManager::DebugScene));
 
 #ifdef USE_GEOMETRY_SHADER
@@ -218,7 +2231,409 @@ int main(int argc, char** argv) {
 	xmlMaterialManager.LoadFromFile("materials.xml");
 	Scene scene(&camera, properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
 	const std::string sceneStatePath = "saved/last_scene.json";
-	if (SceneStateIO::Exists(sceneStatePath)) {
+	EditorSceneManager editorSceneManager;
+	if (!automatedValidation) {
+		editorSceneManager.Initialize(
+			"classic-scenes.manifest.json",
+			sceneStatePath);
+	}
+	bool classicSceneFailed = false;
+	bool classicSceneCaptured = false;
+	double classicSceneLoadMilliseconds = 0.0;
+	FrameTimingStats classicSceneFrameTiming;
+	std::size_t classicSceneMeshCount = 0;
+	std::uint64_t classicSceneVertexCount = 0;
+	std::uint64_t classicSceneTriangleCount = 0;
+	glm::vec3 classicSceneSourceCenter(0.0f);
+	float classicSceneSourceRadius = 0.0f;
+	float classicSceneAppliedScale = 1.0f;
+	std::shared_ptr<Material> classicSceneOverrideMaterial;
+	std::shared_ptr<Model> classicSceneModel;
+	std::shared_ptr<Material> classicSceneMotionCasterMaterial;
+	std::shared_ptr<Model> classicSceneMotionCaster;
+	std::shared_ptr<Model> classicSceneDeferredReceiver;
+	std::shared_ptr<Model> classicSceneReplacementCaster;
+	const bool useBuiltInMaterialScene =
+		pbrSmokeTest || benchmarkPhongMaterialScene || benchmarkPbrMaterialScene;
+	if (classicSceneOptions.enabled) {
+		const float worldScale = classicSceneOptions.worldScale;
+		classicSceneOptions.cameraPosition *= worldScale;
+		classicSceneOptions.cameraTarget *= worldScale;
+		classicSceneOptions.normalizedRadius *= worldScale;
+		classicSceneOptions.pointLightPosition *= worldScale;
+		if (classicSceneOptions.hasSpotLightPosition) {
+			classicSceneOptions.spotLightPosition *= worldScale;
+		}
+		if (classicSceneOptions.hasSpotShadowNearPlane) {
+			classicSceneOptions.spotShadowNearPlane *= worldScale;
+			classicSceneOptions.spotShadowFarPlane *= worldScale;
+		}
+		LoadDefaultLights(scene);
+		for (auto& light : scene.lightSource.pointLights) {
+			light.SetPosition(classicSceneOptions.pointLightPosition);
+			light.SetScale(0.2f * worldScale);
+			light.linear /= worldScale;
+			light.quadratic /= worldScale * worldScale;
+		}
+		if (classicSceneOptions.shadowExperiment) {
+			const bool enableShadows = classicSceneOptions.shadowMode != "off";
+			const bool useDirectional =
+				classicSceneOptions.shadowLights == "directional" ||
+				classicSceneOptions.shadowLights == "all";
+			const bool usePoint =
+				classicSceneOptions.shadowLights == "point" ||
+				classicSceneOptions.shadowLights == "all";
+			const bool useSpot =
+				classicSceneOptions.shadowLights == "spot" ||
+				classicSceneOptions.shadowLights == "all";
+			if (classicSceneOptions.shadowMode == "pcf") {
+				properties.SHADOW_TYPE = ShadowProperty::PCF;
+			}
+			else if (classicSceneOptions.shadowMode == "pcss") {
+				properties.SHADOW_TYPE = ShadowProperty::PCSS;
+			}
+			else {
+				properties.SHADOW_TYPE = ShadowProperty::Default;
+			}
+			properties.SHADOW_PCF_SAMPLE_NUM = 16;
+			properties.SHADOW_PCF_RING_NUM = 8;
+			properties.SHADOW_SAMPLING_PATTERN =
+				classicSceneOptions.shadowSampling == "legacy"
+					? ShadowProperty::LegacyRandom
+					: ShadowProperty::StableVogel;
+
+			for (auto& light : scene.lightSource.directionLights) {
+				light.m_active = useDirectional;
+				light.direction = glm::normalize(
+					classicSceneOptions.directionalLightDirection);
+				light.ambient = glm::vec3(0.02f);
+				light.diffuse = glm::vec3(2.0f);
+				light.specular = glm::vec3(1.0f);
+				light.autoFitShadow = true;
+				light.shadowResolution =
+					classicSceneOptions.shadowResolution > 0
+						? classicSceneOptions.shadowResolution
+						: 2048;
+				light.useShadowMap = enableShadows && useDirectional;
+			}
+			for (auto& light : scene.lightSource.pointLights) {
+				light.m_active = usePoint;
+				light.ambient = glm::vec3(0.0f);
+				light.diffuse = glm::vec3(4.0f);
+				light.specular = glm::vec3(1.0f);
+				light.autoFitShadow = true;
+				light.shadowResolution =
+					classicSceneOptions.shadowResolution > 0
+						? classicSceneOptions.shadowResolution
+						: 1024;
+				light.useShadowMap = enableShadows && usePoint;
+			}
+			if (useSpot) {
+				const glm::vec3 spotPosition =
+					classicSceneOptions.hasSpotLightPosition
+						? classicSceneOptions.spotLightPosition
+						: classicSceneOptions.cameraPosition;
+				const glm::vec3 spotDirection =
+					classicSceneOptions.hasSpotLightDirection
+						? glm::normalize(
+							classicSceneOptions.spotLightDirection)
+						: glm::normalize(
+							classicSceneOptions.cameraTarget -
+							classicSceneOptions.cameraPosition);
+				SpotLight spotLight(
+					spotPosition,
+					spotDirection,
+					glm::vec3(0.0f),
+					glm::vec3(3.0f),
+					glm::vec3(1.0f),
+					25.0f,
+					35.0f);
+				spotLight.autoFitShadow = true;
+				if (classicSceneOptions.hasSpotShadowNearPlane) {
+					spotLight.autoFitShadow = false;
+					spotLight.near_plane =
+						classicSceneOptions.spotShadowNearPlane;
+					spotLight.far_plane =
+						classicSceneOptions.spotShadowFarPlane;
+				}
+				spotLight.shadowResolution =
+					classicSceneOptions.shadowResolution > 0
+						? classicSceneOptions.shadowResolution
+						: 1024;
+				spotLight.linear /= worldScale;
+				spotLight.quadratic /= worldScale * worldScale;
+				spotLight.useShadowMap = enableShadows && useSpot;
+				scene.lightSource.AddSpotLight(spotLight);
+			}
+		}
+		const auto loadStart = PerformanceBenchmarkSession::Clock::now();
+		if (classicSceneOptions.untextured) {
+			classicSceneOverrideMaterial = std::make_shared<Material>("pbr");
+			classicSceneOverrideMaterial->AddProperty(
+				"albedo",
+				MaterialProperty::CreateColor(glm::vec3(0.65f, 0.68f, 0.72f)));
+			classicSceneOverrideMaterial->AddProperty(
+				"metallic",
+				MaterialProperty::CreateFloat(0.0f, 0.0f, 1.0f, 0.01f));
+			classicSceneOverrideMaterial->AddProperty(
+				"roughness",
+				MaterialProperty::CreateFloat(0.65f, 0.04f, 1.0f, 0.01f));
+			classicSceneOverrideMaterial->AddProperty(
+				"ao",
+				MaterialProperty::CreateFloat(1.0f, 0.0f, 1.0f, 0.01f));
+			classicSceneOverrideMaterial->AddProperty(
+				"emissive",
+				MaterialProperty::CreateColor(glm::vec3(0.0f)));
+			classicSceneOverrideMaterial->AddProperty(
+				"opacity",
+				MaterialProperty::CreateFloat(1.0f));
+			classicSceneOverrideMaterial->AddProperty(
+				"useAlphaCutoff",
+				MaterialProperty::CreateBool(false));
+			classicSceneOverrideMaterial->AddProperty(
+				"alphaCutoff",
+				MaterialProperty::CreateFloat(0.0f, 0.0f, 1.0f, 0.01f));
+			classicSceneOverrideMaterial->AddProperty(
+				"useBloom",
+				MaterialProperty::CreateBool(false));
+			classicSceneModel = std::make_shared<Model>(
+				classicSceneOptions.modelPath,
+				classicSceneOverrideMaterial.get());
+		}
+		else {
+			const bool usePhong =
+				classicSceneOptions.renderPath.find("phong-") == 0;
+			classicSceneModel = std::make_shared<Model>(
+				classicSceneOptions.modelPath,
+				shaderManager.GetShader(
+					usePhong ? ShaderManager::Phong : ShaderManager::Pbr));
+		}
+		classicSceneLoadMilliseconds = std::chrono::duration<double, std::milli>(
+			PerformanceBenchmarkSession::Clock::now() - loadStart).count();
+		classicSceneModel->SetName(classicSceneOptions.sceneName);
+		classicSceneSourceCenter = classicSceneModel->GetLoacalCenter();
+		classicSceneSourceRadius = classicSceneModel->GetLocalBoundingRadius();
+		classicSceneMeshCount = classicSceneModel->GetMeshes().size();
+		for (const Mesh& mesh : classicSceneModel->GetMeshes()) {
+			classicSceneVertexCount += mesh.GetVertexCount();
+			classicSceneTriangleCount += mesh.UsesIndices()
+				? mesh.GetIndexCount() / 3u
+				: mesh.GetVertexCount() / 3u;
+		}
+		if (classicSceneMeshCount == 0 || classicSceneSourceRadius <= 0.0001f) {
+			classicSceneFailed = true;
+			std::cerr << "[ClassicScene] failed to load usable geometry from "
+				<< classicSceneOptions.modelPath << std::endl;
+		}
+		else {
+			classicSceneAppliedScale =
+				classicSceneOptions.normalizedRadius / classicSceneSourceRadius;
+			classicSceneModel->SetScale(classicSceneAppliedScale);
+			classicSceneModel->SetPosition(
+				-classicSceneSourceCenter * classicSceneAppliedScale);
+		}
+		scene.modelSource.AddModel(classicSceneModel);
+		const bool needsLocalMotionCaster =
+			classicSceneOptions.shadowWorkload ==
+				"timeline-cache-3way" ||
+			classicSceneOptions.shadowWorkload ==
+				"move-local-caster" ||
+			classicSceneOptions.shadowWorkload ==
+				"deferred-face-required" ||
+			classicSceneOptions.shadowWorkload ==
+				"replace-model-aba";
+		if (needsLocalMotionCaster) {
+			classicSceneMotionCasterMaterial =
+				std::make_shared<Material>("pbr");
+			classicSceneMotionCasterMaterial->AddProperty(
+				"albedo",
+				MaterialProperty::CreateColor(
+					glm::vec3(0.86f, 0.22f, 0.12f)));
+			classicSceneMotionCasterMaterial->AddProperty(
+				"metallic",
+				MaterialProperty::CreateFloat(
+					0.0f, 0.0f, 1.0f, 0.01f));
+			classicSceneMotionCasterMaterial->AddProperty(
+				"roughness",
+				MaterialProperty::CreateFloat(
+					0.45f, 0.04f, 1.0f, 0.01f));
+			classicSceneMotionCasterMaterial->AddProperty(
+				"ao",
+				MaterialProperty::CreateFloat(
+					1.0f, 0.0f, 1.0f, 0.01f));
+			classicSceneMotionCasterMaterial->AddProperty(
+				"opacity",
+				MaterialProperty::CreateFloat(1.0f));
+			classicSceneMotionCasterMaterial->AddProperty(
+				"useAlphaCutoff",
+				MaterialProperty::CreateBool(false));
+			classicSceneMotionCaster =
+				std::make_shared<Model>(
+					"models/sphere/sphere.obj",
+					classicSceneMotionCasterMaterial.get());
+			classicSceneMotionCaster->SetName(
+				"Shadow Cache Motion Caster");
+			const float casterSourceRadius =
+				(std::max)(
+					0.0001f,
+					classicSceneMotionCaster
+						->GetLocalBoundingRadius());
+			const float casterRadius =
+				classicSceneOptions.normalizedRadius * 0.02f;
+			classicSceneMotionCaster->SetScale(
+				casterRadius / casterSourceRadius);
+			classicSceneMotionCaster->SetPosition(
+				classicSceneOptions.pointLightPosition +
+				classicSceneOptions.normalizedRadius *
+					glm::vec3(0.12f, 0.02f, 0.0f));
+			if (classicSceneOptions.shadowWorkload ==
+				"deferred-face-required") {
+				classicSceneMotionCaster->SetName(
+					"Deferred -X Shadow Caster");
+				classicSceneMotionCaster->SetPosition(
+					classicSceneOptions.pointLightPosition +
+						classicSceneOptions.normalizedRadius *
+							glm::vec3(-0.12f, 0.0f, 0.0f));
+			}
+			scene.modelSource.AddModel(classicSceneMotionCaster);
+			if (classicSceneOptions.shadowWorkload ==
+				"deferred-face-required") {
+				classicSceneModel->SetActiveStatus(false);
+				classicSceneDeferredReceiver =
+					std::make_shared<Model>(
+						"models/sphere/sphere.obj",
+						classicSceneMotionCasterMaterial.get());
+				classicSceneDeferredReceiver->SetName(
+					"Required +X Shadow Receiver");
+				classicSceneDeferredReceiver->SetScale(
+					casterRadius / casterSourceRadius);
+				classicSceneDeferredReceiver->SetPosition(
+					classicSceneOptions.pointLightPosition +
+						classicSceneOptions.normalizedRadius *
+							glm::vec3(0.12f, 0.0f, 0.0f));
+				scene.modelSource.AddModel(
+					classicSceneDeferredReceiver);
+			}
+			else if (classicSceneOptions.shadowWorkload ==
+				"replace-model-aba") {
+				classicSceneMotionCaster->SetName(
+					"Topology ABA Caster");
+				classicSceneReplacementCaster =
+					std::make_shared<Model>(
+						"models/sphere/sphere.obj",
+						classicSceneMotionCasterMaterial.get());
+				classicSceneReplacementCaster->SetName(
+					classicSceneMotionCaster->GetName());
+				classicSceneReplacementCaster->SetScale(
+					classicSceneMotionCaster->scale);
+				classicSceneReplacementCaster->SetPosition(
+					classicSceneMotionCaster->position);
+				classicSceneReplacementCaster->SetRotation(
+					classicSceneMotionCaster->rotation);
+			}
+		}
+
+		camera.cameraPos = classicSceneOptions.cameraPosition;
+		camera.cameraFront = glm::normalize(
+			classicSceneOptions.cameraTarget - classicSceneOptions.cameraPosition);
+		camera.up = glm::normalize(classicSceneOptions.cameraUp);
+		camera.fov = classicSceneOptions.fov;
+		properties.DEFER_RENDERING =
+			classicSceneOptions.renderPath.find("deferred") !=
+			std::string::npos;
+		properties.SSAO = false;
+		properties.LIGHT_VOLUME =
+			classicSceneOptions.renderPath == "phong-deferred-volume";
+		properties.BLOOM = false;
+		properties.GAMMA_CORRECTION = true;
+		properties.DEBUG_MODE = false;
+		properties.AUTO_RELOAD_SHADERS = false;
+		properties.AUTO_RELOAD_MATERIALS = false;
+		std::cout << "[ClassicScene] scene=" << classicSceneOptions.sceneName
+			<< " model=" << classicSceneOptions.modelPath
+			<< " loadMs=" << std::fixed << std::setprecision(2)
+			<< classicSceneLoadMilliseconds
+			<< " meshes=" << classicSceneMeshCount
+			<< " vertices=" << classicSceneVertexCount
+			<< " triangles=" << classicSceneTriangleCount
+			<< " sourceRadius=" << classicSceneSourceRadius
+			<< " appliedScale=" << classicSceneAppliedScale
+			<< std::endl;
+	}
+	else if (useBuiltInMaterialScene) {
+		Model::SetImportedMaterialSharingEnabled(!benchmarkUnsharedImportedMaterials);
+		LoadDefaultLights(scene);
+		const bool usePbrMaterial = pbrSmokeTest || benchmarkPbrMaterialScene;
+		auto validationModel = std::make_shared<Model>(
+			"models/backpack/backpack.obj",
+			shaderManager.GetShader(
+				usePbrMaterial ? ShaderManager::Pbr : ShaderManager::Phong));
+		validationModel->SetName("pbr-backpack-validation");
+		validationModel->SetPosition(glm::vec3(0.0f));
+		validationModel->SetScale(1.0f);
+		scene.modelSource.AddModel(validationModel);
+		camera.cameraPos = glm::vec3(0.0f, 0.0f, 5.0f);
+		camera.cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+		camera.up = glm::vec3(0.0f, 1.0f, 0.0f);
+		properties.DEFER_RENDERING = false;
+		properties.SSAO = false;
+		properties.LIGHT_VOLUME = false;
+		properties.BLOOM = false;
+		properties.GAMMA_CORRECTION = true;
+
+		if (pbrSmokeTest) {
+			bool hasPbrMaterial = false;
+			bool hasAlbedo = false;
+			bool hasNormal = false;
+			bool hasRoughness = false;
+			bool hasAo = false;
+			bool hasMetallicFactor = false;
+			bool hasEmissiveFactor = false;
+			for (const Mesh& mesh : validationModel->GetMeshes()) {
+				if (!mesh.material_ptr || mesh.material_ptr->GetShaderName() != "pbr") {
+					continue;
+				}
+				hasPbrMaterial = true;
+				const auto& materialProperties = mesh.material_ptr->GetProperties();
+				auto hasTexture = [&](const char* name) {
+					const auto it = materialProperties.find(name);
+					return it != materialProperties.end() &&
+						it->second.type == MaterialPropertyType::Texture &&
+						!it->second.textures.empty() &&
+						it->second.textures.front().textureID != 0;
+				};
+				hasAlbedo = hasAlbedo || hasTexture("texture_diffuse");
+				hasNormal = hasNormal || hasTexture("texture_normal");
+				hasRoughness = hasRoughness || hasTexture("texture_roughness");
+				hasAo = hasAo || hasTexture("texture_ao");
+				const auto metallic = materialProperties.find("metallic");
+				hasMetallicFactor = hasMetallicFactor ||
+					(metallic != materialProperties.end() &&
+						metallic->second.type == MaterialPropertyType::Float);
+				const auto emissive = materialProperties.find("emissive");
+				hasEmissiveFactor = hasEmissiveFactor ||
+					(emissive != materialProperties.end() &&
+						(emissive->second.type == MaterialPropertyType::Color ||
+							emissive->second.type == MaterialPropertyType::Vec3));
+			}
+			pbrSmokeFailed = !(
+				hasPbrMaterial &&
+				hasAlbedo &&
+				hasNormal &&
+				hasRoughness &&
+				hasAo &&
+				hasMetallicFactor &&
+				hasEmissiveFactor);
+			std::cout << "[PBRSmoke] material=" << hasPbrMaterial
+				<< " albedo=" << hasAlbedo
+				<< " normal=" << hasNormal
+				<< " roughness=" << hasRoughness
+				<< " ao=" << hasAo
+				<< " metallicFactor=" << hasMetallicFactor
+				<< " emissiveFactor=" << hasEmissiveFactor << std::endl;
+		}
+	}
+	else if (SceneStateIO::Exists(sceneStatePath)) {
 		// 有存档：只初始化默认灯光占位，其它由 SceneStateIO 恢复，避免默认模型+存档模型双加载。
 		LoadDefaultLights(scene);
 		const bool loaded = SceneStateIO::LoadAsync(scene, camera, sceneStatePath);
@@ -239,6 +2654,22 @@ int main(int argc, char** argv) {
 	else {
 		// 无存档：走默认场景。
 		LoadModels(scene);
+	}
+	if (resourceSmokeTest) {
+		// Use one known light of every supported shadow type so the lifetime
+		// smoke test exercises 2D directional, cubemap point, and 2D spot maps.
+		scene.lightSource.pointLights.clear();
+		scene.lightSource.directionLights.clear();
+		scene.lightSource.spotLights.clear();
+		LoadDefaultLights(scene);
+		scene.lightSource.AddSpotLight(SpotLight(
+			glm::vec3(0.0f, 8.0f, 4.0f),
+			glm::normalize(glm::vec3(0.0f, -1.0f, -0.4f)),
+			glm::vec3(0.0f),
+			glm::vec3(1.0f),
+			glm::vec3(1.0f),
+			20.0f,
+			30.0f));
 	}
 	CubeTexture skybox("materials/skybox");
 	float skyboxVertices[] = {
@@ -295,6 +2726,22 @@ int main(int argc, char** argv) {
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 	GLState::BindVertexArray(0);
 	scene.skyboxSource = SkyboxSource(skybox, skyboxVAO, shaderManager.GetShader(ShaderManager::Skybox));
+	ImageBasedLighting imageBasedLighting;
+	scene.SetImageBasedLighting(&imageBasedLighting);
+	bool iblInitializationAttempted = false;
+	if ((useBuiltInMaterialScene || classicSceneOptions.enabled) &&
+		scene.UsesPbrMaterials()) {
+		iblInitializationAttempted = true;
+		if (!imageBasedLighting.Initialize(
+			skybox.textureID,
+			skyboxVAO,
+			globalVAOs.quadVAO,
+			properties.SCREEN_WIDTH,
+			properties.SCREEN_HEIGHT)) {
+			std::cerr << "PBR IBL initialization failed; using direct-light fallback" << std::endl;
+			if (pbrSmokeTest) pbrSmokeFailed = true;
+		}
+	}
 	
 	FramebuffersManager& framebuffersMgr = FramebuffersManager::GetInstance();
 	AntiAliasManager& antiAliasMgr = AntiAliasManager::GetInstance();
@@ -314,6 +2761,430 @@ int main(int argc, char** argv) {
 	postprocessRenderPass->Init(properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
 	bool deferredPassActive = properties.DEFER_RENDERING;
 	int resourceSmokeFrames = 0;
+	int pbrSmokeFrames = 0;
+	int classicSceneFrames = 0;
+	std::vector<unsigned char> pbrForwardPixels;
+	std::vector<double> classicSceneFrameMilliseconds;
+	std::vector<BenchmarkTimelineFrameTelemetry>
+		classicSceneTimelineTelemetry;
+	bool classicSceneProfilerCaptureStarted = false;
+	Scene::ShadowSystemStats classicSceneMeasurementStartShadowStats;
+	Scene::ShadowSystemStats classicScenePreviousFrameShadowStats;
+	const glm::vec3 classicSceneBaseModelPosition =
+		classicSceneMotionCaster
+			? classicSceneMotionCaster->position
+			: (classicSceneModel
+				? classicSceneModel->position
+				: glm::vec3(0.0f));
+	const glm::vec3 classicSceneBaseDirection =
+		scene.lightSource.directionLights.empty()
+			? glm::vec3(-0.45f, -1.0f, -0.25f)
+			: scene.lightSource.directionLights.front().direction;
+	const glm::vec3 classicSceneBasePointPosition =
+		scene.lightSource.pointLights.empty()
+			? glm::vec3(0.0f)
+			: scene.lightSource.pointLights.front().position;
+	const int classicSceneBasePointShadowResolution =
+		scene.lightSource.pointLights.empty()
+			? 1024
+			: scene.lightSource.pointLights.front().shadowResolution;
+	const glm::vec3 classicSceneBaseSpotPosition =
+		scene.lightSource.spotLights.empty()
+			? classicSceneOptions.cameraPosition
+			: scene.lightSource.spotLights.front().position;
+	const glm::vec3 classicSceneBaseSpotDirection =
+		scene.lightSource.spotLights.empty()
+			? glm::normalize(
+				classicSceneOptions.cameraTarget -
+				classicSceneOptions.cameraPosition)
+			: scene.lightSource.spotLights.front().direction;
+	BenchmarkMotionTimelineConfig classicSceneTimelineConfig;
+	classicSceneTimelineConfig.fixedFramesPerSecond =
+		classicSceneOptions.timelineFixedFramesPerSecond;
+	classicSceneTimelineConfig.cycleFrames =
+		classicSceneOptions.timelineCycleFrames;
+	classicSceneTimelineConfig.sceneRadius =
+		classicSceneOptions.normalizedRadius;
+	BenchmarkMotionBaseState classicSceneMotionBaseState;
+	classicSceneMotionBaseState.pointPosition =
+		classicSceneBasePointPosition;
+	classicSceneMotionBaseState.casterPosition =
+		classicSceneBaseModelPosition;
+	classicSceneMotionBaseState.cameraPosition =
+		classicSceneOptions.cameraPosition;
+	classicSceneMotionBaseState.cameraTarget =
+		classicSceneOptions.cameraTarget;
+	classicSceneMotionBaseState.cameraUp =
+		classicSceneOptions.cameraUp;
+	const BenchmarkMotionTimeline classicSceneMotionTimeline(
+		BenchmarkMotionTimeline::ProfileFromWorkload(
+			classicSceneOptions.shadowWorkload),
+		classicSceneTimelineConfig,
+		classicSceneMotionBaseState);
+	BenchmarkMotionSample classicSceneCurrentMotionSample =
+		classicSceneMotionTimeline.Sample(
+			-classicSceneOptions.warmupFrames);
+	bool classicSceneTopologyReplacementPerformed = false;
+	auto applyClassicShadowWorkload = [&](int frameNumber) {
+		if (!classicSceneOptions.enabled ||
+			!classicSceneOptions.shadowExperiment ||
+			classicSceneOptions.shadowWorkload == "static-hit") {
+			return;
+		}
+
+		if (classicSceneOptions.shadowWorkload ==
+			"deferred-face-required") {
+			const int timelineFrame =
+				frameNumber -
+				classicSceneOptions.warmupFrames -
+				1;
+			classicSceneCurrentMotionSample =
+				classicSceneMotionTimeline.Sample(timelineFrame);
+			const bool measured = timelineFrame >= 0;
+			properties.POINT_SHADOW_FORCE_ALL_FACES_REQUIRED =
+				!measured;
+			const bool viewPositiveFace =
+				measured
+					? timelineFrame == 0
+					: (frameNumber & 1) != 0;
+			if (classicSceneMotionCaster) {
+				const glm::vec3 movedCasterPosition =
+					classicSceneBaseModelPosition +
+					classicSceneOptions.normalizedRadius *
+						glm::vec3(
+							0.0f,
+							measured ? 0.01f : 0.0f,
+							0.0f);
+				classicSceneMotionCaster->SetPosition(
+					movedCasterPosition);
+				classicSceneCurrentMotionSample.casterPosition =
+					movedCasterPosition;
+			}
+			const glm::vec3 cameraPosition =
+				classicSceneBasePointPosition +
+				classicSceneOptions.normalizedRadius *
+					glm::vec3(0.0f, 0.025f, 0.025f);
+			const glm::vec3 cameraTarget =
+				viewPositiveFace && classicSceneDeferredReceiver
+					? classicSceneDeferredReceiver->position
+					: (classicSceneMotionCaster
+						? classicSceneMotionCaster->position
+						: classicSceneBasePointPosition -
+							glm::vec3(
+								classicSceneOptions.normalizedRadius *
+									0.12f,
+								0.0f,
+								0.0f));
+			camera.cameraPos = cameraPosition;
+			const glm::vec3 cameraDirection =
+				cameraTarget - cameraPosition;
+			if (glm::length(cameraDirection) > 0.0001f) {
+				camera.cameraFront =
+					glm::normalize(cameraDirection);
+			}
+			camera.up = glm::vec3(0.0f, 1.0f, 0.0f);
+			classicSceneCurrentMotionSample.cameraPosition =
+				cameraPosition;
+			classicSceneCurrentMotionSample.cameraTarget =
+				cameraTarget;
+			classicSceneCurrentMotionSample.cameraUp = camera.up;
+			classicSceneCurrentMotionSample.pointPosition =
+				classicSceneBasePointPosition;
+			return;
+		}
+
+		if (classicSceneOptions.shadowWorkload ==
+			"replace-model-aba") {
+			const int timelineFrame =
+				frameNumber -
+				classicSceneOptions.warmupFrames -
+				1;
+			classicSceneCurrentMotionSample =
+				classicSceneMotionTimeline.Sample(timelineFrame);
+			if (timelineFrame >= 0 &&
+				!classicSceneTopologyReplacementPerformed) {
+				const std::shared_ptr<Model> oldModel =
+					classicSceneMotionCaster;
+				if (!oldModel ||
+					!classicSceneReplacementCaster ||
+					!scene.modelSource.ReplaceModel(
+						oldModel,
+						classicSceneReplacementCaster)) {
+					classicSceneFailed = true;
+					std::cerr
+						<< "[ClassicScene] topology ABA replacement failed"
+						<< std::endl;
+				}
+				else {
+					classicSceneMotionCaster =
+						classicSceneReplacementCaster;
+					classicSceneTopologyReplacementPerformed = true;
+				}
+			}
+			if (classicSceneMotionCaster) {
+				classicSceneCurrentMotionSample.casterPosition =
+					classicSceneMotionCaster->position;
+			}
+			return;
+		}
+
+		if (BenchmarkMotionTimeline::IsTimelineWorkload(
+			classicSceneOptions.shadowWorkload)) {
+			const int timelineFrame =
+				frameNumber -
+				classicSceneOptions.warmupFrames -
+				1;
+			classicSceneCurrentMotionSample =
+				classicSceneMotionTimeline.Sample(timelineFrame);
+			const std::uint32_t trackMask =
+				classicSceneCurrentMotionSample.trackMask;
+			if (BenchmarkMotionTimeline::HasTrack(
+				trackMask,
+				BenchmarkMotionTrack::Point) &&
+				!scene.lightSource.pointLights.empty()) {
+				scene.lightSource.pointLights.front().SetPosition(
+					classicSceneCurrentMotionSample.pointPosition);
+			}
+			if (BenchmarkMotionTimeline::HasTrack(
+				trackMask,
+				BenchmarkMotionTrack::Caster) &&
+				(classicSceneMotionCaster ||
+					classicSceneModel)) {
+				auto& motionCaster =
+					classicSceneMotionCaster
+						? classicSceneMotionCaster
+						: classicSceneModel;
+				motionCaster->SetPosition(
+					classicSceneCurrentMotionSample.casterPosition);
+			}
+			if (BenchmarkMotionTimeline::HasTrack(
+				trackMask,
+				BenchmarkMotionTrack::Camera)) {
+				const glm::vec3 cameraDirection =
+					classicSceneCurrentMotionSample.cameraTarget -
+					classicSceneCurrentMotionSample.cameraPosition;
+				camera.cameraPos =
+					classicSceneCurrentMotionSample.cameraPosition;
+				if (glm::length(cameraDirection) > 0.0001f) {
+					camera.cameraFront =
+						glm::normalize(cameraDirection);
+				}
+				camera.up =
+					classicSceneCurrentMotionSample.cameraUp;
+			}
+			return;
+		}
+
+		const float phase = (frameNumber & 1) == 0 ? 1.0f : -1.0f;
+		auto perturbDirection = [phase](const glm::vec3& direction) {
+			const glm::vec3 base =
+				glm::length(direction) > 0.0001f
+					? glm::normalize(direction)
+					: glm::vec3(0.0f, -1.0f, 0.0f);
+			const glm::vec3 referenceAxis =
+				std::abs(base.x) < 0.9f
+					? glm::vec3(1.0f, 0.0f, 0.0f)
+					: glm::vec3(0.0f, 1.0f, 0.0f);
+			const glm::vec3 tangent =
+				glm::normalize(glm::cross(base, referenceAxis));
+			return glm::normalize(base + tangent * (phase * 0.001f));
+		};
+		auto moveDirectional = [&]() {
+			if (scene.lightSource.directionLights.empty()) {
+				return false;
+			}
+			scene.lightSource.directionLights.front().direction =
+				perturbDirection(classicSceneBaseDirection);
+			return true;
+		};
+		auto movePoint = [&]() {
+			if (scene.lightSource.pointLights.empty()) {
+				return false;
+			}
+			scene.lightSource.pointLights.front().SetPosition(
+				classicSceneBasePointPosition +
+				glm::vec3(
+					phase * 0.002f * classicSceneOptions.worldScale,
+					0.0f,
+					0.0f));
+			return true;
+		};
+		auto moveSpot = [&]() {
+			if (scene.lightSource.spotLights.empty()) {
+				return false;
+			}
+			scene.lightSource.spotLights.front().SetPosition(
+				classicSceneBaseSpotPosition +
+				glm::vec3(
+					phase * 0.002f * classicSceneOptions.worldScale,
+					0.0f,
+					0.0f));
+			scene.lightSource.spotLights.front().direction =
+				perturbDirection(classicSceneBaseSpotDirection);
+			return true;
+		};
+		auto moveCaster = [&]() {
+			if (!classicSceneModel) {
+				return false;
+			}
+			classicSceneModel->SetPosition(
+				classicSceneBaseModelPosition +
+				glm::vec3(
+					phase * 0.002f * classicSceneOptions.worldScale,
+					0.0f,
+					0.0f));
+			return true;
+		};
+		auto moveLocalCaster = [&]() {
+			if (!classicSceneMotionCaster) {
+				return false;
+			}
+			classicSceneMotionCaster->SetPosition(
+				classicSceneBaseModelPosition +
+					glm::vec3(
+						phase * 0.002f *
+							classicSceneOptions.worldScale,
+						0.0f,
+						0.0f));
+			return true;
+		};
+		auto changeCasterMaterial = [&]() {
+			if (!classicSceneOverrideMaterial) {
+				return false;
+			}
+			classicSceneOverrideMaterial->AddProperty(
+				"useAlphaCutoff",
+				MaterialProperty::CreateBool(true));
+			classicSceneOverrideMaterial->AddProperty(
+				"alphaCutoff",
+				MaterialProperty::CreateFloat(
+					0.5f,
+					0.0f,
+					1.0f,
+					0.01f));
+			classicSceneOverrideMaterial->AddProperty(
+				"opacity",
+				MaterialProperty::CreateFloat(
+					phase > 0.0f ? 1.0f : 0.0f,
+					0.0f,
+					1.0f,
+					0.01f));
+			return true;
+		};
+		auto reloadShadow2D = [&]() {
+			return shaderManager.ReloadShader("shadow", true);
+		};
+		auto reloadPointShadow = [&]() {
+			const bool layeredReloaded =
+				shaderManager.ReloadShader("shadowCube", true);
+			const bool faceReloaded =
+				shaderManager.ReloadShader("shadowCubeFace", true);
+			return layeredReloaded && faceReloaded;
+		};
+		auto resizePointShadow = [&]() {
+			if (scene.lightSource.pointLights.empty()) {
+				return false;
+			}
+			const int alternateResolution =
+				classicSceneBasePointShadowResolution > 128
+					? (std::max)(
+						128,
+						classicSceneBasePointShadowResolution / 2)
+					: (std::min)(
+						4096,
+						classicSceneBasePointShadowResolution * 2);
+			scene.lightSource.pointLights.front().shadowResolution =
+				phase > 0.0f
+					? classicSceneBasePointShadowResolution
+					: alternateResolution;
+			return true;
+		};
+		auto replacePointShadowTarget = [&]() {
+			if (scene.lightSource.pointLights.empty()) {
+				return false;
+			}
+			auto& light = scene.lightSource.pointLights.front();
+			if (!light.shadowFBO) {
+				return false;
+			}
+			auto& manager = FramebuffersManager::GetInstance();
+			manager.ReleaseFBO(light.shadowFBO);
+			light.shadowFBO = nullptr;
+			manager.TrimUnusedFBOs();
+			return true;
+		};
+		auto toggleCaster = [&]() {
+			if (!classicSceneModel) {
+				return false;
+			}
+			classicSceneModel->SetActiveStatus(phase > 0.0f);
+			return true;
+		};
+
+		if (classicSceneOptions.shadowWorkload == "move-directional") {
+			moveDirectional();
+		}
+		else if (classicSceneOptions.shadowWorkload == "move-point") {
+			movePoint();
+		}
+		else if (classicSceneOptions.shadowWorkload == "move-spot") {
+			moveSpot();
+		}
+		else if (classicSceneOptions.shadowWorkload == "move-caster") {
+			moveCaster();
+		}
+		else if (
+			classicSceneOptions.shadowWorkload ==
+			"move-local-caster") {
+			moveLocalCaster();
+		}
+		else if (
+			classicSceneOptions.shadowWorkload ==
+			"change-caster-material") {
+			changeCasterMaterial();
+		}
+		else if (
+			classicSceneOptions.shadowWorkload == "reload-shadow-2d") {
+			reloadShadow2D();
+		}
+		else if (
+			classicSceneOptions.shadowWorkload ==
+			"reload-shadow-point") {
+			reloadPointShadow();
+		}
+		else if (
+			classicSceneOptions.shadowWorkload ==
+			"resize-point-shadow") {
+			resizePointShadow();
+		}
+		else if (
+			classicSceneOptions.shadowWorkload ==
+			"replace-point-shadow-target") {
+			replacePointShadowTarget();
+		}
+		else if (
+			classicSceneOptions.shadowWorkload == "toggle-caster") {
+			toggleCaster();
+		}
+		else if (classicSceneOptions.shadowWorkload == "force-update") {
+			bool changed = false;
+			if ((classicSceneOptions.shadowLights == "directional" ||
+				classicSceneOptions.shadowLights == "all")) {
+				changed = moveDirectional() || changed;
+			}
+			if ((classicSceneOptions.shadowLights == "point" ||
+					classicSceneOptions.shadowLights == "all")) {
+				changed = movePoint() || changed;
+			}
+			if ((classicSceneOptions.shadowLights == "spot" ||
+					classicSceneOptions.shadowLights == "all")) {
+				changed = moveSpot() || changed;
+			}
+			if (!changed) {
+				moveCaster();
+			}
+		}
+	};
 	bool resourceSmokeFailed = false;
 	auto reportResourceState = [&](const char* stage, std::size_t expectedBusyFBOs) {
 		const auto busyFBOs = FramebuffersManager::GetInstance().GetBusyFBOs();
@@ -358,9 +3229,16 @@ int main(int argc, char** argv) {
 		for (auto& light : scene.lightSource.directionLights) {
 			if (light.GetActiveStatus() && light.useShadowMap) ++shadowCastingLights;
 		}
+		for (auto& light : scene.lightSource.spotLights) {
+			if (light.GetActiveStatus() && light.useShadowMap) ++shadowCastingLights;
+		}
 
 		PerformanceBenchmarkMetadata metadata;
-		metadata.scenePath = sceneStatePath;
+		metadata.scenePath = benchmarkPbrMaterialScene
+			? (benchmarkUnsharedImportedMaterials
+				? "builtin/backpack-pbr-unshared-materials"
+				: "builtin/backpack-pbr")
+			: (benchmarkPhongMaterialScene ? "builtin/backpack-phong" : sceneStatePath);
 		metadata.glVendor = glString(GL_VENDOR);
 		metadata.glRenderer = glString(GL_RENDERER);
 		metadata.glVersion = glString(GL_VERSION);
@@ -396,15 +3274,50 @@ int main(int argc, char** argv) {
 	}
 
 	while (!glfwWindowShouldClose(window)) {
+		if (classicSceneOptions.enabled &&
+			!classicSceneProfilerCaptureStarted &&
+			classicSceneFrames == classicSceneOptions.warmupFrames) {
+			classicSceneMeasurementStartShadowStats =
+				scene.GetShadowSystemStats();
+			classicScenePreviousFrameShadowStats =
+				classicSceneMeasurementStartShadowStats;
+			PerformanceProfiler::GetInstance().BeginBenchmarkCapture(
+				static_cast<std::size_t>(
+					classicSceneOptions.captureFrame -
+					classicSceneOptions.warmupFrames));
+			classicSceneProfilerCaptureStarted = true;
+		}
+		const auto classicSceneFrameStart =
+			PerformanceBenchmarkSession::Clock::now();
 		if (benchmarkOptions.enabled &&
 			!benchmarkSession.OnFrameBoundary(!SceneStateIO::HasPendingAsyncLoads())) {
 			break;
 		}
+		{
 		PERF_FRAME_SCOPE();
+		applyClassicShadowWorkload(classicSceneFrames + 1);
+		if (!automatedValidation) {
+			editorSceneManager.ProcessPendingAction(scene, camera);
+		}
 		// 分帧异步恢复存档里的文件模型，减少单帧加载峰值。
 		{
 			PERF_CPU_SCOPE("Async Model Loads");
 			SceneStateIO::UpdateAsyncLoads(scene, 1);
+		}
+		if (!iblInitializationAttempted && scene.UsesPbrMaterials()) {
+			iblInitializationAttempted = true;
+			if (!imageBasedLighting.Initialize(
+				skybox.textureID,
+				skyboxVAO,
+				globalVAOs.quadVAO,
+				properties.SCREEN_WIDTH,
+				properties.SCREEN_HEIGHT)) {
+				std::cerr << "PBR IBL initialization failed; using direct-light fallback" << std::endl;
+				if (pbrSmokeTest) pbrSmokeFailed = true;
+			}
+		}
+		if (pbrSmokeTest) {
+			++pbrSmokeFrames;
 		}
 		if (resourceSmokeTest && !SceneStateIO::HasPendingAsyncLoads()) {
 			++resourceSmokeFrames;
@@ -425,9 +3338,12 @@ int main(int argc, char** argv) {
 				for (auto& light : scene.lightSource.directionLights) {
 					light.useShadowMap = true;
 				}
+				for (auto& light : scene.lightSource.spotLights) {
+					light.useShadowMap = true;
+				}
 			}
 			else if (resourceSmokeFrames == 120) {
-				reportResourceState("all-effects", 8);
+				reportResourceState("all-effects", 9);
 				properties.BLOOM = false;
 				properties.SSAO = false;
 				properties.DEFER_RENDERING = false;
@@ -435,6 +3351,9 @@ int main(int argc, char** argv) {
 					light.useShadowMap = false;
 				}
 				for (auto& light : scene.lightSource.directionLights) {
+					light.useShadowMap = false;
+				}
+				for (auto& light : scene.lightSource.spotLights) {
 					light.useShadowMap = false;
 				}
 			}
@@ -480,6 +3399,7 @@ int main(int argc, char** argv) {
 		mygui.MainDockSpace();
 		mygui.Overview_UI();
 		mygui.Profiler_UI();
+		mygui.MotionTimeline_UI(scene, camera);
 
 		// Settings / Scene / Materials / XML / Assets ??? Dock ? DockSpace ?
 		mygui.Begin();              // Settings ??
@@ -490,7 +3410,7 @@ int main(int argc, char** argv) {
 		mygui.Anti_Aliasing_UI();
 		mygui.End();
 
-		mygui.Scene_UI(scene);          // Scene：Lights + Models
+		mygui.Scene_UI(scene, camera, editorSceneManager); // Scene browser + lights + models
 		mygui.ModelMaterialsInspector_UI(scene);  // 选中模型的材质查看/编辑
 		mygui.MaterialsInspector_UI();  // 全局材质 Inspector
 		mygui.MaterialsEditor_UI();     // XML 编辑器
@@ -499,8 +3419,16 @@ int main(int argc, char** argv) {
 		//process input
 		{
 			PERF_CPU_SCOPE("Input and Frame Uniforms");
-			if (!benchmarkOptions.enabled) {
+			if (!benchmarkOptions.enabled &&
+				!classicSceneOptions.enabled &&
+				!mygui.IsMotionTimelinePlaying()) {
 				ProcessInput(window);
+			}
+			if (!automatedValidation) {
+				mygui.UpdateMotionTimelinePreview(
+					scene,
+					camera,
+					timer.GetDeltaTime());
 			}
 		//reset used texture num
 		properties.ResetUsedTextureNum();
@@ -529,6 +3457,9 @@ int main(int argc, char** argv) {
 		else {
 			forwardRenderPass->Render(&scene);
 			sceneFBO = forwardRenderPass->GetOutputFBO();
+		}
+		if (!automatedValidation) {
+			mygui.RecordMotionTimelineTelemetry(scene);
 		}
 		//second pass: postprocess (HDR + gamma + bloom) -> LDR texture (inside postprocessRenderPass)
 		
@@ -628,6 +3559,50 @@ int main(int argc, char** argv) {
 			PERF_CPU_SCOPE("ImGui Render");
 			mygui.Render();
 		}
+		if (pbrSmokeTest && (pbrSmokeFrames == 30 || pbrSmokeFrames == 60)) {
+			const bool deferredCapture = pbrSmokeFrames == 60;
+			const std::string capturePath = deferredCapture
+				? "benchmark-results/pbr-ibl/pbr-deferred.ppm"
+				: "benchmark-results/pbr-ibl/pbr-forward.ppm";
+			const FrameCaptureStats capture = CaptureFramebufferPpm(
+				postprocessRenderPass->GetOutputFBO(),
+				capturePath);
+			std::cout << "[PBRSmoke] mode="
+				<< (deferredCapture ? "deferred" : "forward")
+				<< " iblReady=" << imageBasedLighting.IsReady()
+				<< " meanLuminance=" << std::fixed << std::setprecision(4)
+				<< capture.meanLuminance
+				<< " nonBlackRatio=" << capture.nonBlackRatio
+				<< " capture=" << capturePath << std::endl;
+			if (!capture.valid || !imageBasedLighting.IsReady()) {
+				pbrSmokeFailed = true;
+			}
+			if (!deferredCapture) {
+				pbrForwardPixels = capture.pixels;
+				properties.DEFER_RENDERING = true;
+			}
+			else {
+				double meanAbsoluteDifference = 1.0;
+				if (!pbrForwardPixels.empty() &&
+					pbrForwardPixels.size() == capture.pixels.size()) {
+					double differenceSum = 0.0;
+					for (size_t i = 0; i < capture.pixels.size(); ++i) {
+						differenceSum += std::abs(
+							static_cast<int>(pbrForwardPixels[i]) -
+							static_cast<int>(capture.pixels[i]));
+					}
+					meanAbsoluteDifference = differenceSum /
+						(static_cast<double>(capture.pixels.size()) * 255.0);
+				}
+				std::cout << "[PBRSmoke] forwardDeferredMae="
+					<< std::fixed << std::setprecision(6)
+					<< meanAbsoluteDifference << std::endl;
+				if (meanAbsoluteDifference > 0.01) {
+					pbrSmokeFailed = true;
+				}
+				glfwSetWindowShouldClose(window, true);
+			}
+		}
 #elif defined(USE_GEOMETRY_SHADER)
 		geometryShader.use();
 		GLState::BindVertexArray(VAO);
@@ -648,10 +3623,263 @@ int main(int argc, char** argv) {
 			glfwSwapBuffers(window);
 			glfwPollEvents();
 		}
-		
+		if (classicSceneOptions.enabled) {
+			if (classicSceneOptions.gpuSynchronized) {
+				glFinish();
+			}
+			++classicSceneFrames;
+			if (classicSceneFrames > classicSceneOptions.warmupFrames) {
+				const double frameMilliseconds =
+					std::chrono::duration<double, std::milli>(
+						PerformanceBenchmarkSession::Clock::now() -
+						classicSceneFrameStart).count();
+				classicSceneFrameMilliseconds.push_back(frameMilliseconds);
+				PerformanceProfiler::GetInstance().RecordBenchmarkWallFrame(
+					frameMilliseconds);
+				if (classicSceneMotionTimeline.GetProfile() !=
+					BenchmarkMotionProfile::None) {
+					const Scene::ShadowSystemStats& currentShadowStats =
+						scene.GetShadowSystemStats();
+					BenchmarkTimelineFrameTelemetry frameTelemetry;
+					frameTelemetry.measurementFrame =
+						classicSceneFrames -
+						classicSceneOptions.warmupFrames -
+						1;
+					frameTelemetry.motion =
+						classicSceneCurrentMotionSample;
+					frameTelemetry.wallMilliseconds =
+						frameMilliseconds;
+					frameTelemetry.updateCount = CounterDelta(
+						classicScenePreviousFrameShadowStats.updateCount,
+						currentShadowStats.updateCount);
+					frameTelemetry.cacheHitCount = CounterDelta(
+						classicScenePreviousFrameShadowStats.cacheHitCount,
+						currentShadowStats.cacheHitCount);
+					frameTelemetry.lightCacheHitCount = CounterDelta(
+						classicScenePreviousFrameShadowStats.lightCacheHitCount,
+						currentShadowStats.lightCacheHitCount);
+					frameTelemetry.directionalLightUpdateCount =
+						CounterDelta(
+							classicScenePreviousFrameShadowStats
+								.directionalLightUpdateCount,
+							currentShadowStats.directionalLightUpdateCount);
+					frameTelemetry.pointLightUpdateCount = CounterDelta(
+						classicScenePreviousFrameShadowStats
+							.pointLightUpdateCount,
+						currentShadowStats.pointLightUpdateCount);
+					frameTelemetry.pointShadowSubmissionPassCount =
+						CounterDelta(
+							classicScenePreviousFrameShadowStats
+								.pointShadowSubmissionPassCount,
+							currentShadowStats
+								.pointShadowSubmissionPassCount);
+					frameTelemetry.pointShadowRequiredFaceCount =
+						CounterDelta(
+							classicScenePreviousFrameShadowStats
+								.pointShadowRequiredFaceCount,
+							currentShadowStats
+								.pointShadowRequiredFaceCount);
+					frameTelemetry.pointShadowRenderedFaceCount =
+						CounterDelta(
+							classicScenePreviousFrameShadowStats
+								.pointShadowRenderedFaceCount,
+							currentShadowStats
+								.pointShadowRenderedFaceCount);
+					frameTelemetry.pointShadowFaceCacheHitCount =
+						CounterDelta(
+							classicScenePreviousFrameShadowStats
+								.pointShadowFaceCacheHitCount,
+							currentShadowStats
+								.pointShadowFaceCacheHitCount);
+					frameTelemetry.pointShadowDeferredFaceCount =
+						CounterDelta(
+							classicScenePreviousFrameShadowStats
+								.pointShadowDeferredFaceCount,
+							currentShadowStats
+								.pointShadowDeferredFaceCount);
+					frameTelemetry.pointShadowRequiredFaceMask =
+						currentShadowStats
+							.lastPointShadowRequiredFaceMask;
+					frameTelemetry.pointShadowUpdateFaceMask =
+						currentShadowStats
+							.lastPointShadowUpdateFaceMask;
+					frameTelemetry.spotLightUpdateCount = CounterDelta(
+						classicScenePreviousFrameShadowStats
+							.spotLightUpdateCount,
+						currentShadowStats.spotLightUpdateCount);
+					frameTelemetry.updatedLightCount =
+						frameTelemetry.directionalLightUpdateCount +
+						frameTelemetry.pointLightUpdateCount +
+						frameTelemetry.spotLightUpdateCount;
+					frameTelemetry.casterBoundsRebuildCount =
+						CounterDelta(
+							classicScenePreviousFrameShadowStats
+								.casterBoundsRebuildCount,
+							currentShadowStats
+								.casterBoundsRebuildCount);
+					frameTelemetry.sceneTopologyRevision =
+						currentShadowStats.sceneTopologyRevision;
+					frameTelemetry.sceneTopologyInvalidationCount =
+						CounterDelta(
+							classicScenePreviousFrameShadowStats
+								.sceneTopologyInvalidationCount,
+							currentShadowStats
+								.sceneTopologyInvalidationCount);
+					frameTelemetry.sceneTopologyModelCount =
+						currentShadowStats.sceneTopologyModelCount;
+					frameTelemetry.cacheCheckCpuMilliseconds =
+						currentShadowStats
+							.lastCacheCheckCpuMilliseconds;
+					frameTelemetry.casterStateSyncCpuMilliseconds =
+						currentShadowStats
+							.lastCasterStateSyncCpuMilliseconds;
+					frameTelemetry.pointShadowFaceDemandCpuMilliseconds =
+						currentShadowStats
+							.lastPointShadowFaceDemandCpuMilliseconds;
+					frameTelemetry.pointShadowFaceSignatureCpuMilliseconds =
+						currentShadowStats
+							.lastPointShadowFaceSignatureCpuMilliseconds;
+					frameTelemetry.shadowUpdateCpuMilliseconds =
+						frameTelemetry.updateCount > 0
+							? currentShadowStats
+								.lastUpdateCpuMilliseconds
+							: 0.0;
+					classicSceneTimelineTelemetry.push_back(
+						frameTelemetry);
+					classicScenePreviousFrameShadowStats =
+						currentShadowStats;
+				}
+			}
+		}
+		}
+		if (classicSceneOptions.enabled &&
+			classicSceneFrames == classicSceneOptions.captureFrame) {
+			PerformanceProfiler::GetInstance().FinishBenchmarkCapture();
+			const ProfilerBenchmarkSamples& profilerSamples =
+				PerformanceProfiler::GetInstance().GetBenchmarkSamples();
+			const std::size_t expectedSamples = static_cast<std::size_t>(
+				classicSceneOptions.captureFrame -
+				classicSceneOptions.warmupFrames);
+			const bool profilerCaptureSucceeded =
+				classicSceneProfilerCaptureStarted &&
+				profilerSamples.wallFrameMs.size() == expectedSamples &&
+				profilerSamples.cpuFrameMs.size() == expectedSamples &&
+				(!PerformanceProfiler::GetInstance().IsGpuTimingSupported() ||
+					profilerSamples.gpuFrameMs.size() == expectedSamples);
+			if (!profilerCaptureSucceeded) {
+				std::cerr
+					<< "[ClassicScene] profiler capture count mismatch: "
+					<< "expected=" << expectedSamples
+					<< " wall=" << profilerSamples.wallFrameMs.size()
+					<< " cpu=" << profilerSamples.cpuFrameMs.size()
+					<< " gpu=" << profilerSamples.gpuFrameMs.size()
+					<< std::endl;
+			}
+
+			const FrameCaptureStats capture = CaptureFramebufferPpm(
+				postprocessRenderPass->GetOutputFBO(),
+				classicSceneOptions.capturePath);
+			const PointShadowCubeEvidence pointShadowCubeEvidence =
+				CapturePointShadowCubeEvidence(scene);
+			classicSceneFrameTiming =
+				CalculateFrameTimingStats(classicSceneFrameMilliseconds);
+			const bool requiresImageBasedLighting =
+				classicSceneOptions.renderPath.find("pbr-") == 0;
+			const bool requiresPointShadowEvidence =
+				classicSceneOptions.shadowExperiment &&
+				classicSceneOptions.shadowMode != "off" &&
+				(classicSceneOptions.shadowLights == "point" ||
+					classicSceneOptions.shadowLights == "all");
+			const bool timelineCaptureSucceeded =
+				classicSceneMotionTimeline.GetProfile() ==
+					BenchmarkMotionProfile::None ||
+				classicSceneTimelineTelemetry.size() == expectedSamples;
+			const bool captureSucceeded =
+				capture.valid &&
+				profilerCaptureSucceeded &&
+				timelineCaptureSucceeded &&
+				(!requiresImageBasedLighting || imageBasedLighting.IsReady()) &&
+				(!requiresPointShadowEvidence ||
+					pointShadowCubeEvidence.valid) &&
+				!classicSceneFailed;
+			if (requiresPointShadowEvidence &&
+				!pointShadowCubeEvidence.valid) {
+				std::cerr
+					<< "[ClassicScene] point shadow cubemap evidence "
+					<< "is unavailable or invalid"
+					<< std::endl;
+			}
+			if (!timelineCaptureSucceeded) {
+				std::cerr
+					<< "[ClassicScene] timeline telemetry count mismatch: "
+					<< "expected=" << expectedSamples
+					<< " actual="
+					<< classicSceneTimelineTelemetry.size()
+					<< std::endl;
+			}
+			const MemoryStats memory =
+				PerformanceProfiler::GetInstance().GetMemoryStats();
+			float actualSpotShadowNearPlane = 0.0f;
+			float actualSpotShadowFarPlane = 0.0f;
+			if (!scene.lightSource.spotLights.empty()) {
+				actualSpotShadowNearPlane =
+					scene.lightSource.spotLights.front().near_plane;
+				actualSpotShadowFarPlane =
+					scene.lightSource.spotLights.front().far_plane;
+			}
+			if (!WriteClassicSceneResult(
+				classicSceneOptions,
+				captureSucceeded,
+				classicSceneLoadMilliseconds,
+				classicSceneFrameTiming,
+				classicSceneMeshCount,
+				classicSceneVertexCount,
+				classicSceneTriangleCount,
+				classicSceneSourceCenter,
+				classicSceneSourceRadius,
+				classicSceneAppliedScale,
+				capture,
+				pointShadowCubeEvidence,
+				memory,
+				scene.GetShadowSystemStats(),
+				classicSceneMeasurementStartShadowStats,
+				classicSceneMotionTimeline,
+				classicSceneTimelineTelemetry,
+				profilerSamples,
+				actualSpotShadowNearPlane,
+				actualSpotShadowFarPlane)) {
+				std::cerr << "[ClassicScene] failed to write result "
+					<< classicSceneOptions.resultPath << std::endl;
+				classicSceneFailed = true;
+			}
+			classicSceneCaptured = true;
+			classicSceneFailed = classicSceneFailed || !captureSucceeded;
+			std::cout << "[ClassicScene] scene="
+				<< classicSceneOptions.sceneName
+				<< " workload=" << classicSceneOptions.shadowWorkload
+				<< " variant=" << classicSceneOptions.shadowVariant
+				<< " iblReady=" << imageBasedLighting.IsReady()
+				<< " meanLuminance=" << std::fixed << std::setprecision(4)
+				<< capture.meanLuminance
+				<< " nonBlackRatio=" << capture.nonBlackRatio
+				<< " averageFrameMs=" << classicSceneFrameTiming.meanMilliseconds
+				<< " medianFrameMs=" << classicSceneFrameTiming.medianMilliseconds
+				<< " p95FrameMs=" << classicSceneFrameTiming.p95Milliseconds
+				<< " p99FrameMs=" << classicSceneFrameTiming.p99Milliseconds
+				<< " capture=" << classicSceneOptions.capturePath
+				<< " result=" << classicSceneOptions.resultPath
+				<< std::endl;
+			glfwSetWindowShouldClose(window, true);
+		}
 	}
 	if (benchmarkOptions.enabled && !benchmarkSession.IsComplete()) {
 		benchmarkSession.Abort();
+	}
+	if (!resourceSmokeTest &&
+		!pbrSmokeTest &&
+		!benchmarkOptions.enabled &&
+		!classicSceneOptions.enabled) {
+		mygui.RestoreTemporaryEditorState(scene, camera);
 	}
 
 	forwardRenderPass->Destroy();
@@ -660,23 +3888,79 @@ int main(int argc, char** argv) {
 	delete deferRenderPass;
 	postprocessRenderPass->Destroy();
 	delete postprocessRenderPass;
-	if (!resourceSmokeTest && !benchmarkOptions.enabled) {
+	if (!resourceSmokeTest &&
+		!pbrSmokeTest &&
+		!benchmarkOptions.enabled &&
+		!classicSceneOptions.enabled) {
 		SceneStateIO::Save(scene, camera, sceneStatePath);
 	}
 	scene.SetSelectedModelForMaterials(nullptr);
-	scene.modelSource.models.clear();
+	scene.modelSource.ClearModels();
+	classicSceneDeferredReceiver.reset();
+	classicSceneReplacementCaster.reset();
+	classicSceneMotionCaster.reset();
+	classicSceneMotionCasterMaterial.reset();
+	classicSceneModel.reset();
+	classicSceneOverrideMaterial.reset();
 	scene.lightSource.pointLights.clear();
 	scene.lightSource.directionLights.clear();
 	scene.lightSource.spotLights.clear();
 	Model::DestroyMeshCache();
+	scene.SetImageBasedLighting(nullptr);
+	imageBasedLighting.Destroy();
 	skybox.Release();
 	DestroyTextureCache();
 	FramebuffersManager::GetInstance().Shutdown();
+	if (pbrSmokeTest) {
+		const auto& memory = PerformanceProfiler::GetInstance().GetMemoryStats();
+		auto currentBytes = [&](MemoryResourceType type) {
+			return memory.categories[static_cast<size_t>(type)].currentBytes;
+		};
+		const std::uint64_t textureBytes = currentBytes(MemoryResourceType::Texture);
+		const std::uint64_t meshCpuBytes = currentBytes(MemoryResourceType::MeshCpu);
+		const std::uint64_t meshGpuBytes = currentBytes(MemoryResourceType::MeshGpu);
+		const std::uint64_t renderTargetBytes = currentBytes(MemoryResourceType::RenderTarget);
+		std::cout << "[PBRSmoke] released textureBytes=" << textureBytes
+			<< " meshCpuBytes=" << meshCpuBytes
+			<< " meshGpuBytes=" << meshGpuBytes
+			<< " renderTargetBytes=" << renderTargetBytes << std::endl;
+		if (textureBytes != 0 || meshCpuBytes != 0 || meshGpuBytes != 0 || renderTargetBytes != 0) {
+			pbrSmokeFailed = true;
+		}
+	}
+	if (classicSceneOptions.enabled) {
+		const auto& memory = PerformanceProfiler::GetInstance().GetMemoryStats();
+		auto currentBytes = [&](MemoryResourceType type) {
+			return memory.categories[static_cast<size_t>(type)].currentBytes;
+		};
+		const std::uint64_t textureBytes = currentBytes(MemoryResourceType::Texture);
+		const std::uint64_t meshCpuBytes = currentBytes(MemoryResourceType::MeshCpu);
+		const std::uint64_t meshGpuBytes = currentBytes(MemoryResourceType::MeshGpu);
+		const std::uint64_t renderTargetBytes =
+			currentBytes(MemoryResourceType::RenderTarget);
+		std::cout << "[ClassicScene] released textureBytes=" << textureBytes
+			<< " meshCpuBytes=" << meshCpuBytes
+			<< " meshGpuBytes=" << meshGpuBytes
+			<< " renderTargetBytes=" << renderTargetBytes << std::endl;
+		if (!classicSceneCaptured ||
+			textureBytes != 0 ||
+			meshCpuBytes != 0 ||
+			meshGpuBytes != 0 ||
+			renderTargetBytes != 0) {
+			classicSceneFailed = true;
+		}
+	}
 	PerformanceProfiler::GetInstance().Shutdown();
 
 	glfwTerminate();
 	if (resourceSmokeFailed) {
 		return 2;
+	}
+	if (pbrSmokeFailed) {
+		return 6;
+	}
+	if (classicSceneFailed) {
+		return 7;
 	}
 	if (benchmarkOptions.enabled && !benchmarkSession.WasSuccessful()) {
 		return 3;

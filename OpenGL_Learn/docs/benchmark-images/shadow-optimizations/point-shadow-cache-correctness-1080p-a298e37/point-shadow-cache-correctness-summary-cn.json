@@ -1,0 +1,350 @@
+{
+  "schemaVersion": 1,
+  "manifest": {
+    "schemaVersion": 1,
+    "batchId": "point-shadow-cache-correctness-1080p-a298e37",
+    "createdUtc": "2026-07-29T18:35:24.6971187Z",
+    "resolution": [
+      1920,
+      1080
+    ],
+    "internalWarmupFrames": 12,
+    "mode": "hard",
+    "pixelThreshold": {
+      "maximumChannelDelta": 0,
+      "maximumChangedPixels": 0
+    },
+    "variants": {
+      "B": "six-face-oracle",
+      "C": "per-light-point-per-face"
+    },
+    "cases": [
+      {
+        "id": "deferred-face-required",
+        "displayName": "Deferred Face becomes Required",
+        "workload": "deferred-face-required",
+        "experimentId": "point-shadow-cache-correctness-1080p-a298e37-deferred-face-required",
+        "scenes": [
+          "sponza"
+        ],
+        "measuredFrames": 4,
+        "summary": "C:\\Users\\Link\\Dev\\OpenGL_Learn-shadow-formal-a298e37\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\point-shadow-cache-correctness-1080p-a298e37-deferred-face-required\\summary.json"
+      },
+      {
+        "id": "point-move",
+        "displayName": "Point Light move",
+        "workload": "move-point",
+        "experimentId": "point-shadow-cache-correctness-1080p-a298e37-point-move",
+        "scenes": [
+          "sponza",
+          "san-miguel"
+        ],
+        "measuredFrames": 12,
+        "summary": "C:\\Users\\Link\\Dev\\OpenGL_Learn-shadow-formal-a298e37\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\point-shadow-cache-correctness-1080p-a298e37-point-move\\summary.json"
+      },
+      {
+        "id": "local-caster",
+        "displayName": "Local Caster move",
+        "workload": "move-local-caster",
+        "experimentId": "point-shadow-cache-correctness-1080p-a298e37-local-caster",
+        "scenes": [
+          "sponza",
+          "san-miguel"
+        ],
+        "measuredFrames": 12,
+        "summary": "C:\\Users\\Link\\Dev\\OpenGL_Learn-shadow-formal-a298e37\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\point-shadow-cache-correctness-1080p-a298e37-local-caster\\summary.json"
+      },
+      {
+        "id": "fbo-resize",
+        "displayName": "Point Shadow FBO Resize",
+        "workload": "resize-point-shadow",
+        "experimentId": "point-shadow-cache-correctness-1080p-a298e37-fbo-resize",
+        "scenes": [
+          "sponza",
+          "san-miguel"
+        ],
+        "measuredFrames": 12,
+        "summary": "C:\\Users\\Link\\Dev\\OpenGL_Learn-shadow-formal-a298e37\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\point-shadow-cache-correctness-1080p-a298e37-fbo-resize\\summary.json"
+      },
+      {
+        "id": "fbo-replace",
+        "displayName": "Point Shadow FBO Replace",
+        "workload": "replace-point-shadow-target",
+        "experimentId": "point-shadow-cache-correctness-1080p-a298e37-fbo-replace",
+        "scenes": [
+          "sponza",
+          "san-miguel"
+        ],
+        "measuredFrames": 12,
+        "summary": "C:\\Users\\Link\\Dev\\OpenGL_Learn-shadow-formal-a298e37\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\point-shadow-cache-correctness-1080p-a298e37-fbo-replace\\summary.json"
+      },
+      {
+        "id": "shader-reload",
+        "displayName": "Point Shadow Shader Reload",
+        "workload": "reload-shadow-point",
+        "experimentId": "point-shadow-cache-correctness-1080p-a298e37-shader-reload",
+        "scenes": [
+          "sponza",
+          "san-miguel"
+        ],
+        "measuredFrames": 12,
+        "summary": "C:\\Users\\Link\\Dev\\OpenGL_Learn-shadow-formal-a298e37\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\point-shadow-cache-correctness-1080p-a298e37-shader-reload\\summary.json"
+      }
+    ],
+    "topologyAbaSmoke": {
+      "id": "topology-aba",
+      "displayName": "SceneTopologyRevision same-slot replacement smoke",
+      "scene": "sponza",
+      "measuredFrames": 4,
+      "result": "C:\\Users\\Link\\Dev\\OpenGL_Learn-shadow-formal-a298e37\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\point-shadow-cache-correctness-1080p-a298e37\\topology-aba\\topology-aba.json",
+      "capture": "C:\\Users\\Link\\Dev\\OpenGL_Learn-shadow-formal-a298e37\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\point-shadow-cache-correctness-1080p-a298e37\\topology-aba\\topology-aba.ppm",
+      "log": "C:\\Users\\Link\\Dev\\OpenGL_Learn-shadow-formal-a298e37\\OpenGL_Learn\\benchmark-results\\shadow-optimizations\\point-shadow-cache-correctness-1080p-a298e37\\topology-aba\\topology-aba.log",
+      "revisionDelta": 1,
+      "invalidationCount": 1,
+      "modelCountBefore": 2,
+      "modelCountAfter": 2,
+      "pointUpdates": 1
+    },
+    "provenance": {
+      "gitHead": "a298e37e953310364376b631e85840ee2ef353ff",
+      "gitDirty": false,
+      "executablePath": "C:\\Users\\Link\\Dev\\OpenGL_Learn-shadow-formal-a298e37\\x64\\Release\\OpenGL_Learn.exe",
+      "executableSha256": "a0a07672d367fcc74a9a6ec16b6003f821fee69bc062a95fe5fc49514949dd38",
+      "configuration": "Release x64",
+      "requestedSwapInterval": 0
+    }
+  },
+  "result": {
+    "allPassed": true,
+    "screenshotMatrix": {
+      "exactCount": 11,
+      "total": 11
+    },
+    "deferredSamples": [
+      {
+        "frame": 0,
+        "requiredMask": 1,
+        "updateMask": 1,
+        "deferred": 5
+      },
+      {
+        "frame": 1,
+        "requiredMask": 2,
+        "updateMask": 2,
+        "deferred": 4
+      },
+      {
+        "frame": 2,
+        "requiredMask": 2,
+        "updateMask": 0,
+        "deferred": 4
+      },
+      {
+        "frame": 3,
+        "requiredMask": 2,
+        "updateMask": 0,
+        "deferred": 4
+      }
+    ]
+  },
+  "cases": [
+    {
+      "caseId": "deferred-face-required",
+      "caseName": "Deferred Face 后续变为 Required",
+      "workload": "deferred-face-required",
+      "sceneId": "sponza",
+      "sceneName": "Crytek Sponza",
+      "frames": 4,
+      "screenExact": true,
+      "cubeExact": true,
+      "resourcesExact": true,
+      "oracleRendered": 1.5,
+      "candidateRequired": 1.0,
+      "candidateRendered": 0.5,
+      "candidateHits": 0.5,
+      "candidateDeferred": 4.25,
+      "resourceFailures": 0,
+      "fallbacks": 0
+    },
+    {
+      "caseId": "point-move",
+      "caseName": "Point Light 移动",
+      "workload": "move-point",
+      "sceneId": "sponza",
+      "sceneName": "Crytek Sponza",
+      "frames": 12,
+      "screenExact": true,
+      "cubeExact": true,
+      "resourcesExact": true,
+      "oracleRendered": 6.0,
+      "candidateRequired": 6.0,
+      "candidateRendered": 6.0,
+      "candidateHits": 0.0,
+      "candidateDeferred": 0.0,
+      "resourceFailures": 0,
+      "fallbacks": 0
+    },
+    {
+      "caseId": "point-move",
+      "caseName": "Point Light 移动",
+      "workload": "move-point",
+      "sceneId": "san-miguel",
+      "sceneName": "San Miguel 2.1 (low-poly)",
+      "frames": 12,
+      "screenExact": true,
+      "cubeExact": true,
+      "resourcesExact": true,
+      "oracleRendered": 6.0,
+      "candidateRequired": 6.0,
+      "candidateRendered": 6.0,
+      "candidateHits": 0.0,
+      "candidateDeferred": 0.0,
+      "resourceFailures": 0,
+      "fallbacks": 0
+    },
+    {
+      "caseId": "local-caster",
+      "caseName": "局部 Caster 移动",
+      "workload": "move-local-caster",
+      "sceneId": "sponza",
+      "sceneName": "Crytek Sponza",
+      "frames": 12,
+      "screenExact": true,
+      "cubeExact": true,
+      "resourcesExact": true,
+      "oracleRendered": 6.0,
+      "candidateRequired": 6.0,
+      "candidateRendered": 1.0,
+      "candidateHits": 5.0,
+      "candidateDeferred": 0.0,
+      "resourceFailures": 0,
+      "fallbacks": 0
+    },
+    {
+      "caseId": "local-caster",
+      "caseName": "局部 Caster 移动",
+      "workload": "move-local-caster",
+      "sceneId": "san-miguel",
+      "sceneName": "San Miguel 2.1 (low-poly)",
+      "frames": 12,
+      "screenExact": true,
+      "cubeExact": true,
+      "resourcesExact": true,
+      "oracleRendered": 6.0,
+      "candidateRequired": 6.0,
+      "candidateRendered": 1.0,
+      "candidateHits": 5.0,
+      "candidateDeferred": 0.0,
+      "resourceFailures": 0,
+      "fallbacks": 0
+    },
+    {
+      "caseId": "fbo-resize",
+      "caseName": "Point Shadow FBO Resize",
+      "workload": "resize-point-shadow",
+      "sceneId": "sponza",
+      "sceneName": "Crytek Sponza",
+      "frames": 12,
+      "screenExact": true,
+      "cubeExact": true,
+      "resourcesExact": true,
+      "oracleRendered": 6.0,
+      "candidateRequired": 6.0,
+      "candidateRendered": 6.0,
+      "candidateHits": 0.0,
+      "candidateDeferred": 0.0,
+      "resourceFailures": 0,
+      "fallbacks": 0
+    },
+    {
+      "caseId": "fbo-resize",
+      "caseName": "Point Shadow FBO Resize",
+      "workload": "resize-point-shadow",
+      "sceneId": "san-miguel",
+      "sceneName": "San Miguel 2.1 (low-poly)",
+      "frames": 12,
+      "screenExact": true,
+      "cubeExact": true,
+      "resourcesExact": true,
+      "oracleRendered": 6.0,
+      "candidateRequired": 6.0,
+      "candidateRendered": 6.0,
+      "candidateHits": 0.0,
+      "candidateDeferred": 0.0,
+      "resourceFailures": 0,
+      "fallbacks": 0
+    },
+    {
+      "caseId": "fbo-replace",
+      "caseName": "Point Shadow FBO Replace",
+      "workload": "replace-point-shadow-target",
+      "sceneId": "sponza",
+      "sceneName": "Crytek Sponza",
+      "frames": 12,
+      "screenExact": true,
+      "cubeExact": true,
+      "resourcesExact": true,
+      "oracleRendered": 6.0,
+      "candidateRequired": 6.0,
+      "candidateRendered": 6.0,
+      "candidateHits": 0.0,
+      "candidateDeferred": 0.0,
+      "resourceFailures": 0,
+      "fallbacks": 0
+    },
+    {
+      "caseId": "fbo-replace",
+      "caseName": "Point Shadow FBO Replace",
+      "workload": "replace-point-shadow-target",
+      "sceneId": "san-miguel",
+      "sceneName": "San Miguel 2.1 (low-poly)",
+      "frames": 12,
+      "screenExact": true,
+      "cubeExact": true,
+      "resourcesExact": true,
+      "oracleRendered": 6.0,
+      "candidateRequired": 6.0,
+      "candidateRendered": 6.0,
+      "candidateHits": 0.0,
+      "candidateDeferred": 0.0,
+      "resourceFailures": 0,
+      "fallbacks": 0
+    },
+    {
+      "caseId": "shader-reload",
+      "caseName": "Point Shadow Shader Reload",
+      "workload": "reload-shadow-point",
+      "sceneId": "sponza",
+      "sceneName": "Crytek Sponza",
+      "frames": 12,
+      "screenExact": true,
+      "cubeExact": true,
+      "resourcesExact": true,
+      "oracleRendered": 6.0,
+      "candidateRequired": 6.0,
+      "candidateRendered": 6.0,
+      "candidateHits": 0.0,
+      "candidateDeferred": 0.0,
+      "resourceFailures": 0,
+      "fallbacks": 0
+    },
+    {
+      "caseId": "shader-reload",
+      "caseName": "Point Shadow Shader Reload",
+      "workload": "reload-shadow-point",
+      "sceneId": "san-miguel",
+      "sceneName": "San Miguel 2.1 (low-poly)",
+      "frames": 12,
+      "screenExact": true,
+      "cubeExact": true,
+      "resourcesExact": true,
+      "oracleRendered": 6.0,
+      "candidateRequired": 6.0,
+      "candidateRendered": 6.0,
+      "candidateHits": 0.0,
+      "candidateDeferred": 0.0,
+      "resourceFailures": 0,
+      "fallbacks": 0
+    }
+  ]
+}

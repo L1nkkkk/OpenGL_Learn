@@ -5,6 +5,7 @@
 #include <assimp/Exporter.hpp>
 #include <assimp/version.h>
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -26,9 +27,145 @@ namespace {
 	constexpr unsigned int kModelImportFlags =
 		aiProcess_Triangulate |
 		aiProcess_FlipUVs |
+		aiProcess_GenSmoothNormals |
 		aiProcess_CalcTangentSpace |
-		aiProcess_JoinIdenticalVertices;
+		aiProcess_JoinIdenticalVertices |
+		aiProcess_SortByPType;
 	constexpr std::uint64_t kModelImportCacheVersion = 1;
+
+	struct HeightTextureClassification {
+		bool isTangentSpaceNormal = false;
+		std::string reason;
+	};
+
+	std::unordered_map<std::string, HeightTextureClassification> g_heightTextureClassifications;
+
+	bool HasNormalMapNameHint(const std::filesystem::path& texturePath)
+	{
+		std::string stem = texturePath.stem().string();
+		std::transform(stem.begin(), stem.end(), stem.begin(), [](unsigned char value) {
+			return static_cast<char>(std::tolower(value));
+		});
+		return stem.find("normal") != std::string::npos ||
+			stem.rfind("n_", 0) == 0 ||
+			stem.find("_nrm") != std::string::npos ||
+			stem.find("-nrm") != std::string::npos ||
+			(stem.size() > 2 && stem.compare(stem.size() - 2, 2, "_n") == 0) ||
+			(stem.size() > 2 && stem.compare(stem.size() - 2, 2, "-n") == 0);
+	}
+
+	HeightTextureClassification ClassifyHeightTexture(
+		const std::string& modelDirectory,
+		const char* texturePath)
+	{
+		namespace fs = std::filesystem;
+		fs::path resolvedPath(texturePath);
+		if (!resolvedPath.is_absolute()) {
+			resolvedPath = fs::path(modelDirectory) / resolvedPath;
+		}
+		std::error_code error;
+		fs::path absolutePath = fs::absolute(resolvedPath, error);
+		if (!error) {
+			resolvedPath = absolutePath.lexically_normal();
+		}
+
+		const std::string cacheKey = resolvedPath.generic_string();
+		const auto cached = g_heightTextureClassifications.find(cacheKey);
+		if (cached != g_heightTextureClassifications.end()) {
+			return cached->second;
+		}
+
+		HeightTextureClassification result;
+		int width = 0;
+		int height = 0;
+		int channelCount = 0;
+		const std::string nativePath = resolvedPath.string();
+		const bool hasNormalMapNameHint = HasNormalMapNameHint(resolvedPath);
+		if (stbi_info(nativePath.c_str(), &width, &height, &channelCount) == 0) {
+			// Some production assets use formats stb_image cannot inspect (for
+			// example DDS). In that case require explicit filename semantics.
+			result.isTangentSpaceNormal = hasNormalMapNameHint;
+			result.reason = hasNormalMapNameHint
+				? "normal-map filename hint"
+				: "image metadata unavailable and no normal-map filename hint";
+		}
+		else if (channelCount < 3) {
+			// A single/dual-channel HEIGHT texture cannot provide the XYZ vector
+			// expected by the existing tangent-space normal shader path.
+			result.reason = "fewer than three color channels";
+		}
+		else if (hasNormalMapNameHint) {
+			result.isTangentSpaceNormal = true;
+			result.reason = "normal-map filename hint";
+		}
+		else {
+			int loadedWidth = 0;
+			int loadedHeight = 0;
+			int loadedChannels = 0;
+			unsigned char* pixels = stbi_load(
+				nativePath.c_str(),
+				&loadedWidth,
+				&loadedHeight,
+				&loadedChannels,
+				3);
+			if (!pixels || loadedWidth <= 0 || loadedHeight <= 0) {
+				result.reason = "image pixels unavailable and no normal-map filename hint";
+			}
+			else {
+				constexpr std::size_t kMaximumSamples = 4096;
+				const std::size_t pixelCount =
+					static_cast<std::size_t>(loadedWidth) * static_cast<std::size_t>(loadedHeight);
+				const int sampleStride = (std::max)(
+					1,
+					static_cast<int>(std::sqrt(
+						static_cast<double>(pixelCount) / kMaximumSamples)));
+				std::size_t sampleCount = 0;
+				std::size_t positiveZCount = 0;
+				std::size_t blueDominantCount = 0;
+				double redTotal = 0.0;
+				double greenTotal = 0.0;
+				double blueTotal = 0.0;
+				for (int y = 0; y < loadedHeight; y += sampleStride) {
+					for (int x = 0; x < loadedWidth; x += sampleStride) {
+						const std::size_t offset =
+							(static_cast<std::size_t>(y) * loadedWidth + x) * 3;
+						const unsigned int red = pixels[offset];
+						const unsigned int green = pixels[offset + 1];
+						const unsigned int blue = pixels[offset + 2];
+						redTotal += red;
+						greenTotal += green;
+						blueTotal += blue;
+						positiveZCount += blue >= 128 ? 1 : 0;
+						blueDominantCount += blue >= (std::max)(red, green) + 8 ? 1 : 0;
+						++sampleCount;
+					}
+				}
+
+				const double positiveZRatio =
+					static_cast<double>(positiveZCount) / sampleCount;
+				const double blueDominantRatio =
+					static_cast<double>(blueDominantCount) / sampleCount;
+				const double meanRed = redTotal / sampleCount;
+				const double meanGreen = greenTotal / sampleCount;
+				const double meanBlue = blueTotal / sampleCount;
+				result.isTangentSpaceNormal =
+					positiveZRatio >= 0.80 &&
+					(blueDominantRatio >= 0.50 ||
+						meanBlue >= (std::max)(meanRed, meanGreen) + 24.0);
+				result.reason = result.isTangentSpaceNormal
+					? "normal-like RGB content"
+					: "RGB content is not normal-map-like";
+			}
+			stbi_image_free(pixels);
+		}
+
+		g_heightTextureClassifications.emplace(cacheKey, result);
+		if (!result.isTangentSpaceNormal) {
+			std::cout << "[Model Material] ignored HEIGHT texture as tangent-space normal: "
+				<< texturePath << " (" << result.reason << ")" << std::endl;
+		}
+		return result;
+	}
 
 	bool IsValidScene(const aiScene* scene)
 	{
@@ -356,7 +493,33 @@ float Mesh::GetBoundingRadius() const
 	return m_geometry ? m_geometry->GetBoundingRadius() : 0.0f;
 }
 
-void Mesh::Draw(Shader* shader)
+std::uint64_t Mesh::SyncShadowStateRevision(
+	std::uint64_t syncEpoch) const
+{
+	std::size_t signature = 0;
+	hash_combine(signature, m_active);
+	if (m_active) {
+		hash_combine(signature, GetVAO());
+		hash_combine(signature, GetDrawCount());
+		hash_combine(
+			signature,
+			reinterpret_cast<std::uintptr_t>(material_ptr));
+		if (material_ptr) {
+			hash_combine(
+				signature,
+				material_ptr->GetShadowStateRevision(syncEpoch));
+		}
+	}
+	if (!m_shadowStateInitialized ||
+		signature != m_shadowStateSignature) {
+		m_shadowStateInitialized = true;
+		m_shadowStateSignature = signature;
+		++m_shadowStateRevision;
+	}
+	return m_shadowStateRevision;
+}
+
+void Mesh::Draw(Shader* shader, bool forcePbrMaterial)
 {
     if (!material_ptr) {
         return;
@@ -364,7 +527,15 @@ void Mesh::Draw(Shader* shader)
 
 	// XML materials are refreshed once while preparing the scene render data.
 	auto materialGaurd = MaterialGaurd(*material_ptr, shader);
+	if (forcePbrMaterial && shader && shader->shaderName == "deferProcess") {
+		shader->setBool("material.usePBR", true);
+	}
 	GLState::ActiveTexture(GL_TEXTURE0);
+	DrawGeometry();
+}
+
+void Mesh::DrawGeometry()
+{
 	GLState::BindVertexArray(GetVAO());
 	PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, GetDrawCount());
 	if (UsesIndices()) {
@@ -372,6 +543,16 @@ void Mesh::Draw(Shader* shader)
 	}
 	else {
 		glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(GetVertexCount()));
+	}
+}
+
+void Model::DrawGeometry()
+{
+	for (Mesh& mesh : meshes) {
+		if (!mesh.GetActiveStatus()) {
+			continue;
+		}
+		mesh.DrawGeometry();
 	}
 }
 
@@ -404,15 +585,15 @@ void Model::Draw(Shader* shader, unsigned int start_tex_index )
 void Model::loadModel(std::string path,Material* mat)
 {
 	if (!m_shader && !mat) {
-		m_shader = ShaderManager::GetInstance().GetShaderByName("phong");
+		m_shader = ShaderManager::GetInstance().GetShaderByName("pbr");
 	}
-	std::string shaderName = (m_shader ? m_shader->shaderName : std::string("phong"));
+	std::string shaderName = (m_shader ? m_shader->shaderName : std::string("pbr"));
 	std::string cacheKey = path + "|shader=" + shaderName + (mat ? "|mat=custom" : "|mat=default");
 	if (!mat) {
 		auto it = g_modelMeshCache.find(cacheKey);
 		if (it != g_modelMeshCache.end()) {
 			meshes = it->second;
-			directory = path.substr(0, path.find_last_of('/'));
+			directory = std::filesystem::path(path).parent_path().generic_string();
 			return;
 		}
 	}
@@ -447,7 +628,7 @@ void Model::loadModel(std::string path,Material* mat)
 	// 防止 meshes 在 push_back 时多次扩容触发移动/销毁链，先按 Assimp 总 mesh 数预留容量
 	meshes.clear();
 	meshes.reserve(scene->mNumMeshes);
-	directory = path.substr(0, path.find_last_of('/'));
+	directory = std::filesystem::path(path).parent_path().generic_string();
 	processNode(scene->mRootNode, scene,mat);
 	if (!mat) {
 		g_modelMeshCache[cacheKey] = meshes;
@@ -456,8 +637,23 @@ void Model::loadModel(std::string path,Material* mat)
 
 void Model::processNode(aiNode* node, const aiScene* scene,Material* mat)
 {
+	if (!node || !scene) {
+		return;
+	}
 	for (unsigned int i = 0; i < node->mNumMeshes; ++i) {
-		aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
+		const unsigned int meshIndex = node->mMeshes[i];
+		if (meshIndex >= scene->mNumMeshes) {
+			std::cerr << "[Model] skipping invalid mesh index " << meshIndex
+				<< " (mesh count " << scene->mNumMeshes << ')' << std::endl;
+			continue;
+		}
+		aiMesh* mesh = scene->mMeshes[meshIndex];
+		if (!mesh ||
+			!mesh->HasPositions() ||
+			mesh->mNumVertices == 0 ||
+			(mesh->mPrimitiveTypes & aiPrimitiveType_TRIANGLE) == 0) {
+			continue;
+		}
 		meshes.emplace_back(processMesh(mesh, scene,mat));
 	}
 	for (unsigned int i = 0; i < node->mNumChildren; ++i) {
@@ -534,6 +730,30 @@ void Model::RefreshMaterialDrivenState()
 	m_lastAppliedMaterialRevision = materialRevision;
 }
 
+std::uint64_t Model::SyncShadowStateRevision(
+	std::uint64_t syncEpoch)
+{
+	std::size_t signature = 0;
+	hash_combine(signature, m_active);
+	if (m_active) {
+		hash_combine(signature, GetTransformRevision());
+		hash_combine(signature, meshes.size());
+		for (const Mesh& mesh : meshes) {
+			hash_combine(
+				signature,
+				mesh.SyncShadowStateRevision(syncEpoch));
+			hash_combine(signature, mesh.GetShadowStateSignature());
+		}
+	}
+	if (!m_shadowStateInitialized ||
+		signature != m_shadowStateSignature) {
+		m_shadowStateInitialized = true;
+		m_shadowStateSignature = signature;
+		++m_shadowStateRevision;
+	}
+	return m_shadowStateRevision;
+}
+
 Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 {
 	std::vector<Vertex> vertices;
@@ -550,10 +770,15 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 		vector.y = mesh->mVertices[i].y;
 		vector.z = mesh->mVertices[i].z;
 		vertex.Position = vector;
-		vector.x = mesh->mNormals[i].x;
-		vector.y = mesh->mNormals[i].y;
-		vector.z = mesh->mNormals[i].z;
-		vertex.Normal = vector;
+		if (mesh->HasNormals()) {
+			vector.x = mesh->mNormals[i].x;
+			vector.y = mesh->mNormals[i].y;
+			vector.z = mesh->mNormals[i].z;
+			vertex.Normal = vector;
+		}
+		else {
+			vertex.Normal = glm::vec3(0.0f, 1.0f, 0.0f);
+		}
 		if (mesh->mTextureCoords[0]) {
 			glm::vec2 vec;
 			vec.x = mesh->mTextureCoords[0][i].x;
@@ -577,9 +802,15 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 	}
 	for (unsigned int i = 0; i < mesh->mNumFaces; ++i) {
 		const aiFace& face = mesh->mFaces[i];
-		for (unsigned int j = 0; j < face.mNumIndices; ++j) {
-			indices.push_back(face.mIndices[j]);
+		if (face.mNumIndices != 3 ||
+			face.mIndices[0] >= mesh->mNumVertices ||
+			face.mIndices[1] >= mesh->mNumVertices ||
+			face.mIndices[2] >= mesh->mNumVertices) {
+			continue;
 		}
+		indices.push_back(face.mIndices[0]);
+		indices.push_back(face.mIndices[1]);
+		indices.push_back(face.mIndices[2]);
 	}
 	std::cout << "[Mesh Debug] Name: " << mesh->mName.C_Str()
 		<< " | Vertices: " << mesh->mNumVertices
@@ -589,7 +820,8 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 	if(mat) {
 		return Mesh(std::move(vertices), std::move(indices), mat, std::shared_ptr<Material>(), std::string(), tangentBasisReady);
 	}
-	else if (mesh->mMaterialIndex >= 0) {
+	else if (mesh->mMaterialIndex < scene->mNumMaterials &&
+		scene->mMaterials[mesh->mMaterialIndex]) {
 		aiMaterial* aiMat = scene->mMaterials[mesh->mMaterialIndex];
 
 		aiString aiName;
@@ -604,10 +836,28 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 		}
 
 		if (!material) {
-			std::shared_ptr<Material> ownedMaterial = std::make_shared<Material>(materialShaderName);
+			std::shared_ptr<Material> ownedMaterial;
+			if (s_importedMaterialSharingEnabled) {
+				auto cachedMaterial = m_importedMaterials.find(mesh->mMaterialIndex);
+				if (cachedMaterial != m_importedMaterials.end()) {
+					ownedMaterial = cachedMaterial->second;
+				}
+			}
+			if (!ownedMaterial) {
+				ownedMaterial = std::make_shared<Material>(materialShaderName);
+				prosessMaterial(aiMat, ownedMaterial.get());
+				if (s_importedMaterialSharingEnabled) {
+					m_importedMaterials.emplace(mesh->mMaterialIndex, ownedMaterial);
+				}
+			}
 			material = ownedMaterial.get();
-			prosessMaterial(aiMat, material);
-			return Mesh(std::move(vertices), std::move(indices), material, ownedMaterial, std::string(), tangentBasisReady);
+			return Mesh(
+				std::move(vertices),
+				std::move(indices),
+				material,
+				std::move(ownedMaterial),
+				std::string(),
+				tangentBasisReady);
 		}
 	}
 	else {
@@ -628,37 +878,191 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene,Material* mat)
 void Model::prosessMaterial(aiMaterial* mat,Material* material)
 {
 	aiColor3D color(0.0f, 0.0f, 0.0f);
+	aiColor3D diffuseColor(1.0f, 1.0f, 1.0f);
+	aiColor3D emissiveColor(0.0f, 0.0f, 0.0f);
 	float shininess = 0.0f;
 	float opacity = 1.0f;
 	if (mat->Get(AI_MATKEY_COLOR_AMBIENT, color) == AI_SUCCESS)
 		material->AddProperty("ambient", MaterialProperty::CreateVec3(glm::vec3(color.r, color.g, color.b)));
-	if (mat->Get(AI_MATKEY_COLOR_DIFFUSE, color) == AI_SUCCESS)
-		material->AddProperty("diffuse", MaterialProperty::CreateVec3(glm::vec3(color.r, color.g, color.b)));
+	if (mat->Get(AI_MATKEY_COLOR_DIFFUSE, diffuseColor) == AI_SUCCESS)
+		material->AddProperty("diffuse", MaterialProperty::CreateVec3(glm::vec3(diffuseColor.r, diffuseColor.g, diffuseColor.b)));
 	if (mat->Get(AI_MATKEY_COLOR_SPECULAR, color) == AI_SUCCESS)
 		material->AddProperty("specular", MaterialProperty::CreateVec3(glm::vec3(color.r, color.g, color.b)));
 	if (mat->Get(AI_MATKEY_SHININESS, shininess) == AI_SUCCESS)
 		material->AddProperty("shininess", MaterialProperty::CreateFloat(shininess));
 	if (mat->Get(AI_MATKEY_OPACITY, opacity) == AI_SUCCESS)
 		material->AddProperty("opacity", MaterialProperty::CreateFloat(opacity));
-	
-	material->AddProperty("texture_diffuse", MaterialProperty::CreateTexture(loadMaterialTextures(mat, aiTextureType_DIFFUSE, "texture_diffuse")));
+
+	std::vector<Texture> diffuseTextures = loadMaterialTextures(
+		mat,
+		aiTextureType_BASE_COLOR,
+		"texture_diffuse");
+	if (diffuseTextures.empty()) {
+		diffuseTextures = loadMaterialTextures(mat, aiTextureType_DIFFUSE, "texture_diffuse");
+	}
+	material->AddProperty("texture_diffuse", MaterialProperty::CreateTexture(diffuseTextures));
 	material->AddProperty("texture_specular", MaterialProperty::CreateTexture(loadMaterialTextures(mat, aiTextureType_SPECULAR, "texture_specular")));
-	material->AddProperty("texture_normal", MaterialProperty::CreateTexture(loadMaterialTextures(mat, aiTextureType_NORMALS, "texture_normal")));
-	// For cloth/card-like alpha textures use cutout by default to avoid transparent sorting artifacts.
-	bool autoCutout = opacity < 0.999f;
+	auto normalTextures = loadMaterialTextures(mat, aiTextureType_NORMALS, "texture_normal");
+	if (normalTextures.empty()) {
+		// Assimp exposes OBJ map_Bump as HEIGHT for both real height maps and
+		// tangent-space normal maps. Only promote textures with reliable normal
+		// evidence; feeding grayscale height into the XYZ shader path corrupts
+		// lighting instead of producing bump mapping.
+		normalTextures = loadMaterialTextures(
+			mat,
+			aiTextureType_HEIGHT,
+			"texture_normal",
+			true);
+	}
+	material->AddProperty("texture_normal", MaterialProperty::CreateTexture(normalTextures));
+	auto opacityTextures = loadMaterialTextures(
+		mat,
+		aiTextureType_OPACITY,
+		"texture_opacity");
+	material->AddProperty("texture_opacity", MaterialProperty::CreateTexture(opacityTextures));
+
+	if (material->GetShaderName() == "pbr") {
+		aiColor4D baseColor(diffuseColor.r, diffuseColor.g, diffuseColor.b, opacity);
+		if (mat->Get(AI_MATKEY_BASE_COLOR, baseColor) == AI_SUCCESS) {
+			diffuseColor = aiColor3D(baseColor.r, baseColor.g, baseColor.b);
+			opacity *= baseColor.a;
+		}
+		float metallic = 0.0f;
+		float roughness = shininess > 0.0f
+			? std::sqrt(2.0f / (shininess + 2.0f))
+			: 0.5f;
+		mat->Get(AI_MATKEY_METALLIC_FACTOR, metallic);
+		mat->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughness);
+		mat->Get(AI_MATKEY_COLOR_EMISSIVE, emissiveColor);
+
+		auto loadConventionalTexture = [this](
+			const std::vector<std::string>& candidates,
+			const std::string& typeName,
+			bool srgb) {
+			std::vector<Texture> textures;
+			for (const std::string& candidate : candidates) {
+				if (!FileExists(directory + '/' + candidate)) {
+					continue;
+				}
+				for (const Texture& loaded : textures_loaded) {
+					if (loaded.path.C_Str() == candidate) {
+						Texture reused = loaded;
+						reused.type = typeName;
+						textures.push_back(reused);
+						return textures;
+					}
+				}
+
+				Texture texture{};
+				texture.textureID = TextureFromFile(candidate.c_str(), directory, false, srgb);
+				if (texture.textureID == 0) {
+					return textures;
+				}
+				texture.textureGammaID = texture.textureID;
+				texture.type = typeName;
+				texture.path = candidate;
+				textures.push_back(texture);
+				textures_loaded.push_back(texture);
+				return textures;
+			}
+			return textures;
+		};
+
+		auto metallicTextures = loadMaterialTextures(
+			mat,
+			aiTextureType_METALNESS,
+			"texture_metallic");
+		auto roughnessTextures = loadMaterialTextures(
+			mat,
+			aiTextureType_DIFFUSE_ROUGHNESS,
+			"texture_roughness");
+		auto aoTextures = loadMaterialTextures(
+			mat,
+			aiTextureType_AMBIENT_OCCLUSION,
+			"texture_ao");
+		auto emissiveTextures = loadMaterialTextures(
+			mat,
+			aiTextureType_EMISSION_COLOR,
+			"texture_emissive");
+		if (emissiveTextures.empty()) {
+			emissiveTextures = loadMaterialTextures(mat, aiTextureType_EMISSIVE, "texture_emissive");
+		}
+		if (metallicTextures.empty()) {
+			metallicTextures = loadConventionalTexture(
+				{ "metallic.png", "metallic.jpg", "metalness.png", "metalness.jpg" },
+				"texture_metallic",
+				false);
+		}
+		if (roughnessTextures.empty()) {
+			roughnessTextures = loadConventionalTexture(
+				{ "roughness.png", "roughness.jpg" },
+				"texture_roughness",
+				false);
+		}
+		if (aoTextures.empty()) {
+			aoTextures = loadConventionalTexture(
+				{ "ao.png", "ao.jpg", "ambient_occlusion.png", "ambient_occlusion.jpg" },
+				"texture_ao",
+				false);
+		}
+		if (emissiveTextures.empty()) {
+			emissiveTextures = loadConventionalTexture(
+				{ "emissive.png", "emissive.jpg", "emission.png", "emission.jpg" },
+				"texture_emissive",
+				true);
+		}
+
+		const bool packedMetallicRoughness =
+			!metallicTextures.empty() &&
+			!roughnessTextures.empty() &&
+			std::strcmp(
+				metallicTextures.front().path.C_Str(),
+				roughnessTextures.front().path.C_Str()) == 0;
+		material->AddProperty("albedo", MaterialProperty::CreateColor(glm::vec3(
+			diffuseColor.r,
+			diffuseColor.g,
+			diffuseColor.b)));
+		material->AddProperty("metallic", MaterialProperty::CreateFloat(
+			glm::clamp(metallic, 0.0f, 1.0f), 0.0f, 1.0f, 0.01f));
+		material->AddProperty("roughness", MaterialProperty::CreateFloat(
+			glm::clamp(roughness, 0.04f, 1.0f), 0.04f, 1.0f, 0.01f));
+		material->AddProperty("ao", MaterialProperty::CreateFloat(1.0f, 0.0f, 1.0f, 0.01f));
+		material->AddProperty("emissive", MaterialProperty::CreateColor(glm::vec3(
+			emissiveColor.r,
+			emissiveColor.g,
+			emissiveColor.b)));
+		material->AddProperty("metallicRoughnessPacked", MaterialProperty::CreateBool(packedMetallicRoughness));
+		material->AddProperty("texture_metallic", MaterialProperty::CreateTexture(metallicTextures));
+		material->AddProperty("texture_roughness", MaterialProperty::CreateTexture(roughnessTextures));
+		material->AddProperty("texture_ao", MaterialProperty::CreateTexture(aoTextures));
+		material->AddProperty("texture_emissive", MaterialProperty::CreateTexture(emissiveTextures));
+		material->AddProperty("opacity", MaterialProperty::CreateFloat(opacity));
+	}
+	// OBJ map_d is often a separate grayscale image rather than alpha embedded
+	// in the diffuse texture. Enable cutout whenever that mask is present.
+	const bool hasOpacityTexture = !opacityTextures.empty();
+	bool autoCutout = opacity < 0.999f || hasOpacityTexture;
 	material->AddProperty("useAlphaCutoff", MaterialProperty::CreateBool(autoCutout));
 	material->AddProperty("alphaCutoff", MaterialProperty::CreateFloat(autoCutout ? 0.4f : 0.0f, 0.0f, 1.0f, 0.01f));
 
 	material->AddProperty("useBloom", MaterialProperty::CreateBool(false));
 }
 
-std::vector<Texture> Model::loadMaterialTextures(aiMaterial* mat, aiTextureType type, std::string typeName)
+std::vector<Texture> Model::loadMaterialTextures(
+	aiMaterial* mat,
+	aiTextureType type,
+	std::string typeName,
+	bool requireTangentSpaceNormalEvidence)
 {
 	std::vector<Texture> textures;
 	for (unsigned int i = 0; i < mat->GetTextureCount(type); i++)
 	{
 		aiString str;
 		mat->GetTexture(type, i, &str);
+		if (requireTangentSpaceNormalEvidence &&
+			!ClassifyHeightTexture(directory, str.C_Str()).isTangentSpaceNormal) {
+			continue;
+		}
 		bool skip = false;
 		for (unsigned int j = 0; j < textures_loaded.size(); j++)
 		{
@@ -673,7 +1077,7 @@ std::vector<Texture> Model::loadMaterialTextures(aiMaterial* mat, aiTextureType 
 		if (!skip)
 		{   // ???????????��?????????????
 			Texture texture;
-			const bool srgb = typeName == "texture_diffuse";
+			const bool srgb = typeName == "texture_diffuse" || typeName == "texture_emissive";
 			texture.textureID = TextureFromFile(str.C_Str(), directory, false, srgb);
 			texture.textureGammaID = texture.textureID;
 			texture.type = typeName;
@@ -731,7 +1135,7 @@ glm::vec3 Model::CalculateLocalCenter()
 	return center;
 }
 
-std::vector<Vertex> ComputeTBNVertices(
+  std::vector<Vertex> ComputeTBNVertices(
 	std::vector<Vertex>& vertices,
 	const std::vector<unsigned int>& indices) {
 	if (vertices.empty()) {
@@ -750,7 +1154,7 @@ std::vector<Vertex> ComputeTBNVertices(
 	std::vector<glm::vec3> tangentSums(vertices.size(), glm::vec3(0.0f));
 	std::vector<glm::vec3> bitangentSums(vertices.size(), glm::vec3(0.0f));
 	constexpr float determinantEpsilon = 1.0e-8f;
-	for (size_t i = 0; i < indices.size(); i += 3) {
+	for (size_t i = 0; i + 2 < indices.size(); i += 3) {
 		const unsigned int i0 = indices[i];
 		const unsigned int i1 = indices[i + 1];
 		const unsigned int i2 = indices[i + 2];

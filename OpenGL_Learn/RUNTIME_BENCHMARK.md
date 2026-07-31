@@ -33,6 +33,15 @@
 --benchmark-output <path>      JSON 输出路径
 ```
 
+PBR 专项场景参数：
+
+    --benchmark-phong-material-scene       固定 Backpack、Phong、Forward
+    --benchmark-pbr-material-scene         固定 Backpack、PBR + IBL、Forward
+    --benchmark-unshared-imported-materials
+                                           仅与 PBR 专项场景组合，恢复逐 Mesh 材质实例作为优化控制组
+
+Phong/PBR 两个场景使用相同模型、相机、灯光、分辨率和渲染开关，用于记录功能成本；它们不是视觉等价 shader，结果不得外推到其它灯光或材质覆盖率。材质共享开关只允许在 --performance-benchmark 下使用，不是产品运行选项。PBR 正确性与资源回收使用独立的 --pbr-smoke-test，具体协议和最新结果见 PBR_IBL.md。
+
 ## Metrics and semantics
 
 JSON 使用 schema version 1，并包含以下信息：

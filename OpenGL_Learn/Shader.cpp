@@ -1,5 +1,6 @@
 #include "Shader.h"
 #include "Profiler.h"
+#include <algorithm>
 
 namespace fs = std::filesystem;
 
@@ -44,6 +45,13 @@ void Shader::UpdateCachedWriteTimes()
 	if (m_isGeometryShader) {
 		TryGetWriteTime(m_geometryPath, m_geometryWriteTime);
 	}
+	m_dependencyWriteTimes.clear();
+	for (const std::string& dependency : m_sourceDependencies) {
+		fs::file_time_type writeTime;
+		if (TryGetWriteTime(dependency, writeTime)) {
+			m_dependencyWriteTimes.emplace(dependency, writeTime);
+		}
+	}
 }
 
 bool Shader::HasSourceChanges() const
@@ -58,20 +66,88 @@ bool Shader::HasSourceChanges() const
 	if (m_isGeometryShader && TryGetWriteTime(m_geometryPath, currentTime) && currentTime != m_geometryWriteTime) {
 		return true;
 	}
+	for (const auto& [dependency, cachedWriteTime] : m_dependencyWriteTimes) {
+		if (!TryGetWriteTime(dependency, currentTime) || currentTime != cachedWriteTime) {
+			return true;
+		}
+	}
 	return false;
 }
 
 bool Shader::ReadTextFile(const std::string& path, std::string& outText, std::string& errorMessage) const
 {
+	std::vector<std::string> includeStack;
+	return ReadTextFileWithIncludes(path, outText, errorMessage, includeStack);
+}
+
+bool Shader::ReadTextFileWithIncludes(
+	const std::string& path,
+	std::string& outText,
+	std::string& errorMessage,
+	std::vector<std::string>& includeStack) const
+{
+	const std::string normalizedPath = fs::path(path).lexically_normal().generic_string();
+	if (std::find(includeStack.begin(), includeStack.end(), normalizedPath) != includeStack.end()) {
+		errorMessage = "Cyclic shader include detected: " + normalizedPath;
+		return false;
+	}
+
 	std::ifstream shaderFile(path);
 	if (!shaderFile.is_open()) {
 		errorMessage = "Failed to open shader file: " + path;
 		return false;
 	}
 
-	std::stringstream stream;
-	stream << shaderFile.rdbuf();
-	outText = stream.str();
+	if (!includeStack.empty() &&
+		std::find(m_sourceDependencies.begin(), m_sourceDependencies.end(), normalizedPath) ==
+			m_sourceDependencies.end()) {
+		m_sourceDependencies.push_back(normalizedPath);
+	}
+	includeStack.push_back(normalizedPath);
+
+	std::stringstream expanded;
+	std::string line;
+	while (std::getline(shaderFile, line)) {
+		const size_t first = line.find_first_not_of(" \t");
+		const bool isInclude =
+			first != std::string::npos &&
+			line.compare(first, 8, "#include") == 0;
+		if (!isInclude) {
+			expanded << line << '\n';
+			continue;
+		}
+
+		const size_t openingQuote = line.find('"', first + 8);
+		const size_t closingQuote =
+			openingQuote == std::string::npos
+				? std::string::npos
+				: line.find('"', openingQuote + 1);
+		if (openingQuote == std::string::npos || closingQuote == std::string::npos) {
+			errorMessage = "Malformed shader include in " + normalizedPath + ": " + line;
+			includeStack.pop_back();
+			return false;
+		}
+
+		const fs::path includePath =
+			fs::path(normalizedPath).parent_path() /
+			line.substr(openingQuote + 1, closingQuote - openingQuote - 1);
+		std::string includedText;
+		if (!ReadTextFileWithIncludes(
+				includePath.lexically_normal().generic_string(),
+				includedText,
+				errorMessage,
+				includeStack)) {
+			includeStack.pop_back();
+			return false;
+		}
+		expanded << includedText;
+		if (!includedText.empty() && includedText.back() != '\n') {
+			expanded << '\n';
+		}
+	}
+
+	includeStack.pop_back();
+	outText = expanded.str();
 	return true;
 }
 
@@ -101,6 +177,7 @@ bool Shader::BuildProgram(unsigned int& outProgram, std::string& errorMessage) c
 	std::string vertexCode;
 	std::string fragmentCode;
 	std::string geometryCode;
+	m_sourceDependencies.clear();
 
 	if (!ReadTextFile(m_vertexPath, vertexCode, errorMessage)) {
 		return false;
@@ -180,6 +257,7 @@ bool Shader::Reload(bool force, std::string* errorMessage)
 		glDeleteProgram(ID);
 	}
 	ID = newProgram;
+	++m_revision;
 	m_uniformLocationCache.clear();
 	UpdateCachedWriteTimes();
 	if (errorMessage) {

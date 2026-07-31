@@ -88,7 +88,9 @@ public:
 	Mesh& operator=(Mesh&& other) noexcept = default;
 	~Mesh() = default;
 
-	void Draw(Shader* shader = nullptr);
+	void Draw(Shader* shader = nullptr, bool forcePbrMaterial = false);
+	// Submit only geometry; the caller owns shader, material, and render state.
+	void DrawGeometry();
 
 	unsigned int GetVAO() const;
 	std::size_t GetVertexCount() const;
@@ -99,6 +101,11 @@ public:
 	const glm::vec3& GetBoundsMax() const;
 	const glm::vec3& GetBoundsCenter() const;
 	float GetBoundingRadius() const;
+	std::uint64_t SyncShadowStateRevision(
+		std::uint64_t syncEpoch) const;
+	std::size_t GetShadowStateSignature() const {
+		return m_shadowStateSignature;
+	}
 
 	bool GetActiveStatus() const {
 		return m_active;
@@ -111,6 +118,9 @@ public:
 private:
 	bool m_active = true;
 	std::shared_ptr<MeshGeometry> m_geometry;
+	mutable bool m_shadowStateInitialized = false;
+	mutable std::size_t m_shadowStateSignature = 0;
+	mutable std::uint64_t m_shadowStateRevision = 0;
 };
 
 class Model : public BaseObject {
@@ -208,7 +218,12 @@ public:
 	}
 
 	void Draw(Shader* shader = nullptr, unsigned int start_tex_index = 0);
+	// Geometry-only model path for proxy/stencil passes with caller-owned state.
+	void DrawGeometry();
 	static void DestroyMeshCache();
+	static void SetImportedMaterialSharingEnabled(bool enabled) {
+		s_importedMaterialSharingEnabled = enabled;
+	}
 
 	std::unordered_map<int,bool> otherShaderUse;
 	std::unordered_map<int,std::shared_ptr<Shader>> otherShaderPtr;
@@ -253,6 +268,8 @@ public:
 	}
 
 	void RefreshMaterialDrivenState();
+	std::uint64_t SyncShadowStateRevision(
+		std::uint64_t syncEpoch);
 	const std::vector<MeshEntry>& GetOpaqueMeshEntries() const { return m_opaqueMeshes; }
 	const std::vector<MeshEntry>& GetTransparentMeshEntries() const { return m_transparentMeshes; }
 
@@ -278,6 +295,7 @@ public:
 private:
 	std::shared_ptr<Shader> m_shader;
 	std::vector<Texture> textures_loaded;
+	std::unordered_map<unsigned int, std::shared_ptr<Material>> m_importedMaterials;
 	std::string directory;
 	glm::vec3 localCenter;
 	float localBoundingRadius = 0.0f;
@@ -286,7 +304,11 @@ private:
 	std::string m_dataSourceFilePath;
 	std::string m_dataSourceGeneratorId;
 	size_t m_lastAppliedMaterialRevision = static_cast<size_t>(-1);
+	bool m_shadowStateInitialized = false;
+	std::size_t m_shadowStateSignature = 0;
+	std::uint64_t m_shadowStateRevision = 0;
 	inline static unsigned int count = 0;
+	inline static bool s_importedMaterialSharingEnabled = true;
 protected:
 	std::vector<Mesh> meshes;
 	std::vector<MeshEntry> m_opaqueMeshes;
@@ -295,7 +317,11 @@ protected:
 	Mesh processMesh(aiMesh* mesh, const aiScene* scene, Material* mat = nullptr);
 	void processNode(aiNode* node, const aiScene* scene, Material* mat = nullptr);
 	void BuildMeshLists();
-	std::vector<Texture> loadMaterialTextures(aiMaterial* mat, aiTextureType type, std::string typeName);
+	std::vector<Texture> loadMaterialTextures(
+		aiMaterial* mat,
+		aiTextureType type,
+		std::string typeName,
+		bool requireTangentSpaceNormalEvidence = false);
 	void prosessMaterial(aiMaterial* mat,Material* material);
 	glm::vec3 CalculateLocalCenter();
 

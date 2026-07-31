@@ -4,6 +4,16 @@
 #include <sstream>
 
 namespace {
+    std::uint64_t NextFramebufferResourceGeneration()
+    {
+        static std::uint64_t generation = 0;
+        ++generation;
+        if (generation == 0) {
+            ++generation;
+        }
+        return generation;
+    }
+
     std::uint64_t BytesPerPixel(const TextureAttributes& attr)
     {
         switch (attr.internalFormat) {
@@ -36,9 +46,13 @@ namespace {
     {
         const auto& properties = SystemProperties::GetInstance();
         const std::uint64_t width = static_cast<std::uint64_t>(
-            attr.isShadowMap ? properties.SHADOW_WIDTH : properties.SCREEN_WIDTH);
+            attr.width > 0
+                ? attr.width
+                : (attr.isShadowMap ? properties.SHADOW_WIDTH : properties.SCREEN_WIDTH));
         const std::uint64_t height = static_cast<std::uint64_t>(
-            attr.isShadowMap ? properties.SHADOW_HEIGHT : properties.SCREEN_HEIGHT);
+            attr.height > 0
+                ? attr.height
+                : (attr.isShadowMap ? properties.SHADOW_HEIGHT : properties.SCREEN_HEIGHT));
         std::uint64_t bytes = 0;
 
         for (const auto& textureAttr : attr.textureAttrs) {
@@ -72,6 +86,13 @@ void FBO::Delete() {
         glDeleteFramebuffers(1, &framebufferID);
         framebufferID = 0;
     }
+    GLState::ForgetFramebuffers(
+        static_cast<GLsizei>(m_cubeFaceFramebufferIDs.size()),
+        m_cubeFaceFramebufferIDs.data());
+    glDeleteFramebuffers(
+        static_cast<GLsizei>(m_cubeFaceFramebufferIDs.size()),
+        m_cubeFaceFramebufferIDs.data());
+    m_cubeFaceFramebufferIDs.fill(0);
     if (!textureIDs.empty()) {
         GLState::ForgetTextures(static_cast<GLsizei>(textureIDs.size()), textureIDs.data());
         glDeleteTextures(static_cast<GLsizei>(textureIDs.size()), textureIDs.data());
@@ -89,10 +110,58 @@ void FBO::Delete() {
     init = false;
 }
 
+unsigned int FBO::GetCubeFaceFramebuffer(int face) {
+    if (face < 0 ||
+        face >= static_cast<int>(m_cubeFaceFramebufferIDs.size()) ||
+        !IsComplete() ||
+        attr.shadowType != FBOAttributes::ShadowBox ||
+        textureIDs.empty() ||
+        textureIDs.front() == 0 ||
+        framebufferID == 0) {
+        return 0;
+    }
+
+    unsigned int& faceFramebuffer =
+        m_cubeFaceFramebufferIDs[static_cast<std::size_t>(face)];
+    if (faceFramebuffer != 0) {
+        return faceFramebuffer;
+    }
+
+    glGenFramebuffers(1, &faceFramebuffer);
+    if (faceFramebuffer == 0) {
+        return 0;
+    }
+    GLState::BindFramebuffer(GL_FRAMEBUFFER, faceFramebuffer);
+    glFramebufferTexture2D(
+        GL_FRAMEBUFFER,
+        GL_DEPTH_ATTACHMENT,
+        GL_TEXTURE_CUBE_MAP_POSITIVE_X + face,
+        textureIDs.front(),
+        0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    const bool complete =
+        glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+    GLState::BindFramebuffer(GL_FRAMEBUFFER, framebufferID);
+    if (!complete) {
+        GLState::ForgetFramebuffer(faceFramebuffer);
+        glDeleteFramebuffers(1, &faceFramebuffer);
+        faceFramebuffer = 0;
+        return 0;
+    }
+    return faceFramebuffer;
+}
+
 void FBO::Init(FBOAttributes attr) {
+    init = false;
+    m_resourceGeneration = NextFramebufferResourceGeneration();
     this->attr = attr;
-    width = attr.isShadowMap ? properties.SHADOW_WIDTH : properties.SCREEN_WIDTH;
-    height = attr.isShadowMap ? properties.SHADOW_HEIGHT : properties.SCREEN_HEIGHT;
+    width = attr.width > 0
+        ? attr.width
+        : (attr.isShadowMap ? properties.SHADOW_WIDTH : properties.SCREEN_WIDTH);
+    height = attr.height > 0
+        ? attr.height
+        : (attr.isShadowMap ? properties.SHADOW_HEIGHT : properties.SCREEN_HEIGHT);
     float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
     depthTextureID = 0;
 
@@ -116,13 +185,13 @@ void FBO::Init(FBOAttributes attr) {
         // ??????????? (MSAA)
         if (tAttr.target == GL_TEXTURE_2D_MULTISAMPLE) {
             glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, tAttr.internalFormat,
-                properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT, GL_TRUE);
+                width, height, GL_TRUE);
         }
         // ????????????? (ShadowBox)
         else if (tAttr.target == GL_TEXTURE_CUBE_MAP) {
             for (int j = 0; j < 6; ++j) {
                 glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + j, 0, tAttr.internalFormat,
-                    properties.SHADOW_WIDTH, properties.SHADOW_HEIGHT, 0, tAttr.format, tAttr.type, NULL);
+                    width, height, 0, tAttr.format, tAttr.type, NULL);
             }
             // ???????????????????ò????????????????????? mipmap ????????????? complete
             glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -133,10 +202,7 @@ void FBO::Init(FBOAttributes attr) {
         }
         // ??????? 2D ??? (HDR, Defer, ShadowMap ??)
         else {
-            int w = attr.isShadowMap ? properties.SHADOW_WIDTH : properties.SCREEN_WIDTH;
-            int h = attr.isShadowMap ? properties.SHADOW_HEIGHT : properties.SCREEN_HEIGHT;
-
-            glTexImage2D(GL_TEXTURE_2D, 0, tAttr.internalFormat, w, h, 0, tAttr.format, tAttr.type, NULL);
+            glTexImage2D(GL_TEXTURE_2D, 0, tAttr.internalFormat, width, height, 0, tAttr.format, tAttr.type, NULL);
 
             // ??????????
             GLint filter = (attr.isShadowMap) ? GL_NEAREST : GL_LINEAR;
@@ -144,6 +210,10 @@ void FBO::Init(FBOAttributes attr) {
             glTexParameteri(tAttr.target, GL_TEXTURE_MAG_FILTER, filter);
 
             if (attr.isShadowMap) {
+                glTexParameteri(
+                    GL_TEXTURE_2D,
+                    GL_TEXTURE_COMPARE_MODE,
+                    GL_NONE);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
                 glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
@@ -178,7 +248,7 @@ void FBO::Init(FBOAttributes attr) {
         glTexImage2D(
             GL_TEXTURE_2D, 0,
             GL_DEPTH_COMPONENT32F,
-            properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT,
+            width, height,
             0,
             GL_DEPTH_COMPONENT, GL_FLOAT,
             NULL
@@ -208,26 +278,28 @@ void FBO::Init(FBOAttributes attr) {
             glRenderbufferStorageMultisample(
                 GL_RENDERBUFFER, 4,
                 GL_DEPTH24_STENCIL8,
-                properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT
+                width, height
             );
         }
         else {
             glRenderbufferStorage(
                 GL_RENDERBUFFER,
                 GL_DEPTH24_STENCIL8,
-                properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT
+                width, height
             );
         }
         glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rboID);
     }
 
     // ?????
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+    const bool framebufferComplete =
+        glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+    if (!framebufferComplete) {
         std::cerr << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
     }
 
     GLState::BindFramebuffer(GL_FRAMEBUFFER, 0);
-    this->init = true;
+    this->init = framebufferComplete;
     m_trackedBytes = EstimateRenderTargetBytes(attr);
     PerformanceProfiler::GetInstance().RecordMemoryAllocation(
         MemoryResourceType::RenderTarget,
@@ -249,6 +321,37 @@ FBO* FramebuffersManager::GetFBO(FBOAttributes attr) {
 	m_hashMapFBO[attr].push_back(fboPtr);
 	std::cout << "Add FBO??total::" << m_hashMapFBO[attr].size() << std::endl;
 	return fboPtr;
+}
+
+unsigned int FramebuffersManager::GetShadowCompareSampler(
+    bool linearFiltering) {
+    unsigned int& sampler = linearFiltering
+        ? m_shadowCompareLinearSampler
+        : m_shadowCompareNearestSampler;
+    if (sampler != 0) {
+        return sampler;
+    }
+
+    glGenSamplers(1, &sampler);
+    if (sampler == 0) {
+        return 0;
+    }
+    const GLint filter = linearFiltering ? GL_LINEAR : GL_NEAREST;
+    glSamplerParameteri(sampler, GL_TEXTURE_MIN_FILTER, filter);
+    glSamplerParameteri(sampler, GL_TEXTURE_MAG_FILTER, filter);
+    glSamplerParameteri(
+        sampler,
+        GL_TEXTURE_COMPARE_MODE,
+        GL_COMPARE_REF_TO_TEXTURE);
+    glSamplerParameteri(sampler, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+    glSamplerParameteri(sampler, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glSamplerParameteri(sampler, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    const GLfloat borderDepth[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    glSamplerParameterfv(
+        sampler,
+        GL_TEXTURE_BORDER_COLOR,
+        borderDepth);
+    return sampler;
 }
 
 void FramebuffersManager::Resize() {
@@ -299,6 +402,19 @@ void FramebuffersManager::Shutdown() {
     }
     m_hashMapFBO.clear();
     m_fboMap.clear();
+    const unsigned int samplers[] = {
+        m_shadowCompareNearestSampler,
+        m_shadowCompareLinearSampler
+    };
+    for (unsigned int sampler : samplers) {
+        if (sampler == 0) {
+            continue;
+        }
+        GLState::ForgetSampler(sampler);
+        glDeleteSamplers(1, &sampler);
+    }
+    m_shadowCompareNearestSampler = 0;
+    m_shadowCompareLinearSampler = 0;
 }
 
 std::vector<FBO*> FramebuffersManager::GetBusyFBOs() const {
