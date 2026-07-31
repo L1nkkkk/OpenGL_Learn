@@ -21,7 +21,7 @@
 
 | 档位 | 缓存粒度 | 典型行为 |
 |---|---|---|
-| A 全局重绘 | 无缓存控制路径 | 每帧更新 Directional、Point、Spot；Point 固定 6 Face |
+| A 无缓存全量重绘 | 无缓存控制路径 | 每帧更新 Directional、Point、Spot；Point 固定 6 Face |
 | B Per-Light | 当前灯光级 Revision Cache | Point 移动时只更新 Point，但仍固定 6 Face；Caster Revision 仍可能使多灯失效 |
 | C Per-Light + Per-Face | 空间 Caster 签名、Face Dirty/Valid/Required Mask | Point 只绘制 `required & stale` 的 Face，未需求 Face 延迟物化 |
 
@@ -31,7 +31,7 @@
 
 ### Crytek Sponza
 
-| 指标 | A 全局重绘 | B Per-Light | C Per-Face | A→B | B→C | A→C |
+| 指标 | A 无缓存全量重绘 | B Per-Light | C Per-Face | A→B | B→C | A→C |
 |---|---:|---:|---:|---:|---:|---:|
 | GPU 帧时间中位数 (ms) | 1.596 | 1.467 | 1.208 | -8.06% | -17.68% | -24.32% |
 | GPU 帧时间 P95 (ms) | 1.924 | 1.745 | 1.559 | -9.34% | -10.65% | -19.00% |
@@ -78,7 +78,7 @@
 
 ### San Miguel 2.1 (low-poly)
 
-| 指标 | A 全局重绘 | B Per-Light | C Per-Face | A→B | B→C | A→C |
+| 指标 | A 无缓存全量重绘 | B Per-Light | C Per-Face | A→B | B→C | A→C |
 |---|---:|---:|---:|---:|---:|---:|
 | GPU 帧时间中位数 (ms) | 7.873 | 5.649 | 5.260 | -28.25% | -6.88% | -33.19% |
 | GPU 帧时间 P95 (ms) | 8.814 | 8.045 | 7.074 | -8.72% | -12.07% | -19.74% |
@@ -143,9 +143,9 @@ Deferred→Required、Point 移动、局部 Caster、FBO Resize/Replace、Shader
 | 场景 | A/B 屏幕像素 | B/C 屏幕像素 | B 重复运行截图 | Force-All PCSS 最终截图 | PCSS 六面深度 Hash |
 |---|---|---|---|---|---|
 | Crytek Sponza | 完全一致 | 完全一致 | 完全一致 | 完全一致 | 六面完全一致 |
+| San Miguel 2.1 (low-poly) | 完全一致 | 完全一致 | 完全一致 | 完全一致 | 六面完全一致 |
 
 ![Crytek Sponza Force-All PCSS 最终截图](docs/benchmark-images/shadow-optimizations/point-shadow-cache-3way-1080p-a298e37/sponza-force-all-pcss-screenshot.png)
-| San Miguel 2.1 (low-poly) | 完全一致 | 完全一致 | 完全一致 | 完全一致 | 六面完全一致 |
 
 ![San Miguel 2.1 (low-poly) Force-All PCSS 最终截图](docs/benchmark-images/shadow-optimizations/point-shadow-cache-3way-1080p-a298e37/san-miguel-force-all-pcss-screenshot.png)
 
@@ -171,13 +171,13 @@ Deferred→Required、Point 移动、局部 Caster、FBO Resize/Replace、Shader
 - 被测源码 Commit：`a298e37e953310364376b631e85840ee2ef353ff`；`gitDirty=false`。
 - Release 可执行文件 SHA-256：`a0a07672d367fcc74a9a6ec16b6003f821fee69bc062a95fe5fc49514949dd38`。
 - 两组性能实验来源一致性：`通过`。
-- 原始三档 Manifest：[point-shadow-cache-3way-1080p-a298e37-manifest.json](benchmark-results/shadow-optimizations/point-shadow-cache-3way-1080p-a298e37-manifest.json)。
+- 已提交数据汇总：[point-shadow-cache-3way-summary-cn.json](docs/benchmark-images/shadow-optimizations/point-shadow-cache-3way-1080p-a298e37/point-shadow-cache-3way-summary-cn.json)。
 
 ## 7. UI 手动验证与一键复现
 
 - 打开 `Motion Timeline`，点击 `Prepare 3-light test`。它会临时建立一组 Directional/Point/Spot 阴影灯和一个红色局部运动 Caster；退出测试时可恢复原场景。
 - `Profile` 选择 `Cache 3-way phases` 后，轨迹依次执行“点光源+相机 / 局部遮挡物+相机 / 仅相机”。右侧实时显示 Required、Rendered、Face hits 与 Deferred。
-- 顶部 A/B/C 按钮分别切换全局重绘、Per-Light、Per-Light + Per-Face。正式测试仍以脚本的独立进程数据为准。
+- 顶部 A/B/C 按钮分别切换无缓存全量重绘、Per-Light、Per-Light + Per-Face。正式测试仍以脚本的独立进程数据为准。
 
 ```powershell
 .\tools\Test-PointShadowCache3Way.ps1 -SkipBuild -BatchId point-shadow-cache-3way-1080p-final -Width 1920 -Height 1080 -MeasuredFrames 1800 -ExternalWarmupFrames 300 -InternalWarmupFrames 300 -FormalRunsPerVariant 3 -TimelineCycleFrames 1800 -SceneIds sponza,san-miguel

@@ -310,6 +310,7 @@ def write_report(
     output_dir: Path,
     report_path: Path,
 ) -> dict[str, Any]:
+    summary_path = output_dir / "point-shadow-cache-correctness-summary-cn.json"
     matrix_path = output_dir / "correctness-screenshot-matrix.png"
     work_path = output_dir / "correctness-face-work.png"
     matrix_result = build_screenshot_matrix(rows, matrix_path)
@@ -417,7 +418,7 @@ def write_report(
             "- 截图阈值：最大通道差 `0`、变化像素 `0`。",
             f"- 源码 Commit：`{provenance['gitHead']}`；`gitDirty={str(provenance['gitDirty']).lower()}`。",
             f"- 可执行文件 SHA-256：`{provenance['executableSha256']}`。",
-            f"- 原始 Manifest：`{manifest_path}`。",
+            f"- 已提交数据汇总：[point-shadow-cache-correctness-summary-cn.json]({relative(summary_path, report_path)})。",
             "",
             "结论：关键失效路径均能让 C 在采样前完成必要更新，并最终与 B 的屏幕结果、六面深度内容和 Renderer-owned 资源占用完全一致；未观察到资源失败或保守 fallback。",
             "",
