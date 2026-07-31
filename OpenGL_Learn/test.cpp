@@ -7,6 +7,19 @@
 #pragma warning(push)
 #pragma warning(disable:4005)
 #endif
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
+#ifdef near
+#undef near
+#endif
+#ifdef far
+#undef far
+#endif
+#include "third_party/renderdoc/renderdoc_app.h"
+#endif
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include "Learn.h"
@@ -30,9 +43,11 @@
 #include "SceneStateIO.h"
 #include "EditorSceneManager.h"
 #include "BenchmarkMotionTimeline.h"
+#include "SubmissionStressScene.h"
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -41,6 +56,7 @@
 #include <iomanip>
 #include <limits>
 #include <sstream>
+#include <unordered_map>
 #include <vector>
 #ifdef _MSC_VER
 #pragma warning(pop)
@@ -70,6 +86,24 @@ struct FrameCaptureStats {
 	double meanLuminance = 0.0;
 	double nonBlackRatio = 0.0;
 	std::vector<unsigned char> pixels;
+};
+
+struct FloatCaptureStats {
+	bool valid = false;
+	int width = 0;
+	int height = 0;
+	int channels = 0;
+	std::uint64_t finiteValueCount = 0;
+	std::uint64_t nonFiniteValueCount = 0;
+	double minimum = 0.0;
+	double maximum = 0.0;
+	double mean = 0.0;
+};
+
+enum class FloatCaptureSource {
+	Red,
+	Alpha,
+	RGB,
 };
 
 struct FrameTimingStats {
@@ -126,21 +160,41 @@ struct PointShadowCubeEvidence {
 	std::array<PointShadowFaceEvidence, 6> faces;
 };
 
+struct SsaoTemporalCaptureRoi {
+	std::string name;
+	int x = 0;
+	int y = 0;
+	int width = 0;
+	int height = 0;
+};
+
 struct ClassicSceneTestOptions {
 	bool enabled = false;
 	bool untextured = false;
 	bool shadowExperiment = false;
+	bool ssaoExperiment = false;
+	bool deterministicCameraTimeline = false;
+	bool ssaoTemporalCaptureReferenceGuides = false;
+	bool captureFinalFrame = true;
 	bool gpuSynchronized = false;
 	std::string modelPath;
 	std::string sceneName;
 	std::string capturePath;
+	std::string ssaoCapturePath;
+	std::string ssaoFloatCapturePath;
+	std::string ssaoRawFloatCapturePath;
+	std::string ssaoDepthCapturePath;
+	std::string ssaoNormalCapturePath;
+	std::string ssaoTemporalCaptureDirectory;
 	std::string resultPath;
+	std::string renderDocCaptureTemplate;
 	std::string shadowMode = "off";
 	std::string shadowSampling = "stable";
 	std::string shadowLights = "directional";
 	std::string shadowWorkload = "static-hit";
 	std::string shadowVariant = "default";
 	std::string renderPath = "pbr-forward";
+	std::string ssaoMode = "legacy-full";
 	glm::vec3 cameraPosition = glm::vec3(27.0f, 18.0f, 32.0f);
 	glm::vec3 cameraTarget = glm::vec3(0.0f);
 	glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
@@ -161,10 +215,18 @@ struct ClassicSceneTestOptions {
 	int shadowResolution = 0;
 	int width = 1440;
 	int height = 900;
+	int ssaoSamples = 0;
 	int warmupFrames = 15;
 	int captureFrame = 60;
+	int renderDocCaptureFrame = 0;
 	int timelineFixedFramesPerSecond = 60;
 	int timelineCycleFrames = 600;
+	float cameraTimelinePositionRadiusRatio = 0.05f;
+	float cameraTimelineTargetRadiusRatio = 0.01f;
+	int ssaoTemporalCaptureStartFrame = 0;
+	int ssaoTemporalCaptureFrameCount = 0;
+	int ssaoTemporalCaptureStride = 1;
+	std::vector<SsaoTemporalCaptureRoi> ssaoTemporalCaptureRois;
 };
 
 bool ParseFloatArgument(const std::string& text, float& value)
@@ -249,6 +311,33 @@ bool ParseClassicSceneTestOptions(
 			}
 			return true;
 		};
+		auto readTemporalRoi = [&]() {
+			constexpr const char* optionName =
+				"--classic-scene-ssao-temporal-capture-roi";
+			if (argument != optionName) {
+				return false;
+			}
+			if (i + 5 >= argc) {
+				errorMessage =
+					std::string(optionName) +
+					" requires name, x, y, width, and height";
+				return true;
+			}
+			SsaoTemporalCaptureRoi roi;
+			roi.name = argv[++i];
+			if (!ParseIntArgument(argv[++i], roi.x) ||
+				!ParseIntArgument(argv[++i], roi.y) ||
+				!ParseIntArgument(argv[++i], roi.width) ||
+				!ParseIntArgument(argv[++i], roi.height)) {
+				errorMessage =
+					std::string(optionName) +
+					" requires integer x, y, width, and height";
+			}
+			else {
+				options.ssaoTemporalCaptureRois.push_back(roi);
+			}
+			return true;
+		};
 
 		if (readString("--classic-scene-test", options.modelPath)) {
 			options.enabled = true;
@@ -257,7 +346,35 @@ bool ParseClassicSceneTestOptions(
 		}
 		else if (readString("--classic-scene-capture", options.capturePath)) {
 		}
+		else if (readString(
+			"--classic-scene-ssao-capture",
+			options.ssaoCapturePath)) {
+		}
+		else if (readString(
+			"--classic-scene-ssao-float-capture",
+			options.ssaoFloatCapturePath)) {
+		}
+		else if (readString(
+			"--classic-scene-ssao-raw-float-capture",
+			options.ssaoRawFloatCapturePath)) {
+		}
+		else if (readString(
+			"--classic-scene-ssao-depth-capture",
+			options.ssaoDepthCapturePath)) {
+		}
+		else if (readString(
+			"--classic-scene-ssao-normal-capture",
+			options.ssaoNormalCapturePath)) {
+		}
+		else if (readString(
+			"--classic-scene-ssao-temporal-capture-directory",
+			options.ssaoTemporalCaptureDirectory)) {
+		}
 		else if (readString("--classic-scene-result", options.resultPath)) {
+		}
+		else if (readString(
+			"--classic-scene-renderdoc-capture-template",
+			options.renderDocCaptureTemplate)) {
 		}
 		else if (readString("--classic-scene-shadow-mode", options.shadowMode)) {
 			options.shadowExperiment = true;
@@ -352,10 +469,24 @@ bool ParseClassicSceneTestOptions(
 		else if (readInt("--classic-scene-height", options.height)) {
 		}
 		else if (readInt(
+			"--classic-scene-ssao-samples",
+			options.ssaoSamples)) {
+			options.ssaoExperiment = true;
+		}
+		else if (readString(
+			"--classic-scene-ssao-mode",
+			options.ssaoMode)) {
+			options.ssaoExperiment = true;
+		}
+		else if (readInt(
 			"--classic-scene-warmup-frames",
 			options.warmupFrames)) {
 		}
 		else if (readInt("--classic-scene-capture-frame", options.captureFrame)) {
+		}
+		else if (readInt(
+			"--classic-scene-renderdoc-capture-frame",
+			options.renderDocCaptureFrame)) {
 		}
 		else if (readInt(
 			"--classic-scene-timeline-fps",
@@ -365,8 +496,41 @@ bool ParseClassicSceneTestOptions(
 			"--classic-scene-timeline-cycle-frames",
 			options.timelineCycleFrames)) {
 		}
+		else if (readFloat(
+			"--classic-scene-camera-timeline-position-radius-ratio",
+			options.cameraTimelinePositionRadiusRatio)) {
+		}
+		else if (readFloat(
+			"--classic-scene-camera-timeline-target-radius-ratio",
+			options.cameraTimelineTargetRadiusRatio)) {
+		}
+		else if (readInt(
+			"--classic-scene-ssao-temporal-capture-start",
+			options.ssaoTemporalCaptureStartFrame)) {
+		}
+		else if (readInt(
+			"--classic-scene-ssao-temporal-capture-count",
+			options.ssaoTemporalCaptureFrameCount)) {
+		}
+		else if (readInt(
+			"--classic-scene-ssao-temporal-capture-stride",
+			options.ssaoTemporalCaptureStride)) {
+		}
+		else if (readTemporalRoi()) {
+		}
+		else if (argument ==
+			"--classic-scene-deterministic-camera-timeline") {
+			options.deterministicCameraTimeline = true;
+		}
+		else if (argument ==
+			"--classic-scene-ssao-temporal-capture-reference-guides") {
+			options.ssaoTemporalCaptureReferenceGuides = true;
+		}
 		else if (argument == "--classic-scene-untextured") {
 			options.untextured = true;
+		}
+		else if (argument == "--classic-scene-no-capture") {
+			options.captureFinalFrame = false;
 		}
 
 		if (!errorMessage.empty()) {
@@ -384,7 +548,7 @@ bool ParseClassicSceneTestOptions(
 	if (options.sceneName.empty()) {
 		options.sceneName = std::filesystem::path(options.modelPath).stem().string();
 	}
-	if (options.capturePath.empty()) {
+	if (options.captureFinalFrame && options.capturePath.empty()) {
 		options.capturePath =
 			"benchmark-results/classic-scenes/" + options.sceneName + ".ppm";
 	}
@@ -416,6 +580,30 @@ bool ParseClassicSceneTestOptions(
 	if (options.height < 64 || options.height > 16384) {
 		errorMessage =
 			"--classic-scene-height must be between 64 and 16384";
+		return false;
+	}
+	if (options.ssaoExperiment &&
+		options.ssaoSamples != 0 &&
+		options.ssaoSamples != 8 &&
+		options.ssaoSamples != 16 &&
+		options.ssaoSamples != 32 &&
+		options.ssaoSamples != 64) {
+		errorMessage =
+			"--classic-scene-ssao-samples must be 0, 8, 16, 32, or 64";
+		return false;
+	}
+	if (options.ssaoMode != "legacy-full" &&
+		options.ssaoMode != "half-raw" &&
+		options.ssaoMode != "half-bilateral") {
+		errorMessage =
+			"--classic-scene-ssao-mode must be legacy-full, half-raw, "
+			"or half-bilateral";
+		return false;
+	}
+	if (options.ssaoSamples == 0 &&
+		options.ssaoMode != "legacy-full") {
+		errorMessage =
+			"half-resolution SSAO modes require a positive sample count";
 		return false;
 	}
 	if (options.fov < 1.0f || options.fov > 120.0f) {
@@ -491,6 +679,87 @@ bool ParseClassicSceneTestOptions(
 			"pbr-deferred, phong-deferred, or phong-deferred-volume";
 		return false;
 	}
+	if (options.ssaoExperiment &&
+		options.renderPath.find("deferred") == std::string::npos) {
+		errorMessage =
+			"--classic-scene-ssao-samples requires a deferred render path";
+		return false;
+	}
+	if (options.ssaoExperiment && options.shadowExperiment) {
+		errorMessage =
+			"SSAO baseline options cannot be combined with shadow experiments";
+		return false;
+	}
+	const bool hasSsaoCapture =
+		!options.ssaoCapturePath.empty() ||
+		!options.ssaoFloatCapturePath.empty() ||
+		!options.ssaoRawFloatCapturePath.empty() ||
+		!options.ssaoDepthCapturePath.empty() ||
+		!options.ssaoNormalCapturePath.empty();
+	if (hasSsaoCapture &&
+		(!options.ssaoExperiment || options.ssaoSamples == 0)) {
+		errorMessage =
+			"SSAO capture options require 8, 16, 32, or 64 SSAO samples";
+		return false;
+	}
+	const bool hasSsaoTemporalCapture =
+		!options.ssaoTemporalCaptureDirectory.empty();
+	if (hasSsaoTemporalCapture &&
+		(!options.ssaoExperiment ||
+			options.ssaoSamples == 0 ||
+			!options.deterministicCameraTimeline)) {
+		errorMessage =
+			"SSAO temporal capture requires SSAO samples and "
+			"--classic-scene-deterministic-camera-timeline";
+		return false;
+	}
+	if (!hasSsaoTemporalCapture &&
+		(options.ssaoTemporalCaptureFrameCount != 0 ||
+			!options.ssaoTemporalCaptureRois.empty() ||
+			options.ssaoTemporalCaptureReferenceGuides)) {
+		errorMessage =
+			"SSAO temporal capture options require "
+			"--classic-scene-ssao-temporal-capture-directory";
+		return false;
+	}
+	if (hasSsaoTemporalCapture) {
+		if (options.ssaoTemporalCaptureStartFrame < 0 ||
+			options.ssaoTemporalCaptureFrameCount < 1 ||
+			options.ssaoTemporalCaptureFrameCount > 10000 ||
+			options.ssaoTemporalCaptureStride < 1) {
+			errorMessage =
+				"SSAO temporal capture requires start >= 0, count in "
+				"[1,10000], and stride >= 1";
+			return false;
+		}
+		if (options.ssaoTemporalCaptureRois.empty()) {
+			errorMessage =
+				"SSAO temporal capture requires at least one ROI";
+			return false;
+		}
+		for (const SsaoTemporalCaptureRoi& roi :
+			options.ssaoTemporalCaptureRois) {
+			const bool validName =
+				!roi.name.empty() &&
+				std::all_of(
+					roi.name.begin(),
+					roi.name.end(),
+					[](unsigned char character) {
+						return std::isalnum(character) ||
+							character == '-' || character == '_';
+					});
+			if (!validName ||
+				roi.x < 0 || roi.y < 0 ||
+				roi.width < 1 || roi.height < 1 ||
+				roi.x + roi.width > options.width ||
+				roi.y + roi.height > options.height) {
+				errorMessage =
+					"SSAO temporal ROI names must be filesystem-safe and "
+					"top-left coordinates must fit the full-resolution target";
+				return false;
+			}
+		}
+	}
 	if (options.warmupFrames < 1) {
 		errorMessage = "--classic-scene-warmup-frames must be at least 1";
 		return false;
@@ -498,6 +767,53 @@ bool ParseClassicSceneTestOptions(
 	if (options.captureFrame <= options.warmupFrames) {
 		errorMessage =
 			"--classic-scene-capture-frame must be greater than the warm-up frame count";
+		return false;
+	}
+	if (hasSsaoTemporalCapture) {
+		const std::int64_t lastCaptureFrame =
+			static_cast<std::int64_t>(
+				options.ssaoTemporalCaptureStartFrame) +
+			static_cast<std::int64_t>(
+				options.ssaoTemporalCaptureFrameCount - 1) *
+			options.ssaoTemporalCaptureStride;
+		const std::int64_t measuredFrameCount =
+			options.captureFrame - options.warmupFrames;
+		if (lastCaptureFrame >= measuredFrameCount) {
+			errorMessage =
+				"SSAO temporal capture frames must fit inside the measured "
+				"frame range";
+			return false;
+		}
+	}
+	if (options.renderDocCaptureFrame < 0) {
+		errorMessage =
+			"--classic-scene-renderdoc-capture-frame must not be negative";
+		return false;
+	}
+	if (options.renderDocCaptureFrame == 0 &&
+		!options.renderDocCaptureTemplate.empty()) {
+		errorMessage =
+			"--classic-scene-renderdoc-capture-template requires a positive "
+			"RenderDoc capture frame";
+		return false;
+	}
+	if (options.renderDocCaptureFrame > 0 &&
+		options.renderDocCaptureTemplate.empty()) {
+		errorMessage =
+			"--classic-scene-renderdoc-capture-frame requires "
+			"--classic-scene-renderdoc-capture-template";
+		return false;
+	}
+	if (options.renderDocCaptureFrame == 1) {
+		errorMessage =
+			"--classic-scene-renderdoc-capture-frame must be at least 2 "
+			"to avoid startup resource creation";
+		return false;
+	}
+	if (options.renderDocCaptureFrame > options.captureFrame) {
+		errorMessage =
+			"--classic-scene-renderdoc-capture-frame must not exceed "
+			"--classic-scene-capture-frame";
 		return false;
 	}
 	if (options.timelineFixedFramesPerSecond < 1 ||
@@ -510,6 +826,20 @@ bool ParseClassicSceneTestOptions(
 		options.timelineCycleFrames > 36000) {
 		errorMessage =
 			"--classic-scene-timeline-cycle-frames must be between 4 and 36000";
+		return false;
+	}
+	if (options.cameraTimelinePositionRadiusRatio < 0.0f ||
+		options.cameraTimelinePositionRadiusRatio > 0.25f) {
+		errorMessage =
+			"--classic-scene-camera-timeline-position-radius-ratio "
+			"must be between 0 and 0.25";
+		return false;
+	}
+	if (options.cameraTimelineTargetRadiusRatio < 0.0f ||
+		options.cameraTimelineTargetRadiusRatio > 0.25f) {
+		errorMessage =
+			"--classic-scene-camera-timeline-target-radius-ratio "
+			"must be between 0 and 0.25";
 		return false;
 	}
 	if (options.shadowWorkload != "static-hit" &&
@@ -1134,8 +1464,33 @@ void WriteJsonPointShadowCubeEvidence(
 		<< "    }";
 }
 
+void WriteJsonFloatCapture(
+	std::ostream& output,
+	const std::string& path,
+	const FloatCaptureStats& capture)
+{
+	output << "{\n"
+		<< "        \"path\": \"" << EscapeJsonString(path) << "\",\n"
+		<< "        \"requested\": "
+		<< (!path.empty() ? "true" : "false") << ",\n"
+		<< "        \"valid\": "
+		<< (capture.valid ? "true" : "false") << ",\n"
+		<< "        \"width\": " << capture.width << ",\n"
+		<< "        \"height\": " << capture.height << ",\n"
+		<< "        \"channels\": " << capture.channels << ",\n"
+		<< "        \"finiteValueCount\": "
+		<< capture.finiteValueCount << ",\n"
+		<< "        \"nonFiniteValueCount\": "
+		<< capture.nonFiniteValueCount << ",\n"
+		<< "        \"minimum\": " << capture.minimum << ",\n"
+		<< "        \"maximum\": " << capture.maximum << ",\n"
+		<< "        \"mean\": " << capture.mean << "\n"
+		<< "      }";
+}
+
 bool WriteClassicSceneResult(
 	const ClassicSceneTestOptions& options,
+	Scene& scene,
 	bool success,
 	double loadMilliseconds,
 	const FrameTimingStats& frameTiming,
@@ -1146,6 +1501,13 @@ bool WriteClassicSceneResult(
 	float sourceRadius,
 	float appliedScale,
 	const FrameCaptureStats& capture,
+	const FrameCaptureStats& ssaoCapture,
+	const FloatCaptureStats& ssaoFloatCapture,
+	const FloatCaptureStats& ssaoRawFloatCapture,
+	const FloatCaptureStats& ssaoDepthCapture,
+	const FloatCaptureStats& ssaoNormalCapture,
+	const FBO* ssaoFBO,
+	const FBO* ssaoGenerationFBO,
 	const PointShadowCubeEvidence& pointShadowCubeEvidence,
 	const MemoryStats& memory,
 	const Scene::ShadowSystemStats& shadowStats,
@@ -1172,6 +1534,87 @@ bool WriteClassicSceneResult(
 	auto memoryBytes = [&](MemoryResourceType type) {
 		return memory.categories[static_cast<std::size_t>(type)].currentBytes;
 	};
+	std::vector<double> drawCallSamples;
+	drawCallSamples.reserve(profilerSamples.renderStats.size());
+	for (const RenderStats& sample : profilerSamples.renderStats) {
+		drawCallSamples.push_back(
+			static_cast<double>(sample.drawCalls));
+	}
+	int activePointLights = 0;
+	int activeDirectionLights = 0;
+	int activeSpotLights = 0;
+	int shadowCastingLights = 0;
+	for (auto& light : scene.lightSource.pointLights) {
+		if (!light.GetActiveStatus()) {
+			continue;
+		}
+		++activePointLights;
+		if (light.useShadowMap) {
+			++shadowCastingLights;
+		}
+	}
+	for (auto& light : scene.lightSource.directionLights) {
+		if (!light.GetActiveStatus()) {
+			continue;
+		}
+		++activeDirectionLights;
+		if (light.useShadowMap) {
+			++shadowCastingLights;
+		}
+	}
+	for (auto& light : scene.lightSource.spotLights) {
+		if (!light.GetActiveStatus()) {
+			continue;
+		}
+		++activeSpotLights;
+		if (light.useShadowMap) {
+			++shadowCastingLights;
+		}
+	}
+	const bool ssaoOutputAvailable =
+		ssaoFBO &&
+		ssaoFBO->IsComplete() &&
+		!ssaoFBO->textureIDs.empty();
+	const bool ssaoOutputFullResolution =
+		ssaoOutputAvailable &&
+		ssaoFBO->width == properties.SCREEN_WIDTH &&
+		ssaoFBO->height == properties.SCREEN_HEIGHT;
+	const bool ssaoOutputR16F =
+		ssaoOutputAvailable &&
+		!ssaoFBO->attr.textureAttrs.empty() &&
+		ssaoFBO->attr.textureAttrs.front().internalFormat == GL_R16F;
+	const GLint ssaoOutputInternalFormat =
+		ssaoOutputAvailable &&
+		!ssaoFBO->attr.textureAttrs.empty()
+			? ssaoFBO->attr.textureAttrs.front().internalFormat
+			: 0;
+	const bool ssaoGenerationAvailable =
+		ssaoGenerationFBO &&
+		ssaoGenerationFBO->IsComplete() &&
+		!ssaoGenerationFBO->textureIDs.empty();
+	const bool ssaoGenerationFullResolution =
+		ssaoGenerationAvailable &&
+		ssaoGenerationFBO->width == properties.SCREEN_WIDTH &&
+		ssaoGenerationFBO->height == properties.SCREEN_HEIGHT;
+	const bool ssaoGenerationR16F =
+		ssaoGenerationAvailable &&
+		!ssaoGenerationFBO->attr.textureAttrs.empty() &&
+		ssaoGenerationFBO->attr.textureAttrs.front().internalFormat == GL_R16F;
+	const GLint ssaoGenerationInternalFormat =
+		ssaoGenerationAvailable &&
+		!ssaoGenerationFBO->attr.textureAttrs.empty()
+			? ssaoGenerationFBO->attr.textureAttrs.front().internalFormat
+			: 0;
+	const bool ssaoBilateral =
+		options.ssaoMode == "half-bilateral";
+	const FloatCaptureStats& generationFloatCapture =
+		!options.ssaoRawFloatCapturePath.empty()
+			? ssaoRawFloatCapture
+			: ssaoFloatCapture;
+	const std::string& generationFloatCapturePath =
+		!options.ssaoRawFloatCapturePath.empty()
+			? options.ssaoRawFloatCapturePath
+			: options.ssaoFloatCapturePath;
 	double shadowUpdateGpuMilliseconds = 0.0;
 	for (const ProfilerZoneStats& zone :
 		PerformanceProfiler::GetInstance().GetGpuZoneStats()) {
@@ -1184,6 +1627,16 @@ bool WriteClassicSceneResult(
 	const char* glVendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
 	const char* glRenderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
 	const char* glVersion = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+#ifdef NDEBUG
+	const char* buildConfiguration = "Release";
+#else
+	const char* buildConfiguration = "Debug";
+#endif
+#ifdef _WIN64
+	const char* architecture = "x64";
+#else
+	const char* architecture = "Win32";
+#endif
 	const std::uint64_t measuredCacheCheckCount = CounterDelta(
 		measurementStartShadowStats.cacheCheckCount,
 		shadowStats.cacheCheckCount);
@@ -1319,7 +1772,7 @@ bool WriteClassicSceneResult(
 		measurementStartShadowStats.totalDirectionalFitCpuMilliseconds,
 		shadowStats.totalDirectionalFitCpuMilliseconds);
 	output << "{\n"
-		<< "  \"schemaVersion\": 19,\n"
+		<< "  \"schemaVersion\": 21,\n"
 		<< "  \"success\": " << (success ? "true" : "false") << ",\n"
 		<< "  \"scene\": \"" << EscapeJsonString(options.sceneName) << "\",\n"
 		<< "  \"modelPath\": \"" << EscapeJsonString(options.modelPath) << "\",\n"
@@ -1328,12 +1781,17 @@ bool WriteClassicSceneResult(
 		<< "  \"renderPath\": \""
 		<< EscapeJsonString(options.renderPath) << "\",\n"
 		<< "  \"capturePath\": \"" << EscapeJsonString(options.capturePath) << "\",\n"
+		<< "  \"captureRequired\": "
+		<< (options.captureFinalFrame ? "true" : "false") << ",\n"
 		<< "  \"glVendor\": \""
 		<< EscapeJsonString(glVendor ? glVendor : "") << "\",\n"
 		<< "  \"glRenderer\": \""
 		<< EscapeJsonString(glRenderer ? glRenderer : "") << "\",\n"
 		<< "  \"glVersion\": \""
 		<< EscapeJsonString(glVersion ? glVersion : "") << "\",\n"
+		<< "  \"buildConfiguration\": \""
+		<< buildConfiguration << "\",\n"
+		<< "  \"architecture\": \"" << architecture << "\",\n"
 		<< "  \"resolution\": ["
 		<< properties.SCREEN_WIDTH << ", " << properties.SCREEN_HEIGHT << "],\n"
 		<< "  \"camera\": {\n"
@@ -1354,6 +1812,152 @@ bool WriteClassicSceneResult(
 		<< "  \"frameMeasurement\": \""
 		<< (options.gpuSynchronized ? "gpu-synchronized-wall" : "cpu-submission-wall")
 		<< "\",\n"
+		<< "  \"settings\": {\n"
+		<< "    \"requestedSwapInterval\": 0,\n"
+		<< "    \"inputFrozen\": true,\n"
+		<< "    \"deferredRendering\": "
+		<< (properties.DEFER_RENDERING ? "true" : "false") << ",\n"
+		<< "    \"bloom\": "
+		<< (properties.BLOOM ? "true" : "false") << ",\n"
+		<< "    \"gammaCorrection\": "
+		<< (properties.GAMMA_CORRECTION ? "true" : "false") << ",\n"
+		<< "    \"autoReloadShaders\": "
+		<< (properties.AUTO_RELOAD_SHADERS ? "true" : "false") << ",\n"
+		<< "    \"autoReloadMaterials\": "
+		<< (properties.AUTO_RELOAD_MATERIALS ? "true" : "false") << ",\n"
+		<< "    \"activePointLights\": " << activePointLights << ",\n"
+		<< "    \"activeDirectionLights\": "
+		<< activeDirectionLights << ",\n"
+		<< "    \"activeSpotLights\": " << activeSpotLights << ",\n"
+		<< "    \"shadowCastingLights\": "
+		<< shadowCastingLights << "\n"
+		<< "  },\n"
+		<< "  \"ssao\": {\n"
+		<< "    \"experiment\": "
+		<< (options.ssaoExperiment ? "true" : "false") << ",\n"
+		<< "    \"enabled\": "
+		<< (properties.SSAO ? "true" : "false") << ",\n"
+		<< "    \"mode\": \""
+		<< EscapeJsonString(options.ssaoMode) << "\",\n"
+		<< "    \"requestedSamples\": "
+		<< options.ssaoSamples << ",\n"
+		<< "    \"kernelSize\": "
+		<< properties.SSAO_KERNEL_SIZE << ",\n"
+		<< "    \"radius\": " << properties.SSAO_RADIUS << ",\n"
+		<< "    \"bias\": " << properties.SSAO_BIAS << ",\n"
+		<< "    \"kernelGeneration\": {\n"
+		<< "      \"seed\": 1337,\n"
+		<< "      \"capacity\": 64,\n"
+		<< "      \"radialScaleDenominator\": 64,\n"
+		<< "      \"selection\": \"prefix\",\n"
+		<< "      \"sampleCountAndRadialDistributionCoupled\": "
+		<< (options.ssaoSamples > 0 && options.ssaoSamples < 64
+			? "true"
+			: "false") << "\n"
+		<< "    },\n"
+		<< "    \"outputAvailable\": "
+		<< (ssaoOutputAvailable ? "true" : "false") << ",\n"
+		<< "    \"outputWidth\": "
+		<< (ssaoOutputAvailable ? ssaoFBO->width : 0) << ",\n"
+		<< "    \"outputHeight\": "
+		<< (ssaoOutputAvailable ? ssaoFBO->height : 0) << ",\n"
+		<< "    \"outputInternalFormat\": "
+		<< ssaoOutputInternalFormat << ",\n"
+		<< "    \"outputInternalFormatName\": \""
+		<< (ssaoOutputR16F ? "GL_R16F" : "none-or-unexpected") << "\",\n"
+		<< "    \"fullResolution\": "
+		<< (ssaoOutputFullResolution ? "true" : "false") << ",\n"
+		<< "    \"capturePath\": \""
+		<< EscapeJsonString(options.ssaoCapturePath) << "\",\n"
+		<< "    \"captureValid\": "
+		<< (ssaoCapture.valid ? "true" : "false") << ",\n"
+		<< "    \"generate\": {\n"
+		<< "      \"available\": "
+		<< (ssaoGenerationAvailable ? "true" : "false") << ",\n"
+		<< "      \"width\": "
+		<< (ssaoGenerationAvailable ? ssaoGenerationFBO->width : 0)
+		<< ",\n"
+		<< "      \"height\": "
+		<< (ssaoGenerationAvailable ? ssaoGenerationFBO->height : 0)
+		<< ",\n"
+		<< "      \"internalFormat\": "
+		<< ssaoGenerationInternalFormat << ",\n"
+		<< "      \"internalFormatName\": \""
+		<< (ssaoGenerationR16F ? "GL_R16F" : "none-or-unexpected")
+		<< "\",\n"
+		<< "      \"fullResolution\": "
+		<< (ssaoGenerationFullResolution ? "true" : "false") << ",\n"
+		<< "      \"resolutionPolicy\": \""
+		<< (ssaoGenerationFullResolution ? "full" : "ceil-half")
+		<< "\",\n"
+		<< "      \"floatCapture\": ";
+	WriteJsonFloatCapture(
+		output,
+		generationFloatCapturePath,
+		generationFloatCapture);
+	output << "\n"
+		<< "    },\n"
+		<< "    \"output\": {\n"
+		<< "      \"available\": "
+		<< (ssaoOutputAvailable ? "true" : "false") << ",\n"
+		<< "      \"width\": "
+		<< (ssaoOutputAvailable ? ssaoFBO->width : 0) << ",\n"
+		<< "      \"height\": "
+		<< (ssaoOutputAvailable ? ssaoFBO->height : 0) << ",\n"
+		<< "      \"internalFormat\": "
+		<< ssaoOutputInternalFormat << ",\n"
+		<< "      \"internalFormatName\": \""
+		<< (ssaoOutputR16F ? "GL_R16F" : "none-or-unexpected")
+		<< "\",\n"
+		<< "      \"fullResolution\": "
+		<< (ssaoOutputFullResolution ? "true" : "false") << ",\n"
+		<< "      \"sampling\": \""
+		<< (ssaoBilateral
+			? "full-resolution-depth-normal-aware-bilateral"
+			: (options.ssaoMode == "half-raw"
+				? "direct-gl-linear"
+				: "full-resolution-direct")) << "\",\n"
+		<< "      \"ldrCapturePath\": \""
+		<< EscapeJsonString(options.ssaoCapturePath) << "\",\n"
+		<< "      \"ldrCaptureValid\": "
+		<< (ssaoCapture.valid ? "true" : "false") << ",\n"
+		<< "      \"floatCapture\": ";
+	WriteJsonFloatCapture(
+		output,
+		options.ssaoFloatCapturePath,
+		ssaoFloatCapture);
+	output << "\n"
+		<< "    },\n"
+		<< "    \"upsample\": {\n"
+		<< "      \"enabled\": "
+		<< (ssaoBilateral ? "true" : "false") << ",\n"
+		<< "      \"algorithm\": \""
+		<< (ssaoBilateral
+			? "depth-normal-aware-bilateral-2x2"
+			: "none") << "\",\n"
+		<< "      \"depthSigma\": "
+		<< properties.SSAO_BILATERAL_DEPTH_SIGMA << ",\n"
+		<< "      \"normalPower\": "
+		<< properties.SSAO_BILATERAL_NORMAL_POWER << ",\n"
+		<< "      \"neighborhood\": \"2x2-bilinear-footprint\",\n"
+		<< "      \"inputs\": [\"halfAO\", \"fullPositionDepth\", "
+		<< "\"fullNormal\"]\n"
+		<< "    },\n"
+		<< "    \"guidance\": {\n"
+		<< "      \"depthCapture\": ";
+	WriteJsonFloatCapture(
+		output,
+		options.ssaoDepthCapturePath,
+		ssaoDepthCapture);
+	output << ",\n"
+		<< "      \"normalCapture\": ";
+	WriteJsonFloatCapture(
+		output,
+		options.ssaoNormalCapturePath,
+		ssaoNormalCapture);
+	output << "\n"
+		<< "    }\n"
+		<< "  },\n"
 		<< "  \"warmupFrames\": " << options.warmupFrames << ",\n"
 		<< "  \"measuredFrames\": "
 		<< (options.captureFrame - options.warmupFrames) << ",\n"
@@ -1875,6 +2479,8 @@ bool WriteClassicSceneResult(
 	WriteJsonDistribution(output, profilerSamples.cpuFrameMs);
 	output << ",\n      \"gpuFrame\": ";
 	WriteJsonDistribution(output, profilerSamples.gpuFrameMs);
+	output << ",\n      \"drawCalls\": ";
+	WriteJsonDistribution(output, drawCallSamples);
 	output << ",\n      \"cpuZones\": ";
 	WriteJsonZoneDistributions(output, profilerSamples.cpuZoneMs);
 	output << ",\n      \"gpuZones\": ";
@@ -1887,6 +2493,8 @@ bool WriteClassicSceneResult(
 	WriteJsonDoubleArray(output, profilerSamples.cpuFrameMs);
 	output << ",\n      \"gpuFrame\": ";
 	WriteJsonDoubleArray(output, profilerSamples.gpuFrameMs);
+	output << ",\n      \"drawCalls\": ";
+	WriteJsonDoubleArray(output, drawCallSamples);
 	output << ",\n      \"cpuZones\": ";
 	WriteJsonZoneSamples(output, profilerSamples.cpuZoneMs);
 	output << ",\n      \"gpuZones\": ";
@@ -1897,7 +2505,10 @@ bool WriteClassicSceneResult(
 	return output.good();
 }
 
-FrameCaptureStats CaptureFramebufferPpm(const FBO* fbo, const std::string& outputPath)
+FrameCaptureStats CaptureFramebufferPpm(
+	const FBO* fbo,
+	const std::string& outputPath,
+	bool replicateRedChannel = false)
 {
 	FrameCaptureStats stats;
 	if (!fbo || fbo->framebufferID == 0 || fbo->width <= 0 || fbo->height <= 0) {
@@ -1908,6 +2519,12 @@ FrameCaptureStats CaptureFramebufferPpm(const FBO* fbo, const std::string& outpu
 	const int height = fbo->height;
 	std::vector<unsigned char> pixels(
 		static_cast<size_t>(width) * static_cast<size_t>(height) * 3u);
+	std::vector<unsigned char> redPixels;
+	if (replicateRedChannel) {
+		redPixels.resize(
+			static_cast<size_t>(width) *
+			static_cast<size_t>(height));
+	}
 	GLenum pendingError = GL_NO_ERROR;
 	for (GLenum error = glGetError(); error != GL_NO_ERROR; error = glGetError()) {
 		pendingError = error;
@@ -1919,13 +2536,27 @@ FrameCaptureStats CaptureFramebufferPpm(const FBO* fbo, const std::string& outpu
 	GLState::BindFramebuffer(GL_READ_FRAMEBUFFER, fbo->framebufferID);
 	glReadBuffer(GL_COLOR_ATTACHMENT0);
 	glPixelStorei(GL_PACK_ALIGNMENT, 1);
-	glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+	glReadPixels(
+		0,
+		0,
+		width,
+		height,
+		replicateRedChannel ? GL_RED : GL_RGB,
+		GL_UNSIGNED_BYTE,
+		replicateRedChannel ? redPixels.data() : pixels.data());
 	const GLenum readError = glGetError();
 	GLState::BindFramebuffer(GL_READ_FRAMEBUFFER, 0);
 	if (readError != GL_NO_ERROR) {
 		std::cerr << "PBR capture glReadPixels failed with error 0x"
 			<< std::hex << readError << std::dec << std::endl;
 		return stats;
+	}
+	if (replicateRedChannel) {
+		for (std::size_t index = 0; index < redPixels.size(); ++index) {
+			pixels[index * 3u] = redPixels[index];
+			pixels[index * 3u + 1u] = redPixels[index];
+			pixels[index * 3u + 2u] = redPixels[index];
+		}
 	}
 
 	std::error_code directoryError;
@@ -1973,6 +2604,349 @@ FrameCaptureStats CaptureFramebufferPpm(const FBO* fbo, const std::string& outpu
 	return stats;
 }
 
+FloatCaptureStats CaptureFramebufferPfm(
+	const FBO* fbo,
+	int attachmentIndex,
+	const std::string& outputPath,
+	FloatCaptureSource source)
+{
+	FloatCaptureStats stats;
+	if (!fbo ||
+		fbo->framebufferID == 0 ||
+		!fbo->IsComplete() ||
+		fbo->width <= 0 ||
+		fbo->height <= 0 ||
+		attachmentIndex < 0 ||
+		attachmentIndex >= static_cast<int>(fbo->textureIDs.size()) ||
+		outputPath.empty()) {
+		return stats;
+	}
+
+	const int width = fbo->width;
+	const int height = fbo->height;
+	const int outputChannels =
+		source == FloatCaptureSource::RGB ? 3 : 1;
+	const int readChannels =
+		source == FloatCaptureSource::Alpha ? 4 : outputChannels;
+	const GLenum readFormat =
+		source == FloatCaptureSource::Red
+			? GL_RED
+			: (source == FloatCaptureSource::RGB ? GL_RGB : GL_RGBA);
+	const std::size_t pixelCount =
+		static_cast<std::size_t>(width) *
+		static_cast<std::size_t>(height);
+	std::vector<float> readPixels(
+		pixelCount * static_cast<std::size_t>(readChannels));
+	std::vector<float> outputPixels(
+		pixelCount * static_cast<std::size_t>(outputChannels));
+
+	for (GLenum error = glGetError();
+		error != GL_NO_ERROR;
+		error = glGetError()) {
+	}
+	GLState::BindFramebuffer(GL_READ_FRAMEBUFFER, fbo->framebufferID);
+	glReadBuffer(GL_COLOR_ATTACHMENT0 + attachmentIndex);
+	glPixelStorei(GL_PACK_ALIGNMENT, 1);
+	glReadPixels(
+		0,
+		0,
+		width,
+		height,
+		readFormat,
+		GL_FLOAT,
+		readPixels.data());
+	const GLenum readError = glGetError();
+	GLState::BindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+	if (readError != GL_NO_ERROR) {
+		std::cerr << "[ClassicScene] PFM glReadPixels failed with error 0x"
+			<< std::hex << readError << std::dec << std::endl;
+		return stats;
+	}
+
+	if (source == FloatCaptureSource::Alpha) {
+		for (std::size_t index = 0; index < pixelCount; ++index) {
+			outputPixels[index] = readPixels[index * 4u + 3u];
+		}
+	}
+	else {
+		outputPixels = std::move(readPixels);
+	}
+
+	std::error_code directoryError;
+	const std::filesystem::path path(outputPath);
+	if (path.has_parent_path()) {
+		std::filesystem::create_directories(path.parent_path(), directoryError);
+	}
+	if (directoryError) {
+		return stats;
+	}
+	std::ofstream output(path, std::ios::binary | std::ios::trunc);
+	if (!output.is_open()) {
+		return stats;
+	}
+	output << (outputChannels == 3 ? "PF\n" : "Pf\n")
+		<< width << ' ' << height << "\n-1.0\n";
+	// OpenGL and PFM both store the bottom scanline first. The negative
+	// scale records little-endian IEEE-754 data on the Windows benchmark host.
+	output.write(
+		reinterpret_cast<const char*>(outputPixels.data()),
+		static_cast<std::streamsize>(
+			outputPixels.size() * sizeof(float)));
+	if (!output.good()) {
+		return stats;
+	}
+
+	double sum = 0.0;
+	double minimum = (std::numeric_limits<double>::max)();
+	double maximum = (std::numeric_limits<double>::lowest)();
+	std::uint64_t finiteCount = 0;
+	std::uint64_t nonFiniteCount = 0;
+	for (float value : outputPixels) {
+		if (!std::isfinite(value)) {
+			++nonFiniteCount;
+			continue;
+		}
+		const double converted = static_cast<double>(value);
+		minimum = (std::min)(minimum, converted);
+		maximum = (std::max)(maximum, converted);
+		sum += converted;
+		++finiteCount;
+	}
+	stats.valid =
+		finiteCount == outputPixels.size() &&
+		nonFiniteCount == 0 &&
+		output.good();
+	stats.width = width;
+	stats.height = height;
+	stats.channels = outputChannels;
+	stats.finiteValueCount = finiteCount;
+	stats.nonFiniteValueCount = nonFiniteCount;
+	stats.minimum = finiteCount > 0 ? minimum : 0.0;
+	stats.maximum = finiteCount > 0 ? maximum : 0.0;
+	stats.mean = finiteCount > 0
+		? sum / static_cast<double>(finiteCount)
+		: 0.0;
+	return stats;
+}
+
+FrameCaptureStats CaptureFramebufferPpmRegion(
+	const FBO* fbo,
+	const std::string& outputPath,
+	int x,
+	int y,
+	int width,
+	int height)
+{
+	FrameCaptureStats stats;
+	if (!fbo ||
+		fbo->framebufferID == 0 ||
+		!fbo->IsComplete() ||
+		outputPath.empty() ||
+		x < 0 || y < 0 || width <= 0 || height <= 0 ||
+		x + width > fbo->width || y + height > fbo->height) {
+		return stats;
+	}
+
+	std::vector<unsigned char> pixels(
+		static_cast<std::size_t>(width) *
+		static_cast<std::size_t>(height) * 3u);
+	GLState::BindFramebuffer(GL_READ_FRAMEBUFFER, fbo->framebufferID);
+	glReadBuffer(GL_COLOR_ATTACHMENT0);
+	glPixelStorei(GL_PACK_ALIGNMENT, 1);
+	glReadPixels(
+		x,
+		fbo->height - y - height,
+		width,
+		height,
+		GL_RGB,
+		GL_UNSIGNED_BYTE,
+		pixels.data());
+	const GLenum readError = glGetError();
+	GLState::BindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+	if (readError != GL_NO_ERROR) {
+		std::cerr
+			<< "[ClassicScene] ROI PPM glReadPixels failed with error 0x"
+			<< std::hex << readError << std::dec << std::endl;
+		return stats;
+	}
+
+	std::error_code directoryError;
+	const std::filesystem::path path(outputPath);
+	if (path.has_parent_path()) {
+		std::filesystem::create_directories(
+			path.parent_path(),
+			directoryError);
+	}
+	if (directoryError) {
+		return stats;
+	}
+	std::ofstream output(path, std::ios::binary | std::ios::trunc);
+	if (!output.is_open()) {
+		return stats;
+	}
+	output << "P6\n" << width << ' ' << height << "\n255\n";
+	const std::size_t rowBytes = static_cast<std::size_t>(width) * 3u;
+	for (int row = height - 1; row >= 0; --row) {
+		output.write(
+			reinterpret_cast<const char*>(
+				pixels.data() + static_cast<std::size_t>(row) * rowBytes),
+			static_cast<std::streamsize>(rowBytes));
+	}
+	if (!output.good()) {
+		return stats;
+	}
+
+	double luminanceSum = 0.0;
+	std::uint64_t nonBlackPixels = 0;
+	for (std::size_t index = 0; index < pixels.size(); index += 3u) {
+		const double luminance =
+			0.2126 * pixels[index] / 255.0 +
+			0.7152 * pixels[index + 1u] / 255.0 +
+			0.0722 * pixels[index + 2u] / 255.0;
+		luminanceSum += luminance;
+		if (luminance > 0.01) {
+			++nonBlackPixels;
+		}
+	}
+	const std::uint64_t pixelCount =
+		static_cast<std::uint64_t>(width) *
+		static_cast<std::uint64_t>(height);
+	stats.meanLuminance =
+		pixelCount > 0 ? luminanceSum / pixelCount : 0.0;
+	stats.nonBlackRatio =
+		pixelCount > 0
+			? static_cast<double>(nonBlackPixels) / pixelCount
+			: 0.0;
+	// A dark ROI is still a valid lossless capture. Content suitability is
+	// evaluated later by the quality analyzer rather than by a brightness gate.
+	stats.valid = true;
+	return stats;
+}
+
+FloatCaptureStats CaptureFramebufferPfmRegion(
+	const FBO* fbo,
+	int attachmentIndex,
+	const std::string& outputPath,
+	FloatCaptureSource source,
+	int x,
+	int y,
+	int width,
+	int height)
+{
+	FloatCaptureStats stats;
+	if (!fbo ||
+		fbo->framebufferID == 0 ||
+		!fbo->IsComplete() ||
+		attachmentIndex < 0 ||
+		attachmentIndex >= static_cast<int>(fbo->textureIDs.size()) ||
+		outputPath.empty() ||
+		x < 0 || y < 0 || width <= 0 || height <= 0 ||
+		x + width > fbo->width || y + height > fbo->height) {
+		return stats;
+	}
+
+	const int outputChannels =
+		source == FloatCaptureSource::RGB ? 3 : 1;
+	const int readChannels =
+		source == FloatCaptureSource::Alpha ? 4 : outputChannels;
+	const GLenum readFormat =
+		source == FloatCaptureSource::Red
+			? GL_RED
+			: (source == FloatCaptureSource::RGB ? GL_RGB : GL_RGBA);
+	const std::size_t pixelCount =
+		static_cast<std::size_t>(width) *
+		static_cast<std::size_t>(height);
+	std::vector<float> readPixels(
+		pixelCount * static_cast<std::size_t>(readChannels));
+	std::vector<float> outputPixels(
+		pixelCount * static_cast<std::size_t>(outputChannels));
+
+	GLState::BindFramebuffer(GL_READ_FRAMEBUFFER, fbo->framebufferID);
+	glReadBuffer(GL_COLOR_ATTACHMENT0 + attachmentIndex);
+	glPixelStorei(GL_PACK_ALIGNMENT, 1);
+	glReadPixels(
+		x,
+		fbo->height - y - height,
+		width,
+		height,
+		readFormat,
+		GL_FLOAT,
+		readPixels.data());
+	const GLenum readError = glGetError();
+	GLState::BindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+	if (readError != GL_NO_ERROR) {
+		std::cerr
+			<< "[ClassicScene] ROI PFM glReadPixels failed with error 0x"
+			<< std::hex << readError << std::dec << std::endl;
+		return stats;
+	}
+
+	if (source == FloatCaptureSource::Alpha) {
+		for (std::size_t index = 0; index < pixelCount; ++index) {
+			outputPixels[index] = readPixels[index * 4u + 3u];
+		}
+	}
+	else {
+		outputPixels = std::move(readPixels);
+	}
+
+	std::error_code directoryError;
+	const std::filesystem::path path(outputPath);
+	if (path.has_parent_path()) {
+		std::filesystem::create_directories(
+			path.parent_path(),
+			directoryError);
+	}
+	if (directoryError) {
+		return stats;
+	}
+	std::ofstream output(path, std::ios::binary | std::ios::trunc);
+	if (!output.is_open()) {
+		return stats;
+	}
+	output << (outputChannels == 3 ? "PF\n" : "Pf\n")
+		<< width << ' ' << height << "\n-1.0\n";
+	output.write(
+		reinterpret_cast<const char*>(outputPixels.data()),
+		static_cast<std::streamsize>(
+			outputPixels.size() * sizeof(float)));
+	if (!output.good()) {
+		return stats;
+	}
+
+	double sum = 0.0;
+	double minimum = (std::numeric_limits<double>::max)();
+	double maximum = (std::numeric_limits<double>::lowest)();
+	std::uint64_t finiteCount = 0;
+	std::uint64_t nonFiniteCount = 0;
+	for (float value : outputPixels) {
+		if (!std::isfinite(value)) {
+			++nonFiniteCount;
+			continue;
+		}
+		const double converted = static_cast<double>(value);
+		minimum = (std::min)(minimum, converted);
+		maximum = (std::max)(maximum, converted);
+		sum += converted;
+		++finiteCount;
+	}
+	stats.valid =
+		finiteCount == outputPixels.size() &&
+		nonFiniteCount == 0;
+	stats.width = width;
+	stats.height = height;
+	stats.channels = outputChannels;
+	stats.finiteValueCount = finiteCount;
+	stats.nonFiniteValueCount = nonFiniteCount;
+	stats.minimum = finiteCount > 0 ? minimum : 0.0;
+	stats.maximum = finiteCount > 0 ? maximum : 0.0;
+	stats.mean =
+		finiteCount > 0
+			? sum / static_cast<double>(finiteCount)
+			: 0.0;
+	return stats;
+}
+
 
 void ProcessInput(GLFWwindow* window) {
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
@@ -2015,6 +2989,10 @@ void ProcessInput(GLFWwindow* window) {
 }
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
+	if (width <= 0 || height <= 0) {
+		return;
+	}
+
 	glViewport(0, 0, width, height);
 	properties.SCREEN_HEIGHT = height;
 	properties.SCREEN_WIDTH = width;
@@ -2077,6 +3055,17 @@ int main(int argc, char** argv) {
 		std::cerr << "Performance benchmark option error: " << benchmarkOptionError << std::endl;
 		return 4;
 	}
+	SubmissionStressOptions submissionStressOptions;
+	std::string submissionStressOptionError;
+	if (!ParseSubmissionStressOptions(
+		argc,
+		argv,
+		submissionStressOptions,
+		submissionStressOptionError)) {
+		std::cerr << "Submission stress option error: "
+			<< submissionStressOptionError << std::endl;
+		return 4;
+	}
 	for (int i = 1; i < argc; ++i) {
 		if (std::string(argv[i]) == "--resource-smoke-test") {
 			resourceSmokeTest = true;
@@ -2100,10 +3089,18 @@ int main(int argc, char** argv) {
 		((benchmarkPhongMaterialScene || benchmarkPbrMaterialScene) && !benchmarkOptions.enabled) ||
 		(benchmarkUnsharedImportedMaterials &&
 			(!benchmarkOptions.enabled || !benchmarkPbrMaterialScene)) ||
+		(submissionStressOptions.enabled &&
+			(resourceSmokeTest ||
+				pbrSmokeTest ||
+				benchmarkPhongMaterialScene ||
+				benchmarkPbrMaterialScene ||
+				classicSceneOptions.enabled)) ||
 		(classicSceneOptions.enabled &&
 			(resourceSmokeTest || pbrSmokeTest || benchmarkOptions.enabled ||
 				benchmarkPhongMaterialScene || benchmarkPbrMaterialScene))) {
-		std::cerr << "automated smoke modes and --performance-benchmark are mutually exclusive" << std::endl;
+		std::cerr
+			<< "automated smoke and fixed-scene modes are mutually exclusive"
+			<< std::endl;
 		return 4;
 	}
 	const bool automatedValidation =
@@ -2111,10 +3108,93 @@ int main(int argc, char** argv) {
 		resourceSmokeTest ||
 		pbrSmokeTest ||
 		classicSceneOptions.enabled;
-	if (classicSceneOptions.enabled) {
+	if (submissionStressOptions.enabled) {
+		properties.SCREEN_WIDTH = submissionStressOptions.width;
+		properties.SCREEN_HEIGHT = submissionStressOptions.height;
+	}
+	else if (classicSceneOptions.enabled) {
 		properties.SCREEN_WIDTH = classicSceneOptions.width;
 		properties.SCREEN_HEIGHT = classicSceneOptions.height;
 	}
+#ifdef _WIN32
+	RENDERDOC_API_1_6_0* renderDocApi = nullptr;
+	if (classicSceneOptions.renderDocCaptureFrame > 0) {
+		std::error_code capturePathError;
+		const std::filesystem::path captureTemplatePath =
+			std::filesystem::absolute(
+				std::filesystem::path(
+					classicSceneOptions.renderDocCaptureTemplate),
+				capturePathError);
+		if (capturePathError) {
+			std::cerr
+				<< "[RenderDocCapture] failed to resolve capture template: "
+				<< capturePathError.message()
+				<< std::endl;
+			return 8;
+		}
+		std::filesystem::create_directories(
+			captureTemplatePath.parent_path(),
+			capturePathError);
+		if (capturePathError) {
+			std::cerr
+				<< "[RenderDocCapture] failed to create capture directory: "
+				<< capturePathError.message()
+				<< std::endl;
+			return 8;
+		}
+		classicSceneOptions.renderDocCaptureTemplate =
+			captureTemplatePath.string();
+
+		const HMODULE renderDocModule =
+			GetModuleHandleW(L"renderdoc.dll");
+		const pRENDERDOC_GetAPI getRenderDocApi =
+			renderDocModule
+				? reinterpret_cast<pRENDERDOC_GetAPI>(
+					GetProcAddress(
+						renderDocModule,
+						"RENDERDOC_GetAPI"))
+				: nullptr;
+		void* apiPointer = nullptr;
+		if (!getRenderDocApi ||
+			getRenderDocApi(
+				eRENDERDOC_API_Version_1_6_0,
+				&apiPointer) != 1 ||
+			!apiPointer) {
+			std::cerr
+				<< "[RenderDocCapture] RenderDoc 1.6 API is unavailable; "
+				<< "launch this executable through renderdoccmd capture"
+				<< std::endl;
+			return 8;
+		}
+		renderDocApi =
+			static_cast<RENDERDOC_API_1_6_0*>(apiPointer);
+		renderDocApi->SetCaptureFilePathTemplate(
+			classicSceneOptions.renderDocCaptureTemplate.c_str());
+		int apiMajor = 0;
+		int apiMinor = 0;
+		int apiPatch = 0;
+		renderDocApi->GetAPIVersion(
+			&apiMajor,
+			&apiMinor,
+			&apiPatch);
+		std::cout
+			<< "[RenderDocCapture] api="
+			<< apiMajor << "." << apiMinor << "." << apiPatch
+			<< " frame="
+			<< classicSceneOptions.renderDocCaptureFrame
+			<< " template="
+			<< renderDocApi->GetCaptureFilePathTemplate()
+			<< std::endl;
+	}
+#else
+	if (classicSceneOptions.renderDocCaptureFrame > 0) {
+		std::cerr
+			<< "[RenderDocCapture] in-application capture is only supported "
+			<< "by this diagnostic entry on Windows"
+			<< std::endl;
+		return 8;
+	}
+#endif
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -2237,6 +3317,7 @@ int main(int argc, char** argv) {
 			"classic-scenes.manifest.json",
 			sceneStatePath);
 	}
+	SubmissionStressSceneState submissionStressState;
 	bool classicSceneFailed = false;
 	bool classicSceneCaptured = false;
 	double classicSceneLoadMilliseconds = 0.0;
@@ -2255,7 +3336,29 @@ int main(int argc, char** argv) {
 	std::shared_ptr<Model> classicSceneReplacementCaster;
 	const bool useBuiltInMaterialScene =
 		pbrSmokeTest || benchmarkPhongMaterialScene || benchmarkPbrMaterialScene;
-	if (classicSceneOptions.enabled) {
+	if (submissionStressOptions.enabled) {
+		std::string buildError;
+		if (!BuildSubmissionStressScene(
+			scene,
+			camera,
+			submissionStressOptions,
+			submissionStressState,
+			buildError)) {
+			std::cerr << "[SubmissionStress] " << buildError << std::endl;
+			return 6;
+		}
+		std::cout << "[SubmissionStress] "
+			<< DescribeSubmissionStressScene(
+				submissionStressOptions,
+				submissionStressState)
+			<< " resolution="
+			<< submissionStressOptions.width << 'x'
+			<< submissionStressOptions.height
+			<< " cameraDistance=" << std::fixed << std::setprecision(2)
+			<< submissionStressState.cameraDistance
+			<< std::endl;
+	}
+	else if (classicSceneOptions.enabled) {
 		const float worldScale = classicSceneOptions.worldScale;
 		classicSceneOptions.cameraPosition *= worldScale;
 		classicSceneOptions.cameraTarget *= worldScale;
@@ -2541,7 +3644,28 @@ int main(int argc, char** argv) {
 		properties.DEFER_RENDERING =
 			classicSceneOptions.renderPath.find("deferred") !=
 			std::string::npos;
-		properties.SSAO = false;
+		properties.SSAO =
+			classicSceneOptions.ssaoExperiment &&
+			classicSceneOptions.ssaoSamples > 0;
+		properties.SSAO_KERNEL_SIZE =
+			properties.SSAO
+				? classicSceneOptions.ssaoSamples
+				: 64;
+		if (classicSceneOptions.ssaoMode == "half-raw") {
+			properties.SSAO_MODE = SSAOProperty::HalfRaw;
+		}
+		else if (classicSceneOptions.ssaoMode == "half-bilateral") {
+			properties.SSAO_MODE = SSAOProperty::HalfBilateral;
+		}
+		else {
+			properties.SSAO_MODE = SSAOProperty::LegacyFull;
+		}
+		if (classicSceneOptions.ssaoExperiment) {
+			properties.SSAO_RADIUS = 0.35f;
+			properties.SSAO_BIAS = 0.025f;
+			properties.SSAO_BILATERAL_DEPTH_SIGMA = 0.02f;
+			properties.SSAO_BILATERAL_NORMAL_POWER = 32.0f;
+		}
 		properties.LIGHT_VOLUME =
 			classicSceneOptions.renderPath == "phong-deferred-volume";
 		properties.BLOOM = false;
@@ -2549,6 +3673,17 @@ int main(int argc, char** argv) {
 		properties.DEBUG_MODE = false;
 		properties.AUTO_RELOAD_SHADERS = false;
 		properties.AUTO_RELOAD_MATERIALS = false;
+		if (classicSceneOptions.ssaoExperiment) {
+			for (auto& light : scene.lightSource.pointLights) {
+				light.useShadowMap = false;
+			}
+			for (auto& light : scene.lightSource.directionLights) {
+				light.useShadowMap = false;
+			}
+			for (auto& light : scene.lightSource.spotLights) {
+				light.useShadowMap = false;
+			}
+		}
 		std::cout << "[ClassicScene] scene=" << classicSceneOptions.sceneName
 			<< " model=" << classicSceneOptions.modelPath
 			<< " loadMs=" << std::fixed << std::setprecision(2)
@@ -2558,6 +3693,12 @@ int main(int argc, char** argv) {
 			<< " triangles=" << classicSceneTriangleCount
 			<< " sourceRadius=" << classicSceneSourceRadius
 			<< " appliedScale=" << classicSceneAppliedScale
+			<< " ssaoSamples="
+			<< (properties.SSAO
+				? properties.SSAO_KERNEL_SIZE
+				: 0)
+			<< " ssaoMode="
+			<< SSAOProperty::ModeName(properties.SSAO_MODE)
 			<< std::endl;
 	}
 	else if (useBuiltInMaterialScene) {
@@ -2763,6 +3904,10 @@ int main(int argc, char** argv) {
 	int resourceSmokeFrames = 0;
 	int pbrSmokeFrames = 0;
 	int classicSceneFrames = 0;
+	int classicSceneTemporalCapturesCompleted = 0;
+	bool classicSceneTemporalCaptureSucceeded = true;
+	bool renderDocFrameCaptureActive = false;
+	bool renderDocFrameCaptureCompleted = false;
 	std::vector<unsigned char> pbrForwardPixels;
 	std::vector<double> classicSceneFrameMilliseconds;
 	std::vector<BenchmarkTimelineFrameTelemetry>
@@ -2805,6 +3950,10 @@ int main(int argc, char** argv) {
 		classicSceneOptions.timelineCycleFrames;
 	classicSceneTimelineConfig.sceneRadius =
 		classicSceneOptions.normalizedRadius;
+	classicSceneTimelineConfig.cameraPositionRadiusRatio =
+		classicSceneOptions.cameraTimelinePositionRadiusRatio;
+	classicSceneTimelineConfig.cameraTargetRadiusRatio =
+		classicSceneOptions.cameraTimelineTargetRadiusRatio;
 	BenchmarkMotionBaseState classicSceneMotionBaseState;
 	classicSceneMotionBaseState.pointPosition =
 		classicSceneBasePointPosition;
@@ -2816,9 +3965,13 @@ int main(int argc, char** argv) {
 		classicSceneOptions.cameraTarget;
 	classicSceneMotionBaseState.cameraUp =
 		classicSceneOptions.cameraUp;
+	const BenchmarkMotionProfile classicSceneMotionProfile =
+		classicSceneOptions.deterministicCameraTimeline
+			? BenchmarkMotionProfile::Camera
+			: BenchmarkMotionTimeline::ProfileFromWorkload(
+				classicSceneOptions.shadowWorkload);
 	const BenchmarkMotionTimeline classicSceneMotionTimeline(
-		BenchmarkMotionTimeline::ProfileFromWorkload(
-			classicSceneOptions.shadowWorkload),
+		classicSceneMotionProfile,
 		classicSceneTimelineConfig,
 		classicSceneMotionBaseState);
 	BenchmarkMotionSample classicSceneCurrentMotionSample =
@@ -2826,8 +3979,28 @@ int main(int argc, char** argv) {
 			-classicSceneOptions.warmupFrames);
 	bool classicSceneTopologyReplacementPerformed = false;
 	auto applyClassicShadowWorkload = [&](int frameNumber) {
-		if (!classicSceneOptions.enabled ||
-			!classicSceneOptions.shadowExperiment ||
+		if (!classicSceneOptions.enabled) {
+			return;
+		}
+		if (classicSceneOptions.deterministicCameraTimeline) {
+			const int timelineFrame =
+				frameNumber -
+				classicSceneOptions.warmupFrames -
+				1;
+			classicSceneCurrentMotionSample =
+				classicSceneMotionTimeline.Sample(timelineFrame);
+			const glm::vec3 cameraDirection =
+				classicSceneCurrentMotionSample.cameraTarget -
+				classicSceneCurrentMotionSample.cameraPosition;
+			camera.cameraPos =
+				classicSceneCurrentMotionSample.cameraPosition;
+			if (glm::length(cameraDirection) > 0.0001f) {
+				camera.cameraFront = glm::normalize(cameraDirection);
+			}
+			camera.up = classicSceneCurrentMotionSample.cameraUp;
+			return;
+		}
+		if (!classicSceneOptions.shadowExperiment ||
 			classicSceneOptions.shadowWorkload == "static-hit") {
 			return;
 		}
@@ -3234,11 +4407,20 @@ int main(int argc, char** argv) {
 		}
 
 		PerformanceBenchmarkMetadata metadata;
-		metadata.scenePath = benchmarkPbrMaterialScene
-			? (benchmarkUnsharedImportedMaterials
-				? "builtin/backpack-pbr-unshared-materials"
-				: "builtin/backpack-pbr")
-			: (benchmarkPhongMaterialScene ? "builtin/backpack-phong" : sceneStatePath);
+		if (submissionStressOptions.enabled) {
+			metadata.scenePath = DescribeSubmissionStressScene(
+				submissionStressOptions,
+				submissionStressState);
+		}
+		else {
+			metadata.scenePath = benchmarkPbrMaterialScene
+				? (benchmarkUnsharedImportedMaterials
+					? "builtin/backpack-pbr-unshared-materials"
+					: "builtin/backpack-pbr")
+				: (benchmarkPhongMaterialScene
+					? "builtin/backpack-phong"
+					: sceneStatePath);
+		}
 		metadata.glVendor = glString(GL_VENDOR);
 		metadata.glRenderer = glString(GL_RENDERER);
 		metadata.glVersion = glString(GL_VERSION);
@@ -3270,10 +4452,70 @@ int main(int argc, char** argv) {
 		metadata.autoReloadMaterials = properties.AUTO_RELOAD_MATERIALS;
 		metadata.inputFrozen = true;
 		metadata.gpuTimingSupported = PerformanceProfiler::GetInstance().IsGpuTimingSupported();
+		metadata.submissionStressScene = submissionStressOptions.enabled;
+		metadata.submissionStressObjectCount =
+			submissionStressState.objectCount;
+		metadata.submissionStressDynamicObjectCount =
+			submissionStressState.dynamicObjectCount;
+		metadata.submissionStressMaterialCount =
+			submissionStressState.materialCount;
+		metadata.submissionStressSeed = submissionStressOptions.seed;
+		metadata.opaqueSortMode =
+			Scene::GetOpaqueSortModeName(scene.GetOpaqueSortMode());
+		metadata.submissionStressRenderPath =
+			submissionStressOptions.enabled
+				? submissionStressOptions.renderPath
+				: (properties.DEFER_RENDERING ? "deferred" : "forward");
+		metadata.submissionStressGeometrySet =
+			submissionStressOptions.geometrySet;
+		metadata.submissionStressCollectionBreakdown =
+			submissionStressOptions.collectionBreakdown;
 		benchmarkSession.SetMetadata(metadata);
 	}
 
+	const bool minimalSubmissionStressUi =
+		submissionStressOptions.enabled && benchmarkOptions.enabled;
+	const bool minimalSsaoBenchmarkUi =
+		classicSceneOptions.enabled && classicSceneOptions.ssaoExperiment;
+	const bool minimalAutomatedUi =
+		minimalSubmissionStressUi || minimalSsaoBenchmarkUi;
+	const char* minimalPresentZoneName =
+		minimalSubmissionStressUi
+			? "Submission Stress Present"
+			: "SSAO Benchmark Present";
+	std::uint64_t submissionStressFrameIndex = 0;
+	bool submissionStressCaptureCompleted = false;
 	while (!glfwWindowShouldClose(window)) {
+#ifdef _WIN32
+		if (renderDocApi &&
+			!renderDocFrameCaptureActive &&
+			!renderDocFrameCaptureCompleted &&
+			classicSceneFrames + 1 ==
+				classicSceneOptions.renderDocCaptureFrame) {
+			renderDocApi->StartFrameCapture(nullptr, nullptr);
+			if (renderDocApi->IsFrameCapturing() == 0) {
+				std::cerr
+					<< "[RenderDocCapture] failed to begin frame "
+					<< classicSceneOptions.renderDocCaptureFrame
+					<< std::endl;
+				classicSceneFailed = true;
+				break;
+			}
+			renderDocFrameCaptureActive = true;
+			const std::string captureTitle =
+				classicSceneOptions.sceneName + " " +
+				classicSceneOptions.ssaoMode + " " +
+				std::to_string(classicSceneOptions.ssaoSamples) +
+				" samples";
+			renderDocApi->SetCaptureTitle(captureTitle.c_str());
+			std::cout
+				<< "[RenderDocCapture] begin frame="
+				<< classicSceneOptions.renderDocCaptureFrame
+				<< " mode=" << classicSceneOptions.ssaoMode
+				<< " samples=" << classicSceneOptions.ssaoSamples
+				<< std::endl;
+		}
+#endif
 		if (classicSceneOptions.enabled &&
 			!classicSceneProfilerCaptureStarted &&
 			classicSceneFrames == classicSceneOptions.warmupFrames) {
@@ -3303,6 +4545,15 @@ int main(int argc, char** argv) {
 		{
 			PERF_CPU_SCOPE("Async Model Loads");
 			SceneStateIO::UpdateAsyncLoads(scene, 1);
+		}
+		if (submissionStressOptions.enabled) {
+			PERF_CPU_SCOPE("Submission Stress Motion");
+			UpdateSubmissionStressScene(
+				submissionStressState,
+				submissionStressFrameIndex++);
+		}
+		if (submissionStressOptions.collectionBreakdown) {
+			scene.ProfileCollectionBreakdown();
 		}
 		if (!iblInitializationAttempted && scene.UsesPbrMaterials()) {
 			iblInitializationAttempted = true;
@@ -3395,25 +4646,27 @@ int main(int argc, char** argv) {
 			PERF_CPU_SCOPE("Editor UI Build");
 			SetGui();
 
-		// ?? DockSpace??? Unity ?????
-		mygui.MainDockSpace();
-		mygui.Overview_UI();
-		mygui.Profiler_UI();
-		mygui.MotionTimeline_UI(scene, camera);
+			if (!minimalAutomatedUi) {
+				// ?? DockSpace??? Unity ?????
+				mygui.MainDockSpace();
+				mygui.Overview_UI();
+				mygui.Profiler_UI();
+				mygui.MotionTimeline_UI(scene, camera);
 
-		// Settings / Scene / Materials / XML / Assets ??? Dock ? DockSpace ?
-		mygui.Begin();              // Settings ??
-		mygui.System_UI();
-		mygui.Shadow_UI();
-		mygui.Gamma_UI();
-		mygui.Framebuffers_UI();
-		mygui.Anti_Aliasing_UI();
-		mygui.End();
+				// Settings / Scene / Materials / XML / Assets ??? Dock ? DockSpace ?
+				mygui.Begin();              // Settings ??
+				mygui.System_UI();
+				mygui.Shadow_UI();
+				mygui.Gamma_UI();
+				mygui.Framebuffers_UI();
+				mygui.Anti_Aliasing_UI();
+				mygui.End();
 
-		mygui.Scene_UI(scene, camera, editorSceneManager); // Scene browser + lights + models
-		mygui.ModelMaterialsInspector_UI(scene);  // 选中模型的材质查看/编辑
-		mygui.MaterialsInspector_UI();  // 全局材质 Inspector
-		mygui.MaterialsEditor_UI();     // XML 编辑器
+				mygui.Scene_UI(scene, camera, editorSceneManager); // Scene browser + lights + models
+				mygui.ModelMaterialsInspector_UI(scene);  // 选中模型的材质查看/编辑
+				mygui.MaterialsInspector_UI();  // 全局材质 Inspector
+				mygui.MaterialsEditor_UI();     // XML 编辑器
+			}
 
 		}
 		//process input
@@ -3498,59 +4751,251 @@ int main(int argc, char** argv) {
 		// ??????? FBO??????????????? ImGui ?????
 		GLState::BindFramebuffer(GL_FRAMEBUFFER, 0);
 
-		// Viewport：默认(INDEX==0)显示最终渲染结果；否则显示所选 FBO 的指定 color/depth 附件
-		unsigned int viewportTextureID = 0;
-		unsigned int viewportReadFBO = 0;
-		int viewportReadAttachment = 0;
-		bool viewportReadIsDepth = false;
-		int viewportReadWidth = properties.SCREEN_WIDTH;
-		int viewportReadHeight = properties.SCREEN_HEIGHT;
-		if (properties.VIEWPORT_DEBUG_FBO_INDEX == 0) {
-			// 最终图（延迟+正向+后处理后的结果）
+		if (minimalAutomatedUi) {
+			PERF_CPU_SCOPE(minimalPresentZoneName);
+			PERF_GPU_SCOPE(minimalPresentZoneName);
 			FBO* finalFBO = postprocessRenderPass->GetOutputFBO();
 			if (finalFBO && !finalFBO->textureIDs.empty()) {
-				viewportTextureID = finalFBO->textureIDs[0];
-				viewportReadFBO = finalFBO->framebufferID;
-				viewportReadAttachment = 0;
-				viewportReadIsDepth = false;
-				viewportReadWidth = finalFBO->width;
-				viewportReadHeight = finalFBO->height;
-			}
-		} else {
-			std::vector<FBO*> busyFBOs = FramebuffersManager::GetInstance().GetBusyFBOs();
-			int fboIdx = properties.VIEWPORT_DEBUG_FBO_INDEX - 1;
-			if (fboIdx >= 0 && fboIdx < (int)busyFBOs.size()) {
-				FBO* fbo = busyFBOs[fboIdx];
-				if (!fbo->textureIDs.empty()
-					&& properties.VIEWPORT_DEBUG_ATTACHMENT_INDEX >= 0
-					&& properties.VIEWPORT_DEBUG_ATTACHMENT_INDEX < (int)fbo->textureIDs.size()) {
-					viewportTextureID = fbo->textureIDs[properties.VIEWPORT_DEBUG_ATTACHMENT_INDEX];
-					viewportReadFBO = fbo->framebufferID;
-					viewportReadAttachment = properties.VIEWPORT_DEBUG_ATTACHMENT_INDEX;
-					viewportReadIsDepth = (fbo->attr.isShadowMap && properties.VIEWPORT_DEBUG_ATTACHMENT_INDEX == 0);
-					viewportReadWidth = fbo->width;
-					viewportReadHeight = fbo->height;
+				int framebufferWidth = properties.SCREEN_WIDTH;
+				int framebufferHeight = properties.SCREEN_HEIGHT;
+				glfwGetFramebufferSize(
+					window,
+					&framebufferWidth,
+					&framebufferHeight);
+				// A native resize changes the default framebuffer before GLFW
+				// dispatches the size callback. Skip this one diagnostic
+				// present instead of blitting during that transient mismatch;
+				// the callback resizes all managed targets before the next frame.
+				if (framebufferWidth == properties.SCREEN_WIDTH &&
+					framebufferHeight == properties.SCREEN_HEIGHT) {
+					GLState::BindFramebuffer(
+						GL_READ_FRAMEBUFFER,
+						finalFBO->framebufferID);
+					GLState::BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+					glBlitFramebuffer(
+						0,
+						0,
+						finalFBO->width,
+						finalFBO->height,
+						0,
+						0,
+						framebufferWidth,
+						framebufferHeight,
+						GL_COLOR_BUFFER_BIT,
+						GL_NEAREST);
+					GLState::BindFramebuffer(GL_FRAMEBUFFER, 0);
 				}
 			}
 		}
-		{
-			PERF_CPU_SCOPE("Viewport and Assets UI");
-			{
-				PERF_CPU_SCOPE("Viewport UI");
-				mygui.SetViewportReadSource(
-					viewportReadFBO,
-					viewportReadAttachment,
-					viewportReadIsDepth,
-					viewportReadWidth,
-					viewportReadHeight
-				);
-				mygui.Viewport_UI(viewportTextureID);
+		if (classicSceneOptions.enabled &&
+			!classicSceneOptions.ssaoTemporalCaptureDirectory.empty() &&
+			classicSceneFrames >= classicSceneOptions.warmupFrames) {
+			const int measurementFrame =
+				classicSceneFrames - classicSceneOptions.warmupFrames;
+			const int relativeFrame =
+				measurementFrame -
+				classicSceneOptions.ssaoTemporalCaptureStartFrame;
+			const bool captureThisFrame =
+				relativeFrame >= 0 &&
+				relativeFrame %
+					classicSceneOptions.ssaoTemporalCaptureStride == 0 &&
+				classicSceneTemporalCapturesCompleted <
+					classicSceneOptions.ssaoTemporalCaptureFrameCount;
+			if (captureThisFrame) {
+				const FBO* ssaoFBO =
+					deferRenderPass->GetSSAOOutputFBO();
+				const FBO* gbufferFBO =
+					deferRenderPass->GetGBufferFBO();
+				const FBO* ldrFBO =
+					postprocessRenderPass->GetOutputFBO();
+				bool frameCaptureSucceeded = true;
+				std::ostringstream frameName;
+				frameName << "frame-"
+					<< std::setfill('0') << std::setw(6)
+					<< measurementFrame;
+				for (const SsaoTemporalCaptureRoi& roi :
+					classicSceneOptions.ssaoTemporalCaptureRois) {
+					const std::filesystem::path roiDirectory =
+						std::filesystem::path(
+							classicSceneOptions
+								.ssaoTemporalCaptureDirectory) /
+						roi.name;
+					const std::filesystem::path prefix =
+						roiDirectory / frameName.str();
+					const FloatCaptureStats aoCapture =
+						CaptureFramebufferPfmRegion(
+							ssaoFBO,
+							0,
+							prefix.string() + "-ao.pfm",
+							FloatCaptureSource::Red,
+							roi.x,
+							roi.y,
+							roi.width,
+							roi.height);
+					const FrameCaptureStats ldrCapture =
+						CaptureFramebufferPpmRegion(
+							ldrFBO,
+							prefix.string() + "-ldr.ppm",
+							roi.x,
+							roi.y,
+							roi.width,
+							roi.height);
+					frameCaptureSucceeded =
+						frameCaptureSucceeded &&
+						aoCapture.valid &&
+						aoCapture.width == roi.width &&
+						aoCapture.height == roi.height &&
+						aoCapture.channels == 1 &&
+						ldrCapture.valid;
+					if (classicSceneOptions
+						.ssaoTemporalCaptureReferenceGuides) {
+						const FloatCaptureStats depthCapture =
+							CaptureFramebufferPfmRegion(
+								gbufferFBO,
+								0,
+								prefix.string() + "-depth.pfm",
+								FloatCaptureSource::Alpha,
+								roi.x,
+								roi.y,
+								roi.width,
+								roi.height);
+						const FloatCaptureStats normalCapture =
+							CaptureFramebufferPfmRegion(
+								gbufferFBO,
+								1,
+								prefix.string() + "-normal.pfm",
+								FloatCaptureSource::RGB,
+								roi.x,
+								roi.y,
+								roi.width,
+								roi.height);
+						frameCaptureSucceeded =
+							frameCaptureSucceeded &&
+							depthCapture.valid &&
+							depthCapture.width == roi.width &&
+							depthCapture.height == roi.height &&
+							depthCapture.channels == 1 &&
+							normalCapture.valid &&
+							normalCapture.width == roi.width &&
+							normalCapture.height == roi.height &&
+							normalCapture.channels == 3;
+					}
+				}
+				for (GLenum error = glGetError();
+					error != GL_NO_ERROR;
+					error = glGetError()) {
+					frameCaptureSucceeded = false;
+					std::cerr
+						<< "[SSAOTemporalCapture] OpenGL error 0x"
+						<< std::hex << error << std::dec
+						<< " at measurement frame "
+						<< measurementFrame << std::endl;
+				}
+				if (!frameCaptureSucceeded) {
+					classicSceneTemporalCaptureSucceeded = false;
+					classicSceneFailed = true;
+					std::cerr
+						<< "[SSAOTemporalCapture] capture failed at "
+						<< "measurement frame " << measurementFrame
+						<< std::endl;
+				}
+				else {
+					++classicSceneTemporalCapturesCompleted;
+				}
 			}
+		}
+		if (submissionStressOptions.enabled &&
+			!submissionStressCaptureCompleted &&
+			submissionStressFrameIndex >= 2) {
+			const std::uint64_t opaqueSubmissionSignature =
+				scene.ComputeOpaqueSubmissionSignature();
+			benchmarkSession.SetOpaqueSubmissionSignature(
+				opaqueSubmissionSignature);
+			std::ostringstream signatureStream;
+			signatureStream << "0x"
+				<< std::hex
+				<< std::setw(16)
+				<< std::setfill('0')
+				<< opaqueSubmissionSignature;
+			std::cout
+				<< "[SubmissionStress] opaqueSubmissionSignature="
+				<< signatureStream.str()
+				<< std::endl;
 
-			// Assets ?????? models / materials / shaders ??
+			if (!submissionStressOptions.capturePath.empty()) {
+				const FrameCaptureStats capture =
+					CaptureFramebufferPpm(
+						postprocessRenderPass->GetOutputFBO(),
+						submissionStressOptions.capturePath);
+				std::cout << "[SubmissionStress] capture="
+					<< submissionStressOptions.capturePath
+					<< " valid="
+					<< (capture.valid ? "true" : "false")
+					<< " meanLuminance=" << std::fixed
+					<< std::setprecision(4)
+					<< capture.meanLuminance
+					<< " nonBlackRatio="
+					<< capture.nonBlackRatio
+					<< std::endl;
+			}
+			submissionStressCaptureCompleted = true;
+		}
+
+		if (!minimalAutomatedUi) {
+			// Viewport：默认(INDEX==0)显示最终渲染结果；否则显示所选 FBO 的指定 color/depth 附件
+			unsigned int viewportTextureID = 0;
+			unsigned int viewportReadFBO = 0;
+			int viewportReadAttachment = 0;
+			bool viewportReadIsDepth = false;
+			int viewportReadWidth = properties.SCREEN_WIDTH;
+			int viewportReadHeight = properties.SCREEN_HEIGHT;
+			if (properties.VIEWPORT_DEBUG_FBO_INDEX == 0) {
+				// 最终图（延迟+正向+后处理后的结果）
+				FBO* finalFBO = postprocessRenderPass->GetOutputFBO();
+				if (finalFBO && !finalFBO->textureIDs.empty()) {
+					viewportTextureID = finalFBO->textureIDs[0];
+					viewportReadFBO = finalFBO->framebufferID;
+					viewportReadAttachment = 0;
+					viewportReadIsDepth = false;
+					viewportReadWidth = finalFBO->width;
+					viewportReadHeight = finalFBO->height;
+				}
+			} else {
+				std::vector<FBO*> busyFBOs = FramebuffersManager::GetInstance().GetBusyFBOs();
+				int fboIdx = properties.VIEWPORT_DEBUG_FBO_INDEX - 1;
+				if (fboIdx >= 0 && fboIdx < (int)busyFBOs.size()) {
+					FBO* fbo = busyFBOs[fboIdx];
+					if (!fbo->textureIDs.empty()
+						&& properties.VIEWPORT_DEBUG_ATTACHMENT_INDEX >= 0
+						&& properties.VIEWPORT_DEBUG_ATTACHMENT_INDEX < (int)fbo->textureIDs.size()) {
+						viewportTextureID = fbo->textureIDs[properties.VIEWPORT_DEBUG_ATTACHMENT_INDEX];
+						viewportReadFBO = fbo->framebufferID;
+						viewportReadAttachment = properties.VIEWPORT_DEBUG_ATTACHMENT_INDEX;
+						viewportReadIsDepth = (fbo->attr.isShadowMap && properties.VIEWPORT_DEBUG_ATTACHMENT_INDEX == 0);
+						viewportReadWidth = fbo->width;
+						viewportReadHeight = fbo->height;
+					}
+				}
+			}
 			{
-				PERF_CPU_SCOPE("Assets Browser UI");
-				mygui.AssetsBrowser_UI();
+				PERF_CPU_SCOPE("Viewport and Assets UI");
+				{
+					PERF_CPU_SCOPE("Viewport UI");
+					mygui.SetViewportReadSource(
+						viewportReadFBO,
+						viewportReadAttachment,
+						viewportReadIsDepth,
+						viewportReadWidth,
+						viewportReadHeight
+					);
+					mygui.Viewport_UI(viewportTextureID);
+				}
+
+				// Assets ?????? models / materials / shaders ??
+				{
+					PERF_CPU_SCOPE("Assets Browser UI");
+					mygui.AssetsBrowser_UI();
+				}
 			}
 		}
 
@@ -3621,6 +5066,76 @@ int main(int argc, char** argv) {
 		{
 			PERF_CPU_SCOPE("Present and Events");
 			glfwSwapBuffers(window);
+#ifdef _WIN32
+			if (renderDocFrameCaptureActive) {
+				const bool captureSaved =
+					renderDocApi->EndFrameCapture(
+						nullptr,
+						nullptr) != 0;
+				renderDocFrameCaptureActive = false;
+				renderDocFrameCaptureCompleted = captureSaved;
+				if (!captureSaved) {
+					std::cerr
+						<< "[RenderDocCapture] failed to save frame "
+						<< classicSceneOptions.renderDocCaptureFrame
+						<< std::endl;
+					classicSceneFailed = true;
+				}
+				else {
+					const std::string comments =
+						"Diagnostic RenderDoc capture only. Scene=" +
+						classicSceneOptions.sceneName +
+						"; SSAO mode=" +
+						classicSceneOptions.ssaoMode +
+						"; samples=" +
+						std::to_string(
+							classicSceneOptions.ssaoSamples) +
+						"; resolution=" +
+						std::to_string(properties.SCREEN_WIDTH) +
+						"x" +
+						std::to_string(properties.SCREEN_HEIGHT) +
+						". RenderDoc timings are not formal benchmark data.";
+					renderDocApi->SetCaptureFileComments(
+						nullptr,
+						comments.c_str());
+					std::string savedCapturePath;
+					const std::uint32_t captureCount =
+						renderDocApi->GetNumCaptures();
+					if (captureCount > 0) {
+						std::uint32_t pathLength = 0;
+						const std::uint32_t captureIndex =
+							captureCount - 1;
+						if (renderDocApi->GetCapture(
+								captureIndex,
+								nullptr,
+								&pathLength,
+								nullptr) != 0 &&
+							pathLength > 0) {
+							std::vector<char> pathBuffer(
+								static_cast<std::size_t>(
+									pathLength) + 1,
+								'\0');
+							std::uint32_t pathCapacity =
+								static_cast<std::uint32_t>(
+									pathBuffer.size());
+							if (renderDocApi->GetCapture(
+									captureIndex,
+									pathBuffer.data(),
+									&pathCapacity,
+									nullptr) != 0) {
+								savedCapturePath =
+									pathBuffer.data();
+							}
+						}
+					}
+					std::cout
+						<< "[RenderDocCapture] saved=true"
+						<< " captureCount=" << captureCount
+						<< " path=" << savedCapturePath
+						<< std::endl;
+				}
+			}
+#endif
 			glfwPollEvents();
 		}
 		if (classicSceneOptions.enabled) {
@@ -3760,12 +5275,79 @@ int main(int argc, char** argv) {
 			const std::size_t expectedSamples = static_cast<std::size_t>(
 				classicSceneOptions.captureFrame -
 				classicSceneOptions.warmupFrames);
+			auto zoneSampleCount = [](
+				const std::unordered_map<
+					std::string,
+					std::vector<double>>& zones,
+				const char* name) {
+				const auto it = zones.find(name);
+				return it == zones.end()
+					? std::size_t{ 0 }
+					: it->second.size();
+			};
+			const bool gpuTimingSupported =
+				PerformanceProfiler::GetInstance().IsGpuTimingSupported();
 			const bool profilerCaptureSucceeded =
 				classicSceneProfilerCaptureStarted &&
 				profilerSamples.wallFrameMs.size() == expectedSamples &&
 				profilerSamples.cpuFrameMs.size() == expectedSamples &&
-				(!PerformanceProfiler::GetInstance().IsGpuTimingSupported() ||
+				profilerSamples.renderStats.size() == expectedSamples &&
+				(!gpuTimingSupported ||
 					profilerSamples.gpuFrameMs.size() == expectedSamples);
+			const std::size_t deferredCpuSamples =
+				zoneSampleCount(
+					profilerSamples.cpuZoneMs,
+					"Deferred Pass");
+			const std::size_t deferredGpuSamples =
+				zoneSampleCount(
+					profilerSamples.gpuZoneMs,
+					"Deferred Pass");
+			const std::size_t ssaoCpuSamples =
+				zoneSampleCount(
+					profilerSamples.cpuZoneMs,
+					"SSAO Pass");
+			const std::size_t ssaoGpuSamples =
+				zoneSampleCount(
+					profilerSamples.gpuZoneMs,
+					"SSAO Pass");
+			const std::size_t ssaoGenerateCpuSamples =
+				zoneSampleCount(
+					profilerSamples.cpuZoneMs,
+					"SSAO Generate");
+			const std::size_t ssaoGenerateGpuSamples =
+				zoneSampleCount(
+					profilerSamples.gpuZoneMs,
+					"SSAO Generate");
+			const std::size_t ssaoUpsampleCpuSamples =
+				zoneSampleCount(
+					profilerSamples.cpuZoneMs,
+					"SSAO Upsample");
+			const std::size_t ssaoUpsampleGpuSamples =
+				zoneSampleCount(
+					profilerSamples.gpuZoneMs,
+					"SSAO Upsample");
+			const std::size_t expectedSsaoSamples =
+				classicSceneOptions.ssaoSamples > 0
+					? expectedSamples
+					: std::size_t{ 0 };
+			const std::size_t expectedSsaoUpsampleSamples =
+				classicSceneOptions.ssaoSamples > 0 &&
+				classicSceneOptions.ssaoMode == "half-bilateral"
+					? expectedSamples
+					: std::size_t{ 0 };
+			const bool ssaoZoneCaptureSucceeded =
+				!classicSceneOptions.ssaoExperiment ||
+				(gpuTimingSupported &&
+					deferredCpuSamples == expectedSamples &&
+					deferredGpuSamples == expectedSamples &&
+					ssaoCpuSamples == expectedSsaoSamples &&
+					ssaoGpuSamples == expectedSsaoSamples &&
+					ssaoGenerateCpuSamples == expectedSsaoSamples &&
+					ssaoGenerateGpuSamples == expectedSsaoSamples &&
+					ssaoUpsampleCpuSamples ==
+						expectedSsaoUpsampleSamples &&
+					ssaoUpsampleGpuSamples ==
+						expectedSsaoUpsampleSamples);
 			if (!profilerCaptureSucceeded) {
 				std::cerr
 					<< "[ClassicScene] profiler capture count mismatch: "
@@ -3773,12 +5355,229 @@ int main(int argc, char** argv) {
 					<< " wall=" << profilerSamples.wallFrameMs.size()
 					<< " cpu=" << profilerSamples.cpuFrameMs.size()
 					<< " gpu=" << profilerSamples.gpuFrameMs.size()
+					<< " renderStats="
+					<< profilerSamples.renderStats.size()
+					<< std::endl;
+			}
+			if (!ssaoZoneCaptureSucceeded) {
+				std::cerr
+					<< "[SSAOBaseline] required zone count mismatch: "
+					<< "expected=" << expectedSamples
+					<< " deferredCpu=" << deferredCpuSamples
+					<< " deferredGpu=" << deferredGpuSamples
+					<< " expectedSsao=" << expectedSsaoSamples
+					<< " ssaoCpu=" << ssaoCpuSamples
+					<< " ssaoGpu=" << ssaoGpuSamples
+					<< " generateCpu=" << ssaoGenerateCpuSamples
+					<< " generateGpu=" << ssaoGenerateGpuSamples
+					<< " expectedUpsample="
+					<< expectedSsaoUpsampleSamples
+					<< " upsampleCpu=" << ssaoUpsampleCpuSamples
+					<< " upsampleGpu=" << ssaoUpsampleGpuSamples
+					<< " gpuTimingSupported="
+					<< (gpuTimingSupported ? "true" : "false")
 					<< std::endl;
 			}
 
-			const FrameCaptureStats capture = CaptureFramebufferPpm(
-				postprocessRenderPass->GetOutputFBO(),
-				classicSceneOptions.capturePath);
+			bool renderGlErrorFree = true;
+			for (GLenum error = glGetError();
+				error != GL_NO_ERROR;
+				error = glGetError()) {
+				renderGlErrorFree = false;
+				std::cerr
+					<< "[ClassicScene] OpenGL error before capture: 0x"
+					<< std::hex << error << std::dec << std::endl;
+			}
+
+			FrameCaptureStats capture;
+			if (classicSceneOptions.captureFinalFrame) {
+				capture = CaptureFramebufferPpm(
+					postprocessRenderPass->GetOutputFBO(),
+					classicSceneOptions.capturePath);
+			}
+			const FBO* ssaoFBO = deferRenderPass->GetSSAOOutputFBO();
+			const FBO* ssaoGenerationFBO =
+				deferRenderPass->GetSSAOGenerationFBO();
+			const FBO* gbufferFBO = deferRenderPass->GetGBufferFBO();
+			FrameCaptureStats ssaoCapture;
+			if (!classicSceneOptions.ssaoCapturePath.empty()) {
+				ssaoCapture = CaptureFramebufferPpm(
+					ssaoFBO,
+					classicSceneOptions.ssaoCapturePath,
+					true);
+			}
+			FloatCaptureStats ssaoFloatCapture;
+			if (!classicSceneOptions.ssaoFloatCapturePath.empty()) {
+				ssaoFloatCapture = CaptureFramebufferPfm(
+					ssaoFBO,
+					0,
+					classicSceneOptions.ssaoFloatCapturePath,
+					FloatCaptureSource::Red);
+			}
+			FloatCaptureStats ssaoRawFloatCapture;
+			if (!classicSceneOptions.ssaoRawFloatCapturePath.empty()) {
+				ssaoRawFloatCapture = CaptureFramebufferPfm(
+					ssaoGenerationFBO,
+					0,
+					classicSceneOptions.ssaoRawFloatCapturePath,
+					FloatCaptureSource::Red);
+			}
+			FloatCaptureStats ssaoDepthCapture;
+			if (!classicSceneOptions.ssaoDepthCapturePath.empty()) {
+				ssaoDepthCapture = CaptureFramebufferPfm(
+					gbufferFBO,
+					0,
+					classicSceneOptions.ssaoDepthCapturePath,
+					FloatCaptureSource::Alpha);
+			}
+			FloatCaptureStats ssaoNormalCapture;
+			if (!classicSceneOptions.ssaoNormalCapturePath.empty()) {
+				ssaoNormalCapture = CaptureFramebufferPfm(
+					gbufferFBO,
+					1,
+					classicSceneOptions.ssaoNormalCapturePath,
+					FloatCaptureSource::RGB);
+			}
+			for (GLenum error = glGetError();
+				error != GL_NO_ERROR;
+				error = glGetError()) {
+				renderGlErrorFree = false;
+				std::cerr
+					<< "[ClassicScene] OpenGL error after capture: 0x"
+					<< std::hex << error << std::dec << std::endl;
+			}
+			const bool ssaoOutputExpected =
+				classicSceneOptions.ssaoExperiment &&
+				classicSceneOptions.ssaoSamples > 0;
+			const int fullWidth = properties.SCREEN_WIDTH;
+			const int fullHeight = properties.SCREEN_HEIGHT;
+			const int halfWidth = (fullWidth + 1) / 2;
+			const int halfHeight = (fullHeight + 1) / 2;
+			const bool halfGeneration =
+				classicSceneOptions.ssaoMode != "legacy-full";
+			const int expectedGenerationWidth =
+				halfGeneration ? halfWidth : fullWidth;
+			const int expectedGenerationHeight =
+				halfGeneration ? halfHeight : fullHeight;
+			const bool bilateral =
+				classicSceneOptions.ssaoMode == "half-bilateral";
+			const int expectedOutputWidth =
+				bilateral ||
+				classicSceneOptions.ssaoMode == "legacy-full"
+					? fullWidth
+					: halfWidth;
+			const int expectedOutputHeight =
+				bilateral ||
+				classicSceneOptions.ssaoMode == "legacy-full"
+					? fullHeight
+					: halfHeight;
+			auto validAoFbo = [](
+				const FBO* fbo,
+				int expectedWidth,
+				int expectedHeight) {
+				return
+					fbo &&
+					fbo->IsComplete() &&
+					!fbo->textureIDs.empty() &&
+					fbo->width == expectedWidth &&
+					fbo->height == expectedHeight &&
+					!fbo->attr.textureAttrs.empty() &&
+					fbo->attr.textureAttrs.front().internalFormat ==
+						GL_R16F;
+			};
+			const bool ssaoFboRelationshipValid =
+				!ssaoOutputExpected ||
+				(bilateral
+					? (ssaoGenerationFBO &&
+						ssaoFBO &&
+						ssaoGenerationFBO != ssaoFBO &&
+						ssaoGenerationFBO->framebufferID !=
+							ssaoFBO->framebufferID)
+					: (ssaoGenerationFBO == ssaoFBO));
+			const bool ssaoOutputValid =
+				!classicSceneOptions.ssaoExperiment ||
+				(ssaoOutputExpected
+					? (validAoFbo(
+							ssaoFBO,
+							expectedOutputWidth,
+							expectedOutputHeight) &&
+						validAoFbo(
+							ssaoGenerationFBO,
+							expectedGenerationWidth,
+							expectedGenerationHeight) &&
+						ssaoFboRelationshipValid)
+					: ssaoFBO == nullptr &&
+						ssaoGenerationFBO == nullptr);
+			const bool ssaoCaptureValid =
+				classicSceneOptions.ssaoCapturePath.empty() ||
+				ssaoCapture.valid;
+			auto validRequestedFloatCapture = [](
+				const std::string& path,
+				const FloatCaptureStats& captureStats,
+				int expectedWidth,
+				int expectedHeight,
+				int expectedChannels) {
+				return
+					path.empty() ||
+					(captureStats.valid &&
+						captureStats.width == expectedWidth &&
+						captureStats.height == expectedHeight &&
+						captureStats.channels == expectedChannels);
+			};
+			const bool ssaoFloatCapturesValid =
+				validRequestedFloatCapture(
+					classicSceneOptions.ssaoFloatCapturePath,
+					ssaoFloatCapture,
+					expectedOutputWidth,
+					expectedOutputHeight,
+					1) &&
+				validRequestedFloatCapture(
+					classicSceneOptions.ssaoRawFloatCapturePath,
+					ssaoRawFloatCapture,
+					expectedGenerationWidth,
+					expectedGenerationHeight,
+					1) &&
+				validRequestedFloatCapture(
+					classicSceneOptions.ssaoDepthCapturePath,
+					ssaoDepthCapture,
+					fullWidth,
+					fullHeight,
+					1) &&
+				validRequestedFloatCapture(
+					classicSceneOptions.ssaoNormalCapturePath,
+					ssaoNormalCapture,
+					fullWidth,
+					fullHeight,
+					3);
+			if (!ssaoOutputValid ||
+				!ssaoCaptureValid ||
+				!ssaoFloatCapturesValid ||
+				!renderGlErrorFree) {
+				std::cerr
+					<< "[SSAO] output/capture validation failed: "
+					<< "expected=" << (ssaoOutputExpected ? "true" : "false")
+					<< " mode=" << classicSceneOptions.ssaoMode
+					<< " outputAvailable="
+					<< (ssaoFBO ? "true" : "false")
+					<< " outputSize="
+					<< (ssaoFBO ? ssaoFBO->width : 0)
+					<< "x" << (ssaoFBO ? ssaoFBO->height : 0)
+					<< " generationSize="
+					<< (ssaoGenerationFBO
+						? ssaoGenerationFBO->width
+						: 0)
+					<< "x"
+					<< (ssaoGenerationFBO
+						? ssaoGenerationFBO->height
+						: 0)
+					<< " ldrCaptureValid="
+					<< (ssaoCapture.valid ? "true" : "false")
+					<< " floatCapturesValid="
+					<< (ssaoFloatCapturesValid ? "true" : "false")
+					<< " glErrorFree="
+					<< (renderGlErrorFree ? "true" : "false")
+					<< std::endl;
+			}
 			const PointShadowCubeEvidence pointShadowCubeEvidence =
 				CapturePointShadowCubeEvidence(scene);
 			classicSceneFrameTiming =
@@ -3794,10 +5593,23 @@ int main(int argc, char** argv) {
 				classicSceneMotionTimeline.GetProfile() ==
 					BenchmarkMotionProfile::None ||
 				classicSceneTimelineTelemetry.size() == expectedSamples;
+			const bool temporalCaptureSucceeded =
+				classicSceneOptions.ssaoTemporalCaptureDirectory.empty() ||
+				(classicSceneTemporalCaptureSucceeded &&
+					classicSceneTemporalCapturesCompleted ==
+						classicSceneOptions
+							.ssaoTemporalCaptureFrameCount);
 			const bool captureSucceeded =
-				capture.valid &&
+				(!classicSceneOptions.captureFinalFrame ||
+					capture.valid) &&
 				profilerCaptureSucceeded &&
+				ssaoZoneCaptureSucceeded &&
+				ssaoOutputValid &&
+				ssaoCaptureValid &&
+				ssaoFloatCapturesValid &&
+				renderGlErrorFree &&
 				timelineCaptureSucceeded &&
+				temporalCaptureSucceeded &&
 				(!requiresImageBasedLighting || imageBasedLighting.IsReady()) &&
 				(!requiresPointShadowEvidence ||
 					pointShadowCubeEvidence.valid) &&
@@ -3817,6 +5629,15 @@ int main(int argc, char** argv) {
 					<< classicSceneTimelineTelemetry.size()
 					<< std::endl;
 			}
+			if (!temporalCaptureSucceeded) {
+				std::cerr
+					<< "[SSAOTemporalCapture] count mismatch: expected="
+					<< classicSceneOptions
+						.ssaoTemporalCaptureFrameCount
+					<< " actual="
+					<< classicSceneTemporalCapturesCompleted
+					<< std::endl;
+			}
 			const MemoryStats memory =
 				PerformanceProfiler::GetInstance().GetMemoryStats();
 			float actualSpotShadowNearPlane = 0.0f;
@@ -3829,6 +5650,7 @@ int main(int argc, char** argv) {
 			}
 			if (!WriteClassicSceneResult(
 				classicSceneOptions,
+				scene,
 				captureSucceeded,
 				classicSceneLoadMilliseconds,
 				classicSceneFrameTiming,
@@ -3839,6 +5661,13 @@ int main(int argc, char** argv) {
 				classicSceneSourceRadius,
 				classicSceneAppliedScale,
 				capture,
+				ssaoCapture,
+				ssaoFloatCapture,
+				ssaoRawFloatCapture,
+				ssaoDepthCapture,
+				ssaoNormalCapture,
+				ssaoFBO,
+				ssaoGenerationFBO,
 				pointShadowCubeEvidence,
 				memory,
 				scene.GetShadowSystemStats(),
@@ -3872,13 +5701,31 @@ int main(int argc, char** argv) {
 			glfwSetWindowShouldClose(window, true);
 		}
 	}
+#ifdef _WIN32
+	if (renderDocFrameCaptureActive && renderDocApi) {
+		renderDocApi->DiscardFrameCapture(nullptr, nullptr);
+		renderDocFrameCaptureActive = false;
+		classicSceneFailed = true;
+		std::cerr
+			<< "[RenderDocCapture] discarded incomplete capture"
+			<< std::endl;
+	}
+#endif
+	if (classicSceneOptions.renderDocCaptureFrame > 0 &&
+		!renderDocFrameCaptureCompleted) {
+		classicSceneFailed = true;
+		std::cerr
+			<< "[RenderDocCapture] requested frame was not captured"
+			<< std::endl;
+	}
 	if (benchmarkOptions.enabled && !benchmarkSession.IsComplete()) {
 		benchmarkSession.Abort();
 	}
 	if (!resourceSmokeTest &&
 		!pbrSmokeTest &&
 		!benchmarkOptions.enabled &&
-		!classicSceneOptions.enabled) {
+		!classicSceneOptions.enabled &&
+		!submissionStressOptions.enabled) {
 		mygui.RestoreTemporaryEditorState(scene, camera);
 	}
 
@@ -3891,11 +5738,13 @@ int main(int argc, char** argv) {
 	if (!resourceSmokeTest &&
 		!pbrSmokeTest &&
 		!benchmarkOptions.enabled &&
-		!classicSceneOptions.enabled) {
+		!classicSceneOptions.enabled &&
+		!submissionStressOptions.enabled) {
 		SceneStateIO::Save(scene, camera, sceneStatePath);
 	}
 	scene.SetSelectedModelForMaterials(nullptr);
 	scene.modelSource.ClearModels();
+	submissionStressState.Reset();
 	classicSceneDeferredReceiver.reset();
 	classicSceneReplacementCaster.reset();
 	classicSceneMotionCaster.reset();

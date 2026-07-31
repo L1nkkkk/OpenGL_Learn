@@ -9,6 +9,11 @@ public:
 	void Init(int width, int height) override;
 	void Render(Scene* scene, const FBO* inputFBO = nullptr) override;
 	void Destroy() override;
+	const FBO* GetSSAOOutputFBO() const { return m_ssao.GetOutputFBO(); }
+	const FBO* GetSSAOGenerationFBO() const {
+		return m_ssao.GetGenerationFBO();
+	}
+	const FBO* GetGBufferFBO() const { return m_gbufferFBO; }
 
 protected:
 	FBOAttributes BuildAttributesFromSystemProperties() override;
@@ -21,4 +26,3 @@ private:
 	/// Stencil + 球体光体积，仅对模板内像素做点光源着色（与 Scene::DrawDefferedModels 中 LIGHT_VOLUME 分支一致）
 	void DrawPointLightVolumesDeferred(Scene* scene);
 };
-
