@@ -57,6 +57,13 @@ remain under `classic-scenes/_archives/`.
 - Bistro DDS images are decoded once and stored as PNG payloads at their
   expected logical paths because `stb_image` does not decode DDS. The original
   official archive is retained.
+- Bistro's two-channel BC5 DirectX normals are recognized from their zero-filled
+  blue channel at runtime. The shader reconstructs positive Z and converts the
+  Y convention before applying the tangent basis.
+- Bistro's texture named `Specular` is routed as its documented packed map: red
+  occlusion amount (converted to AO visibility), green roughness, and blue
+  metalness. Companion `_Emissive` textures are restored when the OBJ export
+  omitted their MTL slot.
 - No source archive is accepted until both its exact byte length and SHA-256
   hash match the manifest.
 
@@ -123,10 +130,6 @@ claimed for them without a dedicated A/B experiment.
 
 ## Known visual gaps
 
-- Bistro stores ambient occlusion, roughness, and metalness in the RGB channels
-  of its Specular texture and uses DirectX-style normal maps. The renderer does
-  not yet fully interpret that package convention, so both Bistro captures look
-  cooler and grayer than the authored scene.
 - The imported scenes use a simple deterministic acceptance light rig, not
   their original production lighting, probes, lightmaps, or post-processing.
 - The suite currently validates static geometry and materials; animation,

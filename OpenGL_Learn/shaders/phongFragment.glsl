@@ -262,14 +262,24 @@ vec3 CalcSpotLight(
 		color;
 }
 
+vec3 DecodeTangentSpaceNormal(vec3 encodedNormal)
+{
+	if (encodedNormal.b <= (1.0 / 255.0)) {
+		vec2 xy = encodedNormal.rg * 2.0 - 1.0;
+		xy.y = -xy.y;
+		float z = sqrt(max(1.0 - dot(xy, xy), 0.0));
+		return normalize(vec3(xy, z));
+	}
+	return normalize(encodedNormal * 2.0 - 1.0);
+}
+
 void main()
 {
 	vec3 normal;
 	if (material.use_texture_normal) {
-		normal =
-			texture(material.texture_normal1, fs_in.TexCoords).rgb *
-			2.0 - 1.0;
-		normal = normalize(fs_in.TBN * normalize(normal));
+		normal = DecodeTangentSpaceNormal(
+			texture(material.texture_normal1, fs_in.TexCoords).rgb);
+		normal = normalize(fs_in.TBN * normal);
 	}
 	else {
 		normal = normalize(fs_in.Normal);

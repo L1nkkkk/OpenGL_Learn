@@ -29,6 +29,7 @@ struct Material {
 	bool useAlphaCutoff;
 	bool usePBR;
 	bool metallicRoughnessPacked;
+	bool occlusionMapStoresOcclusion;
 };
 
 uniform sampler2D texture_diffuse1;
@@ -80,12 +81,23 @@ vec4 SampleLegacyColor(sampler2D source, vec2 uv)
 	return value;
 }
 
+vec3 DecodeTangentSpaceNormal(vec3 encodedNormal)
+{
+	if (encodedNormal.b <= (1.0 / 255.0)) {
+		vec2 xy = encodedNormal.rg * 2.0 - 1.0;
+		xy.y = -xy.y;
+		float z = sqrt(max(1.0 - dot(xy, xy), 0.0));
+		return normalize(vec3(xy, z));
+	}
+	return normalize(encodedNormal * 2.0 - 1.0);
+}
+
 void main()
 {
 	gPosition = vec4(fs_in.FragPos, max(fs_in.ViewDepth, 0.000001));
 	if (hasNormalMap) {
-		gNormal = normalize(fs_in.TBN *
-			(texture(texture_normal1, fs_in.TexCoords).rgb * 2.0 - 1.0));
+		gNormal = normalize(fs_in.TBN * DecodeTangentSpaceNormal(
+			texture(texture_normal1, fs_in.TexCoords).rgb));
 	} else {
 		gNormal = normalize(fs_in.Normal);
 	}
@@ -126,7 +138,12 @@ void main()
 		if (hasRoughnessMap) roughness *= texture(texture_roughness1, fs_in.TexCoords).r;
 	}
 	float ao = material.ao;
-	if (hasAoMap) ao *= texture(texture_ao1, fs_in.TexCoords).r;
+	if (hasAoMap) {
+		float occlusionSample = texture(texture_ao1, fs_in.TexCoords).r;
+		ao *= material.occlusionMapStoresOcclusion
+			? 1.0 - occlusionSample
+			: occlusionSample;
+	}
 	vec3 emissive = material.emissive;
 	if (hasEmissiveMap) emissive *= texture(texture_emissive1, fs_in.TexCoords).rgb;
 
