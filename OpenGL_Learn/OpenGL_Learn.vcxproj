@@ -169,6 +169,7 @@
     <ClCompile Include="Model.cpp" />
     <ClCompile Include="Object.cpp" />
     <ClCompile Include="PerformanceBenchmark.cpp" />
+	<ClCompile Include="PointLightGridRuntime.cpp" />
     <ClCompile Include="PostprocessRenderPass.cpp" />
     <ClCompile Include="Profiler.cpp" />
     <ClCompile Include="SceneStateIO.cpp" />
@@ -199,6 +200,7 @@
     <ClInclude Include="ModelsLoader.h" />
     <ClInclude Include="mygui.h" />
     <ClInclude Include="PerformanceBenchmark.h" />
+	<ClInclude Include="PointLightGridRuntime.h" />
     <ClInclude Include="PostprocessRenderPass.h" />
     <ClInclude Include="Profiler.h" />
     <ClInclude Include="RenderPass.h" />
@@ -226,6 +228,7 @@
     <None Include="shaders\deferLightFragment.glsl" />
     <None Include="shaders\deferLightVertex.glsl" />
     <None Include="shaders\deferProcessFragment.glsl" />
+    <None Include="shaders\deferProcessReconstructFragment.glsl" />
     <None Include="shaders\deferProcessVertex.glsl" />
     <None Include="shaders\deferVertex.glsl" />
     <None Include="shaders\diffuseFragment.glsl" />
@@ -236,6 +239,9 @@
     <None Include="shaders\lightVolumeFragment.glsl" />
     <None Include="shaders\lightVolumeFullscreenFragment.glsl" />
     <None Include="shaders\lightVolumeFullscreenVertex.glsl" />
+    <None Include="shaders\pointLightLighting.glsl" />
+	<None Include="shaders\pointLightGridFragment.glsl" />
+	<None Include="shaders\pointLightGridVertex.glsl" />
     <None Include="shaders\lightVolumeVertex.glsl" />
     <None Include="shaders\outlineFragment.glsl" />
     <None Include="shaders\defaultVertex.glsl" />
@@ -258,6 +264,7 @@
     <None Include="shaders\normalGeometry.glsl" />
     <None Include="shaders\normalVertex.glsl" />
     <None Include="shaders\outlineVertex.glsl" />
+    <None Include="shaders\positionReconstruction.glsl" />
     <None Include="shaders\pbrFragment.glsl" />
     <None Include="shaders\pbrVertex.glsl" />
     <None Include="shaders\phongFragment.glsl" />

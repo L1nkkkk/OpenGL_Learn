@@ -56,6 +56,7 @@ struct SpotLight {
 };
 
 uniform sampler2D gPosition;
+uniform sampler2D gDepth;
 uniform sampler2D gNormal;
 uniform sampler2D gAlbedoSpec;
 uniform sampler2D gMaterial;
@@ -73,6 +74,9 @@ uniform bool useIBL;
 uniform samplerCube irradianceMap;
 uniform samplerCube prefilterMap;
 uniform sampler2D brdfLUT;
+uniform bool reconstructPosition;
+uniform mat4 inverseProjection;
+uniform mat4 inverseView;
 
 layout(std140) uniform SystemProperties {
 	bool useBloom;
@@ -98,6 +102,7 @@ layout(std140) uniform SystemProperties {
 };
 
 #include "shadowSampling.glsl"
+#include "positionReconstruction.glsl"
 
 float DistributionGGX(vec3 normal, vec3 halfDir, float roughness)
 {
@@ -313,13 +318,12 @@ vec3 LegacySpot(
 
 void main()
 {
-	vec4 positionDepth = texture(gPosition, TexCoords);
-	if (positionDepth.a <= 0.0) {
+	vec3 fragPos;
+	if (!LoadWorldPosition(TexCoords, fragPos)) {
 		FragColor = vec4(0.0, 0.0, 0.0, 1.0);
 		BrightColor = vec4(0.0, 0.0, 0.0, 1.0);
 		return;
 	}
-	vec3 fragPos = positionDepth.rgb;
 	vec3 normal = normalize(texture(gNormal, TexCoords).rgb);
 	vec3 albedo = texture(gAlbedoSpec, TexCoords).rgb;
 	vec4 material = texture(gMaterial, TexCoords);

@@ -1,0 +1,540 @@
+{
+  "schemaVersion": 1,
+  "passed": true,
+  "verifierProvenance": {
+    "captureRecordedVerifierSha256": "47640343DC6108E9B945E0951582C67A2F67144D4FC212EE60A2B45C8F8B581A",
+    "executedVerifierSha256": "44BD1D2C8E982046B73D7C597E946A4BEEB906BF3DD38E834E4D95DF11EF3F6A",
+    "postCaptureVerifierFix": true,
+    "captureInputsUnchanged": true
+  },
+  "protocol": {
+    "sha256": "99D647C5EBBC4BAABDB789A2EFB83C81F13D60D83C753AA7F575481796DAA988",
+    "predatesCapture": true
+  },
+  "executable": {
+    "sha256": "F5C4B77E544C51747CE6741B5D2387AEAB9EEA4D736F22D3271B58E07C1D573F",
+    "currentHashMatches": true
+  },
+  "independentMembershipRebuild": {
+    "caseCount": 4,
+    "records": [
+      {
+        "radius": 1.5,
+        "tileCellCount": 8160,
+        "clusterCellCount": 130560,
+        "lightCount": 512,
+        "matched": true
+      },
+      {
+        "radius": 3.0,
+        "tileCellCount": 8160,
+        "clusterCellCount": 130560,
+        "lightCount": 512,
+        "matched": true
+      },
+      {
+        "radius": 6.0,
+        "tileCellCount": 8160,
+        "clusterCellCount": 130560,
+        "lightCount": 512,
+        "matched": true
+      },
+      {
+        "radius": 12.0,
+        "tileCellCount": 8160,
+        "clusterCellCount": 130560,
+        "lightCount": 512,
+        "matched": true
+      }
+    ]
+  },
+  "mainSeedFullVerification": {
+    "caseCount": 20,
+    "records": [
+      {
+        "lightCount": 32,
+        "radius": 1.5,
+        "groundTruth": 1449744,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "lightCount": 64,
+        "radius": 1.5,
+        "groundTruth": 2903624,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "lightCount": 128,
+        "radius": 1.5,
+        "groundTruth": 4698120,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "lightCount": 256,
+        "radius": 1.5,
+        "groundTruth": 7771919,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "lightCount": 512,
+        "radius": 1.5,
+        "groundTruth": 13077085,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "lightCount": 32,
+        "radius": 3.0,
+        "groundTruth": 7487915,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "lightCount": 64,
+        "radius": 3.0,
+        "groundTruth": 13454064,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "lightCount": 128,
+        "radius": 3.0,
+        "groundTruth": 22518621,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "lightCount": 256,
+        "radius": 3.0,
+        "groundTruth": 40411816,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "lightCount": 512,
+        "radius": 3.0,
+        "groundTruth": 86003634,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "lightCount": 32,
+        "radius": 6.0,
+        "groundTruth": 29907017,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "lightCount": 64,
+        "radius": 6.0,
+        "groundTruth": 63420518,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "lightCount": 128,
+        "radius": 6.0,
+        "groundTruth": 125505133,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "lightCount": 256,
+        "radius": 6.0,
+        "groundTruth": 232166532,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "lightCount": 512,
+        "radius": 6.0,
+        "groundTruth": 437940177,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "lightCount": 32,
+        "radius": 12.0,
+        "groundTruth": 60232264,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "lightCount": 64,
+        "radius": 12.0,
+        "groundTruth": 117229900,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "lightCount": 128,
+        "radius": 12.0,
+        "groundTruth": 234706150,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "lightCount": 256,
+        "radius": 12.0,
+        "groundTruth": 465769410,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "lightCount": 512,
+        "radius": 12.0,
+        "groundTruth": 915561903,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      }
+    ]
+  },
+  "repeatSeedSampleVerification": {
+    "caseCount": 40,
+    "samplePixelsPerCase": 65536,
+    "records": [
+      {
+        "seed": 2769414579,
+        "lightCount": 32,
+        "radius": 1.5,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 2769414579,
+        "lightCount": 64,
+        "radius": 1.5,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 2769414579,
+        "lightCount": 128,
+        "radius": 1.5,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 2769414579,
+        "lightCount": 256,
+        "radius": 1.5,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 2769414579,
+        "lightCount": 512,
+        "radius": 1.5,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 2769414579,
+        "lightCount": 32,
+        "radius": 3.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 2769414579,
+        "lightCount": 64,
+        "radius": 3.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 2769414579,
+        "lightCount": 128,
+        "radius": 3.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 2769414579,
+        "lightCount": 256,
+        "radius": 3.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 2769414579,
+        "lightCount": 512,
+        "radius": 3.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 2769414579,
+        "lightCount": 32,
+        "radius": 6.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 2769414579,
+        "lightCount": 64,
+        "radius": 6.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 2769414579,
+        "lightCount": 128,
+        "radius": 6.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 2769414579,
+        "lightCount": 256,
+        "radius": 6.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 2769414579,
+        "lightCount": 512,
+        "radius": 6.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 2769414579,
+        "lightCount": 32,
+        "radius": 12.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 2769414579,
+        "lightCount": 64,
+        "radius": 12.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 2769414579,
+        "lightCount": 128,
+        "radius": 12.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 2769414579,
+        "lightCount": 256,
+        "radius": 12.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 2769414579,
+        "lightCount": 512,
+        "radius": 12.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 3237998097,
+        "lightCount": 32,
+        "radius": 1.5,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 3237998097,
+        "lightCount": 64,
+        "radius": 1.5,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 3237998097,
+        "lightCount": 128,
+        "radius": 1.5,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 3237998097,
+        "lightCount": 256,
+        "radius": 1.5,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 3237998097,
+        "lightCount": 512,
+        "radius": 1.5,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 3237998097,
+        "lightCount": 32,
+        "radius": 3.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 3237998097,
+        "lightCount": 64,
+        "radius": 3.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 3237998097,
+        "lightCount": 128,
+        "radius": 3.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 3237998097,
+        "lightCount": 256,
+        "radius": 3.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 3237998097,
+        "lightCount": 512,
+        "radius": 3.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 3237998097,
+        "lightCount": 32,
+        "radius": 6.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 3237998097,
+        "lightCount": 64,
+        "radius": 6.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 3237998097,
+        "lightCount": 128,
+        "radius": 6.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 3237998097,
+        "lightCount": 256,
+        "radius": 6.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 3237998097,
+        "lightCount": 512,
+        "radius": 6.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 3237998097,
+        "lightCount": 32,
+        "radius": 12.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 3237998097,
+        "lightCount": 64,
+        "radius": 12.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 3237998097,
+        "lightCount": 128,
+        "radius": 12.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 3237998097,
+        "lightCount": 256,
+        "radius": 12.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      },
+      {
+        "seed": 3237998097,
+        "lightCount": 512,
+        "radius": 12.0,
+        "samplePixels": 65536,
+        "tileMiss": 0,
+        "clusterMiss": 0
+      }
+    ]
+  },
+  "timing": {
+    "present": true,
+    "runCount": 60,
+    "failures": 0,
+    "samplesPerRun": 600
+  },
+  "glLogs": {
+    "checked": true,
+    "errorLogCount": 0
+  },
+  "artifactManifestBeforeVerificationWrite": {
+    "passed": true,
+    "fileCount": 573,
+    "totalBytes": 917620329,
+    "startupSelfMutatingLogExclusions": [
+      "logs/independent-verification.log"
+    ]
+  }
+}

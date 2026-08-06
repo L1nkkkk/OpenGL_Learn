@@ -1,0 +1,65 @@
+﻿{
+    "schemaVersion":  1,
+    "generatedUtc":  "2026-08-04T06:21:11.5729936Z",
+    "executable":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\x64\\Release\\OpenGL_Learn.exe",
+    "executableSha256":  "EA40321A9CDE239AE223C1FBFFD43DCDE560CEC562B982CD4EF8069B4DBB4BB6",
+    "records":  [
+                    {
+                        "name":  "default-deferred-representative",
+                        "startedUtc":  "2026-08-04T06:20:33.0949494Z",
+                        "endedUtc":  "2026-08-04T06:20:37.7822435Z",
+                        "exitCode":  0,
+                        "log":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\point-light-screen-routing\\screen-bounds-scissor-analytic-20260804\\final-smoke\\logs\\default-deferred-representative.log"
+                    },
+                    {
+                        "name":  "explicit-coalesced-control",
+                        "startedUtc":  "2026-08-04T06:20:37.8487719Z",
+                        "endedUtc":  "2026-08-04T06:20:42.4732776Z",
+                        "exitCode":  0,
+                        "log":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\point-light-screen-routing\\screen-bounds-scissor-analytic-20260804\\final-smoke\\logs\\explicit-coalesced-control.log"
+                    },
+                    {
+                        "name":  "explicit-legacy2n-control",
+                        "startedUtc":  "2026-08-04T06:20:42.4872795Z",
+                        "endedUtc":  "2026-08-04T06:20:47.1077483Z",
+                        "exitCode":  0,
+                        "log":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\point-light-screen-routing\\screen-bounds-scissor-analytic-20260804\\final-smoke\\logs\\explicit-legacy2n-control.log"
+                    },
+                    {
+                        "name":  "analytic-screen-high-overlap",
+                        "startedUtc":  "2026-08-04T06:20:47.1117482Z",
+                        "endedUtc":  "2026-08-04T06:20:51.6712451Z",
+                        "exitCode":  0,
+                        "log":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\point-light-screen-routing\\screen-bounds-scissor-analytic-20260804\\final-smoke\\logs\\analytic-screen-high-overlap.log"
+                    },
+                    {
+                        "name":  "analytic-screen-edge-cases",
+                        "startedUtc":  "2026-08-04T06:20:51.6762459Z",
+                        "endedUtc":  "2026-08-04T06:20:56.2987415Z",
+                        "exitCode":  0,
+                        "log":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\point-light-screen-routing\\screen-bounds-scissor-analytic-20260804\\final-smoke\\logs\\analytic-screen-edge-cases.log"
+                    },
+                    {
+                        "name":  "resource-forward-deferred-resize-effects",
+                        "startedUtc":  "2026-08-04T06:20:56.3027477Z",
+                        "endedUtc":  "2026-08-04T06:21:02.2100760Z",
+                        "exitCode":  0,
+                        "log":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\point-light-screen-routing\\screen-bounds-scissor-analytic-20260804\\final-smoke\\logs\\resource-forward-deferred-resize-effects.log"
+                    },
+                    {
+                        "name":  "classic-sponza-pbr-forward",
+                        "startedUtc":  "2026-08-04T06:21:02.2130768Z",
+                        "endedUtc":  "2026-08-04T06:21:06.9041180Z",
+                        "exitCode":  0,
+                        "log":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\point-light-screen-routing\\screen-bounds-scissor-analytic-20260804\\final-smoke\\logs\\classic-sponza-pbr-forward.log"
+                    },
+                    {
+                        "name":  "classic-sponza-pbr-deferred",
+                        "startedUtc":  "2026-08-04T06:21:06.9171196Z",
+                        "endedUtc":  "2026-08-04T06:21:11.5689914Z",
+                        "exitCode":  0,
+                        "log":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\point-light-screen-routing\\screen-bounds-scissor-analytic-20260804\\final-smoke\\logs\\classic-sponza-pbr-deferred.log"
+                    }
+                ],
+    "success":  true
+}

@@ -1,0 +1,283 @@
+﻿{
+    "schemaVersion":  1,
+    "valid":  true,
+    "protocolSha256":  "2084DF5EC28AD4AAFEA925D13DFE6EADCC09346252154421B205D7F2377EB1F0",
+    "expectedRuns":  [
+                         {
+                             "stem":  "quality-n0512-r015-analytic-screen",
+                             "kind":  "oracle-quality",
+                             "coverage":  "representative",
+                             "lightCount":  512,
+                             "radius":  1.5,
+                             "renderMode":  "analytic-screen",
+                             "result":  "raw\\quality-n0512-r015-analytic-screen.json",
+                             "capture":  "captures\\quality-n0512-r015-analytic-screen.ppm",
+                             "log":  "logs\\quality-n0512-r015-analytic-screen.log",
+                             "captureGBuffer":  false
+                         },
+                         {
+                             "stem":  "quality-n0512-r015-tile16",
+                             "kind":  "oracle-quality",
+                             "coverage":  "representative",
+                             "lightCount":  512,
+                             "radius":  1.5,
+                             "renderMode":  "tile16",
+                             "result":  "raw\\quality-n0512-r015-tile16.json",
+                             "capture":  "captures\\quality-n0512-r015-tile16.ppm",
+                             "log":  "logs\\quality-n0512-r015-tile16.log",
+                             "captureGBuffer":  false
+                         },
+                         {
+                             "stem":  "quality-n0512-r015-cluster16",
+                             "kind":  "oracle-quality",
+                             "coverage":  "representative",
+                             "lightCount":  512,
+                             "radius":  1.5,
+                             "renderMode":  "cluster16",
+                             "result":  "raw\\quality-n0512-r015-cluster16.json",
+                             "capture":  "captures\\quality-n0512-r015-cluster16.ppm",
+                             "log":  "logs\\quality-n0512-r015-cluster16.log",
+                             "captureGBuffer":  false
+                         },
+                         {
+                             "stem":  "quality-n0128-r100-analytic-screen",
+                             "kind":  "oracle-quality",
+                             "coverage":  "representative",
+                             "lightCount":  128,
+                             "radius":  10,
+                             "renderMode":  "analytic-screen",
+                             "result":  "raw\\quality-n0128-r100-analytic-screen.json",
+                             "capture":  "captures\\quality-n0128-r100-analytic-screen.ppm",
+                             "log":  "logs\\quality-n0128-r100-analytic-screen.log",
+                             "captureGBuffer":  false
+                         },
+                         {
+                             "stem":  "quality-n0128-r100-tile16",
+                             "kind":  "oracle-quality",
+                             "coverage":  "representative",
+                             "lightCount":  128,
+                             "radius":  10,
+                             "renderMode":  "tile16",
+                             "result":  "raw\\quality-n0128-r100-tile16.json",
+                             "capture":  "captures\\quality-n0128-r100-tile16.ppm",
+                             "log":  "logs\\quality-n0128-r100-tile16.log",
+                             "captureGBuffer":  false
+                         },
+                         {
+                             "stem":  "quality-n0128-r100-cluster16",
+                             "kind":  "oracle-quality",
+                             "coverage":  "representative",
+                             "lightCount":  128,
+                             "radius":  10,
+                             "renderMode":  "cluster16",
+                             "result":  "raw\\quality-n0128-r100-cluster16.json",
+                             "capture":  "captures\\quality-n0128-r100-cluster16.ppm",
+                             "log":  "logs\\quality-n0128-r100-cluster16.log",
+                             "captureGBuffer":  false
+                         },
+                         {
+                             "stem":  "quality-n0512-r120-analytic-screen",
+                             "kind":  "oracle-quality",
+                             "coverage":  "representative",
+                             "lightCount":  512,
+                             "radius":  12,
+                             "renderMode":  "analytic-screen",
+                             "result":  "raw\\quality-n0512-r120-analytic-screen.json",
+                             "capture":  "captures\\quality-n0512-r120-analytic-screen.ppm",
+                             "log":  "logs\\quality-n0512-r120-analytic-screen.log",
+                             "captureGBuffer":  false
+                         },
+                         {
+                             "stem":  "quality-n0512-r120-tile16",
+                             "kind":  "oracle-quality",
+                             "coverage":  "representative",
+                             "lightCount":  512,
+                             "radius":  12,
+                             "renderMode":  "tile16",
+                             "result":  "raw\\quality-n0512-r120-tile16.json",
+                             "capture":  "captures\\quality-n0512-r120-tile16.ppm",
+                             "log":  "logs\\quality-n0512-r120-tile16.log",
+                             "captureGBuffer":  true
+                         },
+                         {
+                             "stem":  "quality-n0512-r120-cluster16",
+                             "kind":  "oracle-quality",
+                             "coverage":  "representative",
+                             "lightCount":  512,
+                             "radius":  12,
+                             "renderMode":  "cluster16",
+                             "result":  "raw\\quality-n0512-r120-cluster16.json",
+                             "capture":  "captures\\quality-n0512-r120-cluster16.ppm",
+                             "log":  "logs\\quality-n0512-r120-cluster16.log",
+                             "captureGBuffer":  false
+                         },
+                         {
+                             "stem":  "edge-n0000-tile16",
+                             "kind":  "edge",
+                             "coverage":  "representative",
+                             "lightCount":  0,
+                             "radius":  3,
+                             "renderMode":  "tile16",
+                             "result":  "raw\\edge-n0000-tile16.json",
+                             "capture":  "captures\\edge-n0000-tile16.ppm",
+                             "log":  "logs\\edge-n0000-tile16.log",
+                             "captureGBuffer":  false
+                         },
+                         {
+                             "stem":  "edge-n0000-cluster16",
+                             "kind":  "edge",
+                             "coverage":  "representative",
+                             "lightCount":  0,
+                             "radius":  3,
+                             "renderMode":  "cluster16",
+                             "result":  "raw\\edge-n0000-cluster16.json",
+                             "capture":  "captures\\edge-n0000-cluster16.ppm",
+                             "log":  "logs\\edge-n0000-cluster16.log",
+                             "captureGBuffer":  false
+                         },
+                         {
+                             "stem":  "edge-n0001-tile16",
+                             "kind":  "edge",
+                             "coverage":  "representative",
+                             "lightCount":  1,
+                             "radius":  3,
+                             "renderMode":  "tile16",
+                             "result":  "raw\\edge-n0001-tile16.json",
+                             "capture":  "captures\\edge-n0001-tile16.ppm",
+                             "log":  "logs\\edge-n0001-tile16.log",
+                             "captureGBuffer":  false
+                         },
+                         {
+                             "stem":  "edge-n0001-cluster16",
+                             "kind":  "edge",
+                             "coverage":  "representative",
+                             "lightCount":  1,
+                             "radius":  3,
+                             "renderMode":  "cluster16",
+                             "result":  "raw\\edge-n0001-cluster16.json",
+                             "capture":  "captures\\edge-n0001-cluster16.ppm",
+                             "log":  "logs\\edge-n0001-cluster16.log",
+                             "captureGBuffer":  false
+                         },
+                         {
+                             "stem":  "edge-n0016-tile16",
+                             "kind":  "edge",
+                             "coverage":  "edge-cases",
+                             "lightCount":  16,
+                             "radius":  3,
+                             "renderMode":  "tile16",
+                             "result":  "raw\\edge-n0016-tile16.json",
+                             "capture":  "captures\\edge-n0016-tile16.ppm",
+                             "log":  "logs\\edge-n0016-tile16.log",
+                             "captureGBuffer":  false
+                         },
+                         {
+                             "stem":  "edge-n0016-cluster16",
+                             "kind":  "edge",
+                             "coverage":  "edge-cases",
+                             "lightCount":  16,
+                             "radius":  3,
+                             "renderMode":  "cluster16",
+                             "result":  "raw\\edge-n0016-cluster16.json",
+                             "capture":  "captures\\edge-n0016-cluster16.ppm",
+                             "log":  "logs\\edge-n0016-cluster16.log",
+                             "captureGBuffer":  false
+                         }
+                     ],
+    "completedRuns":  [
+                          {
+                              "stem":  "quality-n0512-r015-analytic-screen",
+                              "resultSha256":  "B6960000F7BA8CA2A18B07FC1AB5DAFFBE653CC4843A5C17B64931E0ABDA9FFA",
+                              "captureSha256":  "03881974806A68F1371242EB8908B0EDEB482168FA571FBDA3F6A89028A5F05E",
+                              "logSha256":  "37529111E509E96990FB4927F77B5FF1EEB25C376A8F5BBA06ECD2E9A2E23859"
+                          },
+                          {
+                              "stem":  "quality-n0512-r015-tile16",
+                              "resultSha256":  "A6AF0C34AC5F15009FF8B5DEF1E8F2D273BD4F15320E5E7C2D3987C443FA4988",
+                              "captureSha256":  "797957479BCD54388115CDBBE588B95A11CFF39006C68381A04748CB1F6CCC75",
+                              "logSha256":  "EC9465134157BE2B5E7C78D5B75A7A2E192FE230957DAAC7E78485015689509C"
+                          },
+                          {
+                              "stem":  "quality-n0512-r015-cluster16",
+                              "resultSha256":  "C0C4939E9D8138078549D08EBA37FCA3CDC3F16BB1F2D8CB6AB2F04E4B79F6AC",
+                              "captureSha256":  "797957479BCD54388115CDBBE588B95A11CFF39006C68381A04748CB1F6CCC75",
+                              "logSha256":  "9EB41AE8A84741549BD75DDD0A94A66CE38C70EB298DC8C122BE8FCBBFF45927"
+                          },
+                          {
+                              "stem":  "quality-n0128-r100-analytic-screen",
+                              "resultSha256":  "4829A2E15C63364EA134273488A5FD4180B198AC073751CE9D816A7A51C8CEBA",
+                              "captureSha256":  "64E1B4FC5D7281A01FA999D8789AAF211AC2043037F55638D700C8ABB532FAE1",
+                              "logSha256":  "340E509958F6D5917AD9F207937E6A069110AF6261CCFC754AFAD68871E96838"
+                          },
+                          {
+                              "stem":  "quality-n0128-r100-tile16",
+                              "resultSha256":  "3132F5F971C4DDB306452795BE2C07C7B977AD7C14D3CDCDD8869D3725522079",
+                              "captureSha256":  "BDB4BA5D45381EB909E1183FFD09C8347BD74ED3F0EC1760E379C163F815ED85",
+                              "logSha256":  "D8F252E42A6195DACB0C8A2580C23A5BF8CF376098373ED834A4F918448267C4"
+                          },
+                          {
+                              "stem":  "quality-n0128-r100-cluster16",
+                              "resultSha256":  "41496ED0686195BC4A21F530FFFFEAAF7EB5574C5126265468B53AC4A23C7D10",
+                              "captureSha256":  "BDB4BA5D45381EB909E1183FFD09C8347BD74ED3F0EC1760E379C163F815ED85",
+                              "logSha256":  "456D61B2ED9F1EA1CB0B5FB428452FE4747D478B9F1AF2BD947C0F731A27FFE3"
+                          },
+                          {
+                              "stem":  "quality-n0512-r120-analytic-screen",
+                              "resultSha256":  "566CBD0AC299872A106572FA3CB3713ABB0FB7FF8F188329D0D2F24194F1975B",
+                              "captureSha256":  "7BDA47A25847CAC49D86454B04D6CD4E0CDCF63F710010DCC03D29E967DD8BA6",
+                              "logSha256":  "768983674C553BEE1AE098F6974425C4A63DE624BE9C838B60EBB687D0032531"
+                          },
+                          {
+                              "stem":  "quality-n0512-r120-tile16",
+                              "resultSha256":  "7A03E7BF4F0D1FE068389D16010B5170BA0A6D8B2E8E279C63235D669EB6245D",
+                              "captureSha256":  "03E3F22D1917628B4BC1CDE355CEAC7080E91D6AEB264BDDA3EBBD61A38AC2CA",
+                              "logSha256":  "4E5BF61FD55B96BE2600B6FCE2D483D1E96FE5DA5C1F2B7C9004D4D11C20B14F",
+                              "gbufferPosition":  "captures\\quality-n0512-r120-gbuffer-position.pfm",
+                              "gbufferPositionSha256":  "884A61A4782161B876743962D21ED2A21B85668081FBABF25C5BCEB94E1F2B90",
+                              "gbufferValidity":  "captures\\quality-n0512-r120-gbuffer-validity.pfm",
+                              "gbufferValiditySha256":  "AB79776C29416D2F49113F207268DEB0DF927B0E30C34B13DE4EB10DB91D461A"
+                          },
+                          {
+                              "stem":  "quality-n0512-r120-cluster16",
+                              "resultSha256":  "DC0258C646D0AA70A34F074B5C6F5387C66A41FFB6705D217974D42F167C4F9D",
+                              "captureSha256":  "03E3F22D1917628B4BC1CDE355CEAC7080E91D6AEB264BDDA3EBBD61A38AC2CA",
+                              "logSha256":  "7868A75055F08BCC70D34F757E7DBC468B1FD7FDE0559CC778122666BC6C1B56"
+                          },
+                          {
+                              "stem":  "edge-n0000-tile16",
+                              "resultSha256":  "5C7FA00F689979D6AAA7CF3FEB31AA7819A68DDBDA313BF484F0FFE3AA3DA87A",
+                              "captureSha256":  "A8AAF2A0A91B2FF218775A0D2B6A229C9C4488DCE4F835689A24559F9F414490",
+                              "logSha256":  "BBE17DF4366207C6BA687C3191EC2E4150BE0A6DA0FFE26F0C162594637D6C41"
+                          },
+                          {
+                              "stem":  "edge-n0000-cluster16",
+                              "resultSha256":  "3CAE72212C6D7851C0C50B462144FD780A4EE82E02BF57819359B1F9FD28BDC6",
+                              "captureSha256":  "A8AAF2A0A91B2FF218775A0D2B6A229C9C4488DCE4F835689A24559F9F414490",
+                              "logSha256":  "0846098F778B167F4BF1515323037F95F9A734973575A4CB9A668C73533E8952"
+                          },
+                          {
+                              "stem":  "edge-n0001-tile16",
+                              "resultSha256":  "6F64917091999258C0D52B5C00D16A1D6D9635527A8B4EAD7CC146350CA7773A",
+                              "captureSha256":  "21ECE8710375B86B18E089652DE8A1F3424E3350C47E68968E79F75A8C3BF79C",
+                              "logSha256":  "5E84758058812C3DB7D636AD9FEBB162A99169138DA9BE9687805621A4F7A49E"
+                          },
+                          {
+                              "stem":  "edge-n0001-cluster16",
+                              "resultSha256":  "AF0470C5E35B28DA7FABAC27599254CE1F143147192C82514A51053BA0F99C4E",
+                              "captureSha256":  "21ECE8710375B86B18E089652DE8A1F3424E3350C47E68968E79F75A8C3BF79C",
+                              "logSha256":  "721B3DE853C0FDC567964F72405115A808AEA9B2EAD281396F7F5D2158E9FCA1"
+                          },
+                          {
+                              "stem":  "edge-n0016-tile16",
+                              "resultSha256":  "ED0BCEF09F076733C28B7B485DAF9AB0A4ECAA6FEA7D154706F31149680F6F86",
+                              "captureSha256":  "0359DC6A8DD60A98F42A7F759A00A164CD3CA9BA33F206A5B847AA0C1CD4ABD4",
+                              "logSha256":  "3473679432E63013296EA3343482BC5ADB5F1C15A3F6F8196C5DC136A6BD7631"
+                          },
+                          {
+                              "stem":  "edge-n0016-cluster16",
+                              "resultSha256":  "5F019BB2676A307E27011D6310FF3BA1FDC2AD3AAC104A6E70DB3BF7BE9DE515",
+                              "captureSha256":  "0359DC6A8DD60A98F42A7F759A00A164CD3CA9BA33F206A5B847AA0C1CD4ABD4",
+                              "logSha256":  "EA3C5996702D32C8F8BD67087CE5147B8B93B335352E02BB2EF793DCA681E6F6"
+                          }
+                      ]
+}

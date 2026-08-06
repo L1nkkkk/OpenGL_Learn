@@ -72,6 +72,212 @@ namespace SSAOProperty {
     }
 }
 
+namespace GBufferPositionProperty {
+    enum Mode {
+        Explicit = 0,
+        ReconstructFromDepth,
+    };
+
+    inline const char* ModeName(int mode) {
+        switch (mode) {
+        case Explicit:
+            return "explicit";
+        case ReconstructFromDepth:
+            return "reconstruct";
+        default:
+            return "unknown";
+        }
+    }
+}
+
+namespace PointLightStencilClearProperty {
+    enum Mode {
+        Legacy2N = 0,
+        CoalescedNPlusOne,
+    };
+
+    inline const char* ModeName(int mode) {
+        switch (mode) {
+        case Legacy2N:
+            return "legacy-2n";
+        case CoalescedNPlusOne:
+            return "coalesced-n-plus-one";
+        default:
+            return "unknown";
+        }
+    }
+}
+
+namespace PointLightRenderProperty {
+    enum Mode {
+        CoalescedVolume = 0,
+        BoundsVolume,
+        ScissoredVolume,
+        AnalyticVolumeFull,
+        AnalyticVolume,
+        AnalyticScreen,
+        AnalyticFullscreen,
+        Tile16,
+        Cluster16,
+    };
+
+    inline const char* ModeName(int mode) {
+        switch (mode) {
+        case CoalescedVolume:
+            return "coalesced-volume";
+        case BoundsVolume:
+            return "bounds-volume";
+        case ScissoredVolume:
+            return "scissored-volume";
+        case AnalyticVolumeFull:
+            return "analytic-volume-full";
+        case AnalyticVolume:
+            return "analytic-volume";
+        case AnalyticScreen:
+            return "analytic-screen";
+        case AnalyticFullscreen:
+            return "analytic-fullscreen";
+        case Tile16:
+            return "tile16";
+        case Cluster16:
+            return "cluster16";
+        default:
+            return "unknown";
+        }
+    }
+
+    inline bool RequiresBounds(int mode) {
+        return mode != CoalescedVolume &&
+            mode != Tile16 && mode != Cluster16;
+    }
+
+    inline bool UsesScreenDraw(int mode) {
+        return mode == AnalyticScreen || mode == AnalyticFullscreen ||
+            mode == Tile16 || mode == Cluster16;
+    }
+
+    inline bool UsesGrid(int mode) {
+        return mode == Tile16 || mode == Cluster16;
+    }
+
+    inline bool UsesAnalyticVolume(int mode) {
+        return mode == AnalyticVolumeFull || mode == AnalyticVolume;
+    }
+
+    inline bool UsesScissor(int mode) {
+        return mode == ScissoredVolume ||
+            mode == AnalyticVolume ||
+            mode == AnalyticScreen;
+    }
+}
+
+namespace PointLightGridUpdateProperty {
+    enum Mode {
+        Cached = 0,
+        RebuildEveryFrame,
+    };
+
+    inline const char* ModeName(int mode) {
+        switch (mode) {
+        case Cached:
+            return "cached";
+        case RebuildEveryFrame:
+            return "rebuild";
+        default:
+            return "unknown";
+        }
+    }
+}
+
+struct PointLightGridTelemetry {
+    bool valid = false;
+    bool clustered = false;
+    bool rebuiltThisFrame = false;
+    bool cacheHit = false;
+    bool overflow = false;
+    int tileSize = 16;
+    int sliceCount = 1;
+    int tilesX = 0;
+    int tilesY = 0;
+    std::uint64_t logicalCells = 0;
+    std::uint64_t nonEmptyCells = 0;
+    std::uint64_t lightCount = 0;
+    std::uint64_t totalIndices = 0;
+    std::uint64_t maximumLightsPerCell = 0;
+    double averageLightsPerCell = 0.0;
+    std::uint64_t metadataBytes = 0;
+    std::uint64_t indexBytes = 0;
+    std::uint64_t lightBytes = 0;
+    std::uint64_t residentBytes = 0;
+    std::uint64_t uploadedBytesThisFrame = 0;
+    std::uint64_t buildCount = 0;
+    std::uint64_t uploadCount = 0;
+    std::uint64_t cacheHitCount = 0;
+    std::uint64_t inputSignature = 0;
+    std::uint64_t csrSignature = 0;
+    int maxTextureBufferTexels = 0;
+    std::string error;
+};
+
+namespace PointLightScreenProxyProperty {
+    enum Classification {
+        Outside = 0,
+        ConservativeRect,
+        FullscreenFallback,
+    };
+
+    enum FallbackReason {
+        None = 0,
+        CameraInside,
+        NearPlaneIntersection,
+        InvalidRadius,
+        InvalidProjection,
+    };
+
+    inline const char* ClassificationName(int classification) {
+        switch (classification) {
+        case Outside:
+            return "outside";
+        case ConservativeRect:
+            return "conservative-rect";
+        case FullscreenFallback:
+            return "fullscreen-fallback";
+        default:
+            return "unknown";
+        }
+    }
+
+    inline const char* FallbackReasonName(int reason) {
+        switch (reason) {
+        case None:
+            return "none";
+        case CameraInside:
+            return "camera-inside";
+        case NearPlaneIntersection:
+            return "near-plane-intersection";
+        case InvalidRadius:
+            return "invalid-radius";
+        case InvalidProjection:
+            return "invalid-projection";
+        default:
+            return "unknown";
+        }
+    }
+}
+
+struct PointLightScreenProxyTelemetry {
+    std::uint64_t stableLightId = 0;
+    std::uint64_t sourceIndex = 0;
+    float radius = 0.0f;
+    int classification = PointLightScreenProxyProperty::Outside;
+    int fallbackReason = PointLightScreenProxyProperty::None;
+    int rectX = 0;
+    int rectY = 0;
+    int rectWidth = 0;
+    int rectHeight = 0;
+    double coverageRatio = 0.0;
+};
+
 // Viewport ??????? FramebuffersManager ????? isBusy ?? FBO ???????????????? color/depth ??????
 
 class SystemProperties {
@@ -265,6 +471,35 @@ public:
     int BLOOM_BLUR_ITERATIONS = 5;
 
     bool DEFER_RENDERING = false;
+    // Production remains on the explicit RGBA16F position attachment. The
+    // reconstruction path is selected only by an explicit CLI/benchmark flag.
+    int GBUFFER_POSITION_MODE = GBufferPositionProperty::Explicit;
+    // The formal A/B gate passed; normal Deferred rendering uses the
+    // coalesced lifecycle. Legacy2N remains explicitly selectable.
+    int POINT_LIGHT_STENCIL_CLEAR_MODE =
+        PointLightStencilClearProperty::CoalescedNPlusOne;
+    bool POINT_LIGHT_STENCIL_CLEAR_MODE_EXPLICIT = false;
+    // The fixed Analytic Screen path passed the five-process correctness and
+    // performance gates across all measured coverage buckets. Explicit Volume,
+    // Coalesced, and Legacy2N switches remain available for reproduction.
+    int POINT_LIGHT_RENDER_MODE = PointLightRenderProperty::AnalyticScreen;
+    bool POINT_LIGHT_RENDER_MODE_EXPLICIT = false;
+    int POINT_LIGHT_GRID_UPDATE_MODE = PointLightGridUpdateProperty::Cached;
+    bool POINT_LIGHT_GRID_UPDATE_MODE_EXPLICIT = false;
+    // Zero preserves legacy mode inference: Tile16 -> 1, Cluster16 -> 16.
+    // Benchmarks may explicitly select 1/2/4/8/16 while sharing one runtime.
+    int POINT_LIGHT_GRID_SLICE_COUNT = 0;
+    bool POINT_LIGHT_GRID_SLICE_COUNT_EXPLICIT = false;
+    PointLightGridTelemetry POINT_LIGHT_GRID_TELEMETRY;
+    bool POINT_LIGHT_OFFSCREEN_CULLING = false;
+    bool POINT_LIGHT_OFFSCREEN_CULLING_EXPLICIT = false;
+    bool POINT_LIGHT_BOUNDS_TELEMETRY_REQUESTED = false;
+    bool POINT_LIGHT_BOUNDS_TELEMETRY_EXECUTED = false;
+    std::vector<PointLightScreenProxyTelemetry> POINT_LIGHT_BOUNDS_TELEMETRY;
+    // Diagnostic readback is opt-in and is never enabled by formal timing runs.
+    bool POINT_LIGHT_STENCIL_LIFECYCLE_CHECK = false;
+    bool POINT_LIGHT_STENCIL_LIFECYCLE_CHECK_EXECUTED = false;
+    std::uint64_t POINT_LIGHT_STENCIL_NONZERO_PIXELS = 0;
     bool FRUSTUM_CULLING = true;
     bool FORWARD_NORMAL_BUFFER = false;
     /// 屏幕空间环境光遮蔽（仅延迟管线）：当前为采样 Pass 输出 R8/R16 可视度纹理，后续再接入模糊与光照。
@@ -779,7 +1014,8 @@ public:
 	unsigned int framebufferID = 0;
 	std::vector<unsigned int> textureIDs;
 	unsigned int rboID = 0;
-	// When attr.hasDepthTexture == true, depth is stored in this texture.
+	// When attr.hasDepthTexture is true, this is the main D24S8 attachment;
+	// sampling reads its depth aspect while stencil tests use the same storage.
 	unsigned int depthTextureID = 0;
 	bool init = false;
     std::string passName;
@@ -819,7 +1055,9 @@ public:
 	std::uint64_t GetResourceGeneration() const {
 		return m_resourceGeneration;
 	}
-
+	std::uint64_t GetTrackedBytes() const {
+		return m_trackedBytes;
+	}
 	void Resize() {
 		Delete();
 		Init(attr);

@@ -3,7 +3,21 @@
 #include "Profiler.h"
 #include "ShaderManager.h"
 
+#include <algorithm>
 #include <random>
+
+namespace {
+	bool ReconstructPositionFromDepth()
+	{
+		return SystemProperties::GetInstance().GBUFFER_POSITION_MODE ==
+			GBufferPositionProperty::ReconstructFromDepth;
+	}
+
+	int GBufferNormalAttachment()
+	{
+		return ReconstructPositionFromDepth() ? 0 : 1;
+	}
+}
 
 FBOAttributes SSAORenderPass::BuildAttributesFromSystemProperties()
 {
@@ -146,8 +160,22 @@ void SSAORenderPass::Render(Scene* scene, const FBO* gbufferFBO)
 	PERF_CPU_SCOPE("SSAO Pass");
 	PERF_GPU_SCOPE("SSAO Pass");
 	auto& properties = SystemProperties::GetInstance();
-	if (!properties.SSAO || !gbufferFBO || gbufferFBO->textureIDs.size() < 2)
+	const bool reconstructPosition = ReconstructPositionFromDepth();
+	const int normalAttachment = GBufferNormalAttachment();
+	const std::size_t requiredColorAttachments =
+		reconstructPosition ? std::size_t{ 1 } : std::size_t{ 2 };
+	if (!properties.SSAO ||
+		!scene ||
+		!scene->camera_ptr ||
+		!gbufferFBO ||
+		gbufferFBO->textureIDs.size() < requiredColorAttachments ||
+		(reconstructPosition && gbufferFBO->depthTextureID == 0))
 		return;
+	const float aspect = static_cast<float>(properties.SCREEN_WIDTH) /
+		static_cast<float>((std::max)(1, properties.SCREEN_HEIGHT));
+	const glm::mat4 inverseProjection = reconstructPosition
+		? glm::inverse(scene->camera_ptr->GetProjectionMatrix(aspect))
+		: glm::mat4(1.0f);
 
 	UpdateRenderTargets();
 	FBO* generationFBO =
@@ -186,7 +214,14 @@ void SSAORenderPass::Render(Scene* scene, const FBO* gbufferFBO)
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		ssaoShader->use();
-		ssaoShader->setInt("gPosition", 0);
+		ssaoShader->setBool("reconstructPosition", reconstructPosition);
+		if (reconstructPosition) {
+			ssaoShader->setInt("gDepth", 0);
+			ssaoShader->setMat4("inverseProjection", inverseProjection);
+		}
+		else {
+			ssaoShader->setInt("gPosition", 0);
+		}
 		ssaoShader->setInt("gNormal", 1);
 		ssaoShader->setInt("texNoise", 2);
 		// Keep the original four-full-resolution-pixel noise period in all
@@ -204,9 +239,15 @@ void SSAORenderPass::Render(Scene* scene, const FBO* gbufferFBO)
 		}
 
 		GLState::ActiveTexture(GL_TEXTURE0);
-		GLState::BindTexture(GL_TEXTURE_2D, gbufferFBO->textureIDs[0]);
+		GLState::BindTexture(
+			GL_TEXTURE_2D,
+			reconstructPosition
+				? gbufferFBO->depthTextureID
+				: gbufferFBO->textureIDs[0]);
 		GLState::ActiveTexture(GL_TEXTURE1);
-		GLState::BindTexture(GL_TEXTURE_2D, gbufferFBO->textureIDs[1]);
+		GLState::BindTexture(
+			GL_TEXTURE_2D,
+			gbufferFBO->textureIDs[normalAttachment]);
 		GLState::ActiveTexture(GL_TEXTURE2);
 		GLState::BindTexture(GL_TEXTURE_2D, m_noiseTexture);
 
@@ -227,7 +268,18 @@ void SSAORenderPass::Render(Scene* scene, const FBO* gbufferFBO)
 
 		upsampleShader->use();
 		upsampleShader->setInt("halfAO", 0);
-		upsampleShader->setInt("gPosition", 1);
+		upsampleShader->setBool(
+			"reconstructPosition",
+			reconstructPosition);
+		if (reconstructPosition) {
+			upsampleShader->setInt("gDepth", 1);
+			upsampleShader->setMat4(
+				"inverseProjection",
+				inverseProjection);
+		}
+		else {
+			upsampleShader->setInt("gPosition", 1);
+		}
 		upsampleShader->setInt("gNormal", 2);
 		upsampleShader->setFloat(
 			"depthSigma",
@@ -241,9 +293,15 @@ void SSAORenderPass::Render(Scene* scene, const FBO* gbufferFBO)
 			GL_TEXTURE_2D,
 			generationFBO->textureIDs[0]);
 		GLState::ActiveTexture(GL_TEXTURE1);
-		GLState::BindTexture(GL_TEXTURE_2D, gbufferFBO->textureIDs[0]);
+		GLState::BindTexture(
+			GL_TEXTURE_2D,
+			reconstructPosition
+				? gbufferFBO->depthTextureID
+				: gbufferFBO->textureIDs[0]);
 		GLState::ActiveTexture(GL_TEXTURE2);
-		GLState::BindTexture(GL_TEXTURE_2D, gbufferFBO->textureIDs[1]);
+		GLState::BindTexture(
+			GL_TEXTURE_2D,
+			gbufferFBO->textureIDs[normalAttachment]);
 
 		GLState::BindVertexArray(globalVAOs.quadVAO);
 		PerformanceProfiler::GetInstance().RecordDraw(GL_TRIANGLES, 6);

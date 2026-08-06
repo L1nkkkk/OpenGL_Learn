@@ -1,0 +1,447 @@
+{
+  "schemaVersion": 1,
+  "passed": true,
+  "method": "independent PFM sphere ground truth + persisted CSR decode",
+  "protocolSha256": "3B3492ADBF51E80820A8E7CA1C407DF84723E85CC2DE5A2DA32CA8DB169E0B5E",
+  "aggregateSha256": "A106EEA2A0B490120D32527BFCE159A46A7ACE7D66F618B12D143A60A657063C",
+  "captureManifestSha256": "A42391D992FD2CF4FB52FA718640BDFA1E18FF3EE8484EA80DD7829BD2D9EC09",
+  "caseCount": 4,
+  "schemeCount": 20,
+  "summaryRowsParsed": 20,
+  "totalGroundTruthInteractions": 839261407,
+  "totalMissInteractions": 0,
+  "cases": [
+    {
+      "stem": "small-local-0064",
+      "resolution": [
+        1920,
+        1080
+      ],
+      "validPixelCount": 2073600,
+      "invalidPixelCount": 0,
+      "sceneSignature": "0xfd16c1bceca1fc02",
+      "submissionSignature": "0x9db8a8b3ea929e70",
+      "schemes": {
+        "tile": {
+          "csrSha256": "F01B3B94F58E3F674E035CEB191577A5D17C5934E9E32F23BE4AAA340071919D",
+          "storedSlices": 0,
+          "cellCount": 8160,
+          "totalIndexReferences": 37413,
+          "metadataBytes": 65280,
+          "indexBytes": 149652,
+          "candidateInteractions": 9533312,
+          "groundTruthInteractions": 1347865,
+          "missInteractions": 0,
+          "checks": {
+            "csrHash": true,
+            "indexReferences": true,
+            "candidateInteractions": true,
+            "groundTruthInteractions": true,
+            "missInteractions": true,
+            "memory": true
+          }
+        },
+        "cluster-08": {
+          "csrSha256": "4F83CCA50EE120DA84C50E94280F45374BE0D541693A601A94304CAEDD231B73",
+          "storedSlices": 8,
+          "cellCount": 65280,
+          "totalIndexReferences": 77039,
+          "metadataBytes": 522240,
+          "indexBytes": 308156,
+          "candidateInteractions": 4547404,
+          "groundTruthInteractions": 1347865,
+          "missInteractions": 0,
+          "checks": {
+            "csrHash": true,
+            "indexReferences": true,
+            "candidateInteractions": true,
+            "groundTruthInteractions": true,
+            "missInteractions": true,
+            "memory": true
+          }
+        },
+        "cluster-16": {
+          "csrSha256": "31904B638D548A1CE88E6ACDD9C3362E07232C3F6CD8B345E34BE9E98D18B11C",
+          "storedSlices": 16,
+          "cellCount": 130560,
+          "totalIndexReferences": 113434,
+          "metadataBytes": 1044480,
+          "indexBytes": 453736,
+          "candidateInteractions": 3605489,
+          "groundTruthInteractions": 1347865,
+          "missInteractions": 0,
+          "checks": {
+            "csrHash": true,
+            "indexReferences": true,
+            "candidateInteractions": true,
+            "groundTruthInteractions": true,
+            "missInteractions": true,
+            "memory": true
+          }
+        },
+        "cluster-24": {
+          "csrSha256": "F964B11A0C468D959A3454BD89B6E5074F004A579A650CFC8AAA7ABCAE2DB8F7",
+          "storedSlices": 24,
+          "cellCount": 195840,
+          "totalIndexReferences": 145056,
+          "metadataBytes": 1566720,
+          "indexBytes": 580224,
+          "candidateInteractions": 3431165,
+          "groundTruthInteractions": 1347865,
+          "missInteractions": 0,
+          "checks": {
+            "csrHash": true,
+            "indexReferences": true,
+            "candidateInteractions": true,
+            "groundTruthInteractions": true,
+            "missInteractions": true,
+            "memory": true
+          }
+        },
+        "cluster-32": {
+          "csrSha256": "C8A66C429DB93A7DFD9D1BBC9C25F2FEB7F60D715B3A6B05C98BBBB8352513D7",
+          "storedSlices": 32,
+          "cellCount": 261120,
+          "totalIndexReferences": 185817,
+          "metadataBytes": 2088960,
+          "indexBytes": 743268,
+          "candidateInteractions": 3312398,
+          "groundTruthInteractions": 1347865,
+          "missInteractions": 0,
+          "checks": {
+            "csrHash": true,
+            "indexReferences": true,
+            "candidateInteractions": true,
+            "groundTruthInteractions": true,
+            "missInteractions": true,
+            "memory": true
+          }
+        }
+      }
+    },
+    {
+      "stem": "medium-local-0064",
+      "resolution": [
+        1920,
+        1080
+      ],
+      "validPixelCount": 2073600,
+      "invalidPixelCount": 0,
+      "sceneSignature": "0x57639ef24223fd1e",
+      "submissionSignature": "0xf9596d3150be44e8",
+      "schemes": {
+        "tile": {
+          "csrSha256": "F7FED7BD4B4AEAB9F6FA76A5AD856F1A4A4F5196A2D4AF4AE5C304482BEABDCE",
+          "storedSlices": 0,
+          "cellCount": 8160,
+          "totalIndexReferences": 204958,
+          "metadataBytes": 65280,
+          "indexBytes": 819832,
+          "candidateInteractions": 52137600,
+          "groundTruthInteractions": 10484625,
+          "missInteractions": 0,
+          "checks": {
+            "csrHash": true,
+            "indexReferences": true,
+            "candidateInteractions": true,
+            "groundTruthInteractions": true,
+            "missInteractions": true,
+            "memory": true
+          }
+        },
+        "cluster-08": {
+          "csrSha256": "08FA004FD1EB694C40A6C9F46E7BCAF9708D43B42E9891FF9DA7C583E5FEC39D",
+          "storedSlices": 8,
+          "cellCount": 65280,
+          "totalIndexReferences": 635065,
+          "metadataBytes": 522240,
+          "indexBytes": 2540260,
+          "candidateInteractions": 27095721,
+          "groundTruthInteractions": 10484625,
+          "missInteractions": 0,
+          "checks": {
+            "csrHash": true,
+            "indexReferences": true,
+            "candidateInteractions": true,
+            "groundTruthInteractions": true,
+            "missInteractions": true,
+            "memory": true
+          }
+        },
+        "cluster-16": {
+          "csrSha256": "7158134D415C90296C642E8026C2516CA9F5F8D75EC96E4409C97A4C2CA5DFA7",
+          "storedSlices": 16,
+          "cellCount": 130560,
+          "totalIndexReferences": 1121056,
+          "metadataBytes": 1044480,
+          "indexBytes": 4484224,
+          "candidateInteractions": 23799653,
+          "groundTruthInteractions": 10484625,
+          "missInteractions": 0,
+          "checks": {
+            "csrHash": true,
+            "indexReferences": true,
+            "candidateInteractions": true,
+            "groundTruthInteractions": true,
+            "missInteractions": true,
+            "memory": true
+          }
+        },
+        "cluster-24": {
+          "csrSha256": "E6B9818091022F3A2BFB50E511916F63DE03733594E3B38DF8DB329200AE0074",
+          "storedSlices": 24,
+          "cellCount": 195840,
+          "totalIndexReferences": 1601707,
+          "metadataBytes": 1566720,
+          "indexBytes": 6406828,
+          "candidateInteractions": 22813076,
+          "groundTruthInteractions": 10484625,
+          "missInteractions": 0,
+          "checks": {
+            "csrHash": true,
+            "indexReferences": true,
+            "candidateInteractions": true,
+            "groundTruthInteractions": true,
+            "missInteractions": true,
+            "memory": true
+          }
+        },
+        "cluster-32": {
+          "csrSha256": "802BDD9F406DD508925443D5785F5A9903E8191B2FBBD688C46A993391E6F0D1",
+          "storedSlices": 32,
+          "cellCount": 261120,
+          "totalIndexReferences": 2104170,
+          "metadataBytes": 2088960,
+          "indexBytes": 8416680,
+          "candidateInteractions": 22522393,
+          "groundTruthInteractions": 10484625,
+          "missInteractions": 0,
+          "checks": {
+            "csrHash": true,
+            "indexReferences": true,
+            "candidateInteractions": true,
+            "groundTruthInteractions": true,
+            "missInteractions": true,
+            "memory": true
+          }
+        }
+      }
+    },
+    {
+      "stem": "representative-0256",
+      "resolution": [
+        1920,
+        1080
+      ],
+      "validPixelCount": 2073600,
+      "invalidPixelCount": 0,
+      "sceneSignature": "0x53c86b88620f757d",
+      "submissionSignature": "0xda0284a310591088",
+      "schemes": {
+        "tile": {
+          "csrSha256": "39025B47E250F3B178F428F88296CD77BDA5B49D1E943171CE4C85C1EDA5B8F1",
+          "storedSlices": 0,
+          "cellCount": 8160,
+          "totalIndexReferences": 1044112,
+          "metadataBytes": 65280,
+          "indexBytes": 4176448,
+          "candidateInteractions": 265484288,
+          "groundTruthInteractions": 80858002,
+          "missInteractions": 0,
+          "checks": {
+            "csrHash": true,
+            "indexReferences": true,
+            "candidateInteractions": true,
+            "groundTruthInteractions": true,
+            "missInteractions": true,
+            "memory": true
+          }
+        },
+        "cluster-08": {
+          "csrSha256": "56649E4803A05AA19E6C57B51A06497A25A9AE6360B2B9998A3056C4369494E8",
+          "storedSlices": 8,
+          "cellCount": 65280,
+          "totalIndexReferences": 3782165,
+          "metadataBytes": 522240,
+          "indexBytes": 15128660,
+          "candidateInteractions": 171445621,
+          "groundTruthInteractions": 80858002,
+          "missInteractions": 0,
+          "checks": {
+            "csrHash": true,
+            "indexReferences": true,
+            "candidateInteractions": true,
+            "groundTruthInteractions": true,
+            "missInteractions": true,
+            "memory": true
+          }
+        },
+        "cluster-16": {
+          "csrSha256": "E9D01FB8DF9A4AB9930524F1844057416E80E6643B6923AB4C2C25CB93DCFB9A",
+          "storedSlices": 16,
+          "cellCount": 130560,
+          "totalIndexReferences": 6847824,
+          "metadataBytes": 1044480,
+          "indexBytes": 27391296,
+          "candidateInteractions": 157716544,
+          "groundTruthInteractions": 80858002,
+          "missInteractions": 0,
+          "checks": {
+            "csrHash": true,
+            "indexReferences": true,
+            "candidateInteractions": true,
+            "groundTruthInteractions": true,
+            "missInteractions": true,
+            "memory": true
+          }
+        },
+        "cluster-24": {
+          "csrSha256": "E809F6763297D403732B576BE1EE07828EA7B864452262A4147257EFAE60691C",
+          "storedSlices": 24,
+          "cellCount": 195840,
+          "totalIndexReferences": 9936638,
+          "metadataBytes": 1566720,
+          "indexBytes": 39746552,
+          "candidateInteractions": 151638827,
+          "groundTruthInteractions": 80858002,
+          "missInteractions": 0,
+          "checks": {
+            "csrHash": true,
+            "indexReferences": true,
+            "candidateInteractions": true,
+            "groundTruthInteractions": true,
+            "missInteractions": true,
+            "memory": true
+          }
+        },
+        "cluster-32": {
+          "csrSha256": "D17BDABCC4303E2C34C8C7AB3B714D9587FDBDB4CEB978EE61B2855938892291",
+          "storedSlices": 32,
+          "cellCount": 261120,
+          "totalIndexReferences": 12938269,
+          "metadataBytes": 2088960,
+          "indexBytes": 51753076,
+          "candidateInteractions": 149197606,
+          "groundTruthInteractions": 80858002,
+          "missInteractions": 0,
+          "checks": {
+            "csrHash": true,
+            "indexReferences": true,
+            "candidateInteractions": true,
+            "groundTruthInteractions": true,
+            "missInteractions": true,
+            "memory": true
+          }
+        }
+      }
+    },
+    {
+      "stem": "high-overlap-0512",
+      "resolution": [
+        1920,
+        1080
+      ],
+      "validPixelCount": 2073600,
+      "invalidPixelCount": 0,
+      "sceneSignature": "0x695a812f20020a8c",
+      "submissionSignature": "0x3e403b6e7ce6d1ff",
+      "schemes": {
+        "tile": {
+          "csrSha256": "90E8A7FFE3FD60CE97DE5FAC7F2DEFD52366756A31210C3347C5145793A79873",
+          "storedSlices": 0,
+          "cellCount": 8160,
+          "totalIndexReferences": 4082516,
+          "metadataBytes": 65280,
+          "indexBytes": 16330064,
+          "candidateInteractions": 1037439360,
+          "groundTruthInteractions": 746570915,
+          "missInteractions": 0,
+          "checks": {
+            "csrHash": true,
+            "indexReferences": true,
+            "candidateInteractions": true,
+            "groundTruthInteractions": true,
+            "missInteractions": true,
+            "memory": true
+          }
+        },
+        "cluster-08": {
+          "csrSha256": "119C3D960F03760718885E74B177ED84BFF905998A102D453774A32B4318A1E9",
+          "storedSlices": 8,
+          "cellCount": 65280,
+          "totalIndexReferences": 21429180,
+          "metadataBytes": 522240,
+          "indexBytes": 85716720,
+          "candidateInteractions": 849317836,
+          "groundTruthInteractions": 746570915,
+          "missInteractions": 0,
+          "checks": {
+            "csrHash": true,
+            "indexReferences": true,
+            "candidateInteractions": true,
+            "groundTruthInteractions": true,
+            "missInteractions": true,
+            "memory": true
+          }
+        },
+        "cluster-16": {
+          "csrSha256": "EB3FF815AEA2B2AE39E939C55E2E13DAF929B07352AABAB422E932116959B7FB",
+          "storedSlices": 16,
+          "cellCount": 130560,
+          "totalIndexReferences": 39810668,
+          "metadataBytes": 1044480,
+          "indexBytes": 159242672,
+          "candidateInteractions": 805802304,
+          "groundTruthInteractions": 746570915,
+          "missInteractions": 0,
+          "checks": {
+            "csrHash": true,
+            "indexReferences": true,
+            "candidateInteractions": true,
+            "groundTruthInteractions": true,
+            "missInteractions": true,
+            "memory": true
+          }
+        },
+        "cluster-24": {
+          "csrSha256": "33ABF6047805736EE18137730CD336D6AE09C21658210062D4786BCFE39BD960",
+          "storedSlices": 24,
+          "cellCount": 195840,
+          "totalIndexReferences": 58191476,
+          "metadataBytes": 1566720,
+          "indexBytes": 232765904,
+          "candidateInteractions": 798072433,
+          "groundTruthInteractions": 746570915,
+          "missInteractions": 0,
+          "checks": {
+            "csrHash": true,
+            "indexReferences": true,
+            "candidateInteractions": true,
+            "groundTruthInteractions": true,
+            "missInteractions": true,
+            "memory": true
+          }
+        },
+        "cluster-32": {
+          "csrSha256": "5244C697960A5F201A5B8D9A81DFDB9BE637C219995FE0FEF0DF6EACACD57498",
+          "storedSlices": 32,
+          "cellCount": 261120,
+          "totalIndexReferences": 76693052,
+          "metadataBytes": 2088960,
+          "indexBytes": 306772208,
+          "candidateInteractions": 790052920,
+          "groundTruthInteractions": 746570915,
+          "missInteractions": 0,
+          "checks": {
+            "csrHash": true,
+            "indexReferences": true,
+            "candidateInteractions": true,
+            "groundTruthInteractions": true,
+            "missInteractions": true,
+            "memory": true
+          }
+        }
+      }
+    }
+  ]
+}

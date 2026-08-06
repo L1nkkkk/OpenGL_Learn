@@ -1,0 +1,104 @@
+﻿{
+    "schemaVersion":  1,
+    "valid":  true,
+    "createdUtc":  "2026-08-05T02:55:16.0300694Z",
+    "protocolSha256":  "2084DF5EC28AD4AAFEA925D13DFE6EADCC09346252154421B205D7F2377EB1F0",
+    "executableSha256":  "736DD47EBD3362714CC4C8E654594B7646ED55D36A5B6CA4CEC7AFEC83125235",
+    "renderDocVersion":  "1.45.0",
+    "case":  "cached N=512 R=3 Cluster16",
+    "rdc":  "renderdoc\\captures\\cached-n0512-r030-cluster16_capture.rdc",
+    "replay":  "renderdoc\\replay\\cached-n0512-r030-cluster16-replay.json",
+    "analysisScriptSha256":  "EB9AAE5DCB0DDAA28D9BB283C2C630F4509F6B79EC5020DE1BC90513D4F8DC6B",
+    "files":  [
+                  {
+                      "path":  "renderdoc\\captures\\cached-n0512-r030-cluster16_capture.rdc",
+                      "bytes":  343473250,
+                      "sha256":  "6F615A62D5CE97661F830BC832C9712163F6592C111EC6584330EC5DE1C0935C"
+                  },
+                  {
+                      "path":  "renderdoc\\diagnostics\\cached-n0512-r030-cluster16.json",
+                      "bytes":  104395,
+                      "sha256":  "D2BD523C83C10605AD621346A9DA0B1A414F095EBF4ADEB30BB5A33A9B66411F"
+                  },
+                  {
+                      "path":  "renderdoc\\images\\cached-n0512-r030-cluster16-app.ppm",
+                      "bytes":  6220817,
+                      "sha256":  "3C03514C0BA286939ECA765ACC25E807266B87BB77BC45DD7936FBCBBF00375B"
+                  },
+                  {
+                      "path":  "renderdoc\\images\\cached-n0512-r030-cluster16-thumbnail.png",
+                      "bytes":  2964175,
+                      "sha256":  "18F4F6E3172BE59A65693234C78F821FD7BEA37A2A59F38F373FC33D34602D15"
+                  },
+                  {
+                      "path":  "renderdoc\\logs\\capture.stderr.log",
+                      "bytes":  83,
+                      "sha256":  "BB051BDA5AA14363E86AB6FD9E71AFEF5D9D7D92671571A610ED7F27BAA711E2"
+                  },
+                  {
+                      "path":  "renderdoc\\logs\\capture.stdout.log",
+                      "bytes":  30249,
+                      "sha256":  "3BEBCBF0CD5B2541BF693C83C038B48D8DDE3796058692BED4D245BEC47C39C4"
+                  },
+                  {
+                      "path":  "renderdoc\\logs\\qrenderdoc-analysis-rerun.log",
+                      "bytes":  0,
+                      "sha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                  },
+                  {
+                      "path":  "renderdoc\\logs\\qrenderdoc-analysis-rerun.stderr.log",
+                      "bytes":  0,
+                      "sha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                  },
+                  {
+                      "path":  "renderdoc\\logs\\qrenderdoc-analysis-rerun.stdout.log",
+                      "bytes":  0,
+                      "sha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                  },
+                  {
+                      "path":  "renderdoc\\logs\\qrenderdoc-analysis-rerun2.stderr.log",
+                      "bytes":  0,
+                      "sha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                  },
+                  {
+                      "path":  "renderdoc\\logs\\qrenderdoc-analysis-rerun2.stdout.log",
+                      "bytes":  0,
+                      "sha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                  },
+                  {
+                      "path":  "renderdoc\\logs\\qrenderdoc-analysis.stderr.log",
+                      "bytes":  0,
+                      "sha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                  },
+                  {
+                      "path":  "renderdoc\\logs\\qrenderdoc-analysis.stdout.log",
+                      "bytes":  0,
+                      "sha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                  },
+                  {
+                      "path":  "renderdoc\\logs\\renderdoccmd-replay.stderr.log",
+                      "bytes":  0,
+                      "sha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                  },
+                  {
+                      "path":  "renderdoc\\logs\\renderdoccmd-replay.stdout.log",
+                      "bytes":  232,
+                      "sha256":  "94731A2EEA5A8D3714DB3D6EFCFAABEB583E86A4D1539FE29AFEDC06DB3DB6FF"
+                  },
+                  {
+                      "path":  "renderdoc\\logs\\thumbnail.stderr.log",
+                      "bytes":  0,
+                      "sha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                  },
+                  {
+                      "path":  "renderdoc\\logs\\thumbnail.stdout.log",
+                      "bytes":  448,
+                      "sha256":  "A7A541D8D2F0BC7B003EFACD39478BD886FBC5DFD33CC430B0D3931E761CFC4A"
+                  },
+                  {
+                      "path":  "renderdoc\\replay\\cached-n0512-r030-cluster16-replay.json",
+                      "bytes":  22359,
+                      "sha256":  "95749074063CC18A77712230AEBD2ACEAA1D27584D1CA3400A4F2BE35D5EA19D"
+                  }
+              ]
+}

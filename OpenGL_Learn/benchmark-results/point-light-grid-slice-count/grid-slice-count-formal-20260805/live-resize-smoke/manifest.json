@@ -1,0 +1,39 @@
+﻿{
+    "schemaVersion":  1,
+    "success":  true,
+    "executableSha256":  "3CB1CA6986DCF27DA90A9AC4F8988BFD71D172A250498ABE2B9C0CA760588BAB",
+    "processId":  0,
+    "windowHandle":  0,
+    "requestedInitialResolution":  [
+                                       640,
+                                       360
+                                   ],
+    "resizeSequence":  [
+                           [
+                               800,
+                               450
+                           ],
+                           [
+                               1024,
+                               576
+                           ]
+                       ],
+    "finalResolution":  [
+                            1008,
+                            537
+                        ],
+    "finalGridDimensions":  [
+                                63,
+                                34,
+                                8
+                            ],
+    "expectedLogicalCells":  17136,
+    "logicalCells":  17136,
+    "sliceCount":  8,
+    "buildCount":  3,
+    "cacheHitCount":  7998,
+    "csrSignature":  "0x236a8d4bd874d440",
+    "remainingRendererProcesses":  0,
+    "resultSha256":  "7D425C6B2516E88DE9FDFBB91FA673434B98943EF07A690246020F1B61DDEB63",
+    "captureSha256":  "1A080334454533BC58AE36834D6230D20DB4A2DEC784088638B05758A4D545B3"
+}

@@ -53,6 +53,26 @@ struct RenderStats {
 	std::uint64_t culledMeshes = 0;
 	std::uint64_t opaqueMeshes = 0;
 	std::uint64_t transparentMeshes = 0;
+	std::uint64_t pointLightsTotal = 0;
+	std::uint64_t pointLightsActive = 0;
+	std::uint64_t pointLightsSubmitted = 0;
+	std::uint64_t pointLightsCulled = 0;
+	std::uint64_t pointLightBoundsRect = 0;
+	std::uint64_t pointLightBoundsOutside = 0;
+	std::uint64_t pointLightBoundsFullscreenFallback = 0;
+	std::uint64_t pointLightFallbackCameraInside = 0;
+	std::uint64_t pointLightFallbackNearPlane = 0;
+	std::uint64_t pointLightFallbackInvalid = 0;
+	std::uint64_t pointLightVolumeCount = 0;
+	std::uint64_t pointLightScreenCount = 0;
+	std::uint64_t pointLightStencilDraws = 0;
+	std::uint64_t pointLightLightingVolumeDraws = 0;
+	std::uint64_t pointLightScreenDraws = 0;
+	std::uint64_t pointLightRectPixelArea = 0;
+	std::uint64_t pointLightStencilClearPixelArea = 0;
+	std::uint64_t stencilClears = 0;
+	std::uint64_t pointLightStencilClears = 0;
+	std::uint64_t fixedStencilClears = 0;
 	std::uint64_t uiDrawCalls = 0;
 	std::uint64_t uiVertices = 0;
 	std::uint64_t uiIndices = 0;
@@ -124,6 +144,26 @@ public:
 	void EndGpuScope(const GpuScopeToken& token);
 
 	void RecordDraw(unsigned int primitiveMode, std::uint64_t vertexCount, std::uint64_t instanceCount = 1);
+	void SetDeferredPointLightStats(
+		std::uint64_t total,
+		std::uint64_t active,
+		std::uint64_t submitted,
+		std::uint64_t culled);
+	void SetDeferredPointLightPathStats(
+		std::uint64_t boundsRect,
+		std::uint64_t boundsOutside,
+		std::uint64_t boundsFullscreenFallback,
+		std::uint64_t fallbackCameraInside,
+		std::uint64_t fallbackNearPlane,
+		std::uint64_t fallbackInvalid,
+		std::uint64_t volumeCount,
+		std::uint64_t screenCount,
+		std::uint64_t stencilDraws,
+		std::uint64_t lightingVolumeDraws,
+		std::uint64_t screenDraws,
+		std::uint64_t rectPixelArea,
+		std::uint64_t stencilClearPixelArea);
+	void RecordStencilClear(bool pointLightPhase = false);
 	void RecordShaderBind();
 	void RecordUniformUpdate();
 	void RecordUniformLocationLookup(bool cacheHit);
@@ -167,7 +207,9 @@ private:
 	// Keep enough timestamp pairs in flight for benchmark runs without forcing
 	// a synchronous read when the driver queues several frames. Fixed-scene
 	// captures still reject any zone whose sample count is incomplete.
-	static constexpr std::size_t kGpuQueryLatency = 16;
+	// Keep enough timestamp pairs in flight for 1080p SSAO runs without
+	// dropping a zone when the GPU temporarily trails the CPU submission loop.
+	static constexpr std::size_t kGpuQueryLatency = 64;
 	static constexpr std::size_t kFrameHistorySize = 240;
 
 	struct GpuQuerySlot {

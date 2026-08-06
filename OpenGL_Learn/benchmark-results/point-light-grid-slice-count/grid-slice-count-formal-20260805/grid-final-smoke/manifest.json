@@ -1,0 +1,66 @@
+﻿{
+    "schemaVersion":  1,
+    "generatedUtc":  "2026-08-05T13:25:45.0304747Z",
+    "executable":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\x64\\Release\\OpenGL_Learn.exe",
+    "executableSha256":  "3CB1CA6986DCF27DA90A9AC4F8988BFD71D172A250498ABE2B9C0CA760588BAB",
+    "records":  [
+                    {
+                        "name":  "legacy-tile16",
+                        "mode":  "tile16",
+                        "explicitSlices":  null,
+                        "runtimeSlices":  1,
+                        "csrSignature":  "0x0de585affa19a1e3",
+                        "imageSha256":  "6C7455D59BC852F3E91940EF0271FA25A9C3E0486AD4EF072209ED3C569F63C7",
+                        "exitCode":  0,
+                        "success":  true
+                    },
+                    {
+                        "name":  "explicit-s01",
+                        "mode":  "tile16",
+                        "explicitSlices":  1,
+                        "runtimeSlices":  1,
+                        "csrSignature":  "0x0de585affa19a1e3",
+                        "imageSha256":  "6C7455D59BC852F3E91940EF0271FA25A9C3E0486AD4EF072209ED3C569F63C7",
+                        "exitCode":  0,
+                        "success":  true
+                    },
+                    {
+                        "name":  "legacy-cluster16",
+                        "mode":  "cluster16",
+                        "explicitSlices":  null,
+                        "runtimeSlices":  16,
+                        "csrSignature":  "0xbddf6e2972b4493a",
+                        "imageSha256":  "6C7455D59BC852F3E91940EF0271FA25A9C3E0486AD4EF072209ED3C569F63C7",
+                        "exitCode":  0,
+                        "success":  true
+                    },
+                    {
+                        "name":  "explicit-s16",
+                        "mode":  "cluster16",
+                        "explicitSlices":  16,
+                        "runtimeSlices":  16,
+                        "csrSignature":  "0xbddf6e2972b4493a",
+                        "imageSha256":  "6C7455D59BC852F3E91940EF0271FA25A9C3E0486AD4EF072209ED3C569F63C7",
+                        "exitCode":  0,
+                        "success":  true
+                    },
+                    {
+                        "name":  "explicit-s08",
+                        "mode":  "cluster16",
+                        "explicitSlices":  8,
+                        "runtimeSlices":  8,
+                        "csrSignature":  "0xbce4b37c729983d8",
+                        "imageSha256":  "6C7455D59BC852F3E91940EF0271FA25A9C3E0486AD4EF072209ED3C569F63C7",
+                        "exitCode":  0,
+                        "success":  true
+                    }
+                ],
+    "endpointCompatibility":  {
+                                  "tileImageExact":  true,
+                                  "tileCsrExact":  true,
+                                  "clusterImageExact":  true,
+                                  "clusterCsrExact":  true
+                              },
+    "remainingRendererProcesses":  0,
+    "success":  true
+}
