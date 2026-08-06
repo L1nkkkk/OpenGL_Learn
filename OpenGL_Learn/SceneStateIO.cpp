@@ -13,8 +13,10 @@ using rapidjson::Document;
 using rapidjson::Value;
 
 namespace {
+	constexpr int kCurrentSceneVersion = 3;
 	std::queue<std::string> g_pendingModelJsonQueue;
 	int g_totalAsyncModelCount = 0;
+	int g_pendingSceneVersion = kCurrentSceneVersion;
 
 	std::string SerializeJsonValue(const Value& v) {
 		rapidjson::StringBuffer sb;
@@ -134,7 +136,7 @@ namespace {
 		return MaterialPropertyType::Int;
 	}
 
-	void ApplyModelEntry(Scene& scene, const Value& m) {
+	void ApplyModelEntry(Scene& scene, const Value& m, int sceneVersion) {
 		if (!m.IsObject() || !m.HasMember("name") || !m["name"].IsString()) return;
 		const std::string modelName = m["name"].GetString();
 
@@ -228,6 +230,20 @@ namespace {
 			if (idx < 0 || idx >= static_cast<int>(meshes.size())) continue;
 			Material* mat = meshes[static_cast<size_t>(idx)].material_ptr;
 			if (!mat) continue;
+			const auto& importedProperties = mat->GetProperties();
+			const auto importedUseCutoff =
+				importedProperties.find("useAlphaCutoff");
+			const auto importedCutoff = importedProperties.find("alphaCutoff");
+			const bool importedAlphaCutout =
+				importedUseCutoff != importedProperties.end() &&
+				importedUseCutoff->second.type == MaterialPropertyType::Bool &&
+				importedUseCutoff->second.scalarValue.boolValue &&
+				importedCutoff != importedProperties.end() &&
+				importedCutoff->second.type == MaterialPropertyType::Float &&
+				importedCutoff->second.scalarValue.floatValue > 0.0f;
+			const RenderState importedRenderState = mat->GetRenderState();
+			const bool migrateImportedAlphaCutout =
+				sceneVersion < kCurrentSceneVersion && importedAlphaCutout;
 			if (mm.HasMember("renderState") && mm["renderState"].IsObject()) {
 				const auto& rsIn = mm["renderState"];
 				RenderState rs = mat->GetRenderState();
@@ -236,6 +252,10 @@ namespace {
 				if (rsIn.HasMember("stencilTest")) rs.stencilTest = rsIn["stencilTest"].GetBool();
 				if (rsIn.HasMember("blendMode")) rs.blendMode = static_cast<BlendMode>(rsIn["blendMode"].GetInt());
 				if (rsIn.HasMember("cullMode")) rs.cullMode = static_cast<CullMode>(rsIn["cullMode"].GetInt());
+				if (migrateImportedAlphaCutout &&
+					importedRenderState.cullMode == CullMode::None) {
+					rs.cullMode = CullMode::None;
+				}
 				mat->SetRenderState(rs);
 			}
 			if (mm.HasMember("properties") && mm["properties"].IsObject()) {
@@ -261,7 +281,20 @@ namespace {
 						default: break;
 						}
 					}
-					mat->AddProperty(it->name.GetString(), p);
+					const std::string propertyName = it->name.GetString();
+					if (migrateImportedAlphaCutout &&
+						propertyName == "useAlphaCutoff" &&
+						p.type == MaterialPropertyType::Bool &&
+						!p.scalarValue.boolValue) {
+						continue;
+					}
+					if (migrateImportedAlphaCutout &&
+						propertyName == "alphaCutoff" &&
+						p.type == MaterialPropertyType::Float &&
+						p.scalarValue.floatValue <= 0.0f) {
+						continue;
+					}
+					mat->AddProperty(propertyName, p);
 				}
 			}
 		}
@@ -278,7 +311,7 @@ bool SceneStateIO::Save(const Scene& scene, const Camera& camera, const std::str
 	doc.SetObject();
 	auto& alloc = doc.GetAllocator();
 
-	doc.AddMember("version", 2, alloc);
+	doc.AddMember("version", kCurrentSceneVersion, alloc);
 
 	Value cameraObj(rapidjson::kObjectType);
 	Value cpos, cfront, cup;
@@ -507,6 +540,10 @@ bool SceneStateIO::Load(Scene& scene, Camera& camera, const std::string& path) {
 	Document doc;
 	doc.Parse(text.c_str());
 	if (doc.HasParseError() || !doc.IsObject()) return false;
+	const int sceneVersion =
+		doc.HasMember("version") && doc["version"].IsInt()
+		? doc["version"].GetInt()
+		: 1;
 
 	if (doc.HasMember("camera") && doc["camera"].IsObject()) {
 		const auto& c = doc["camera"];
@@ -621,7 +658,7 @@ bool SceneStateIO::Load(Scene& scene, Camera& camera, const std::string& path) {
 
 	if (doc.HasMember("models") && doc["models"].IsArray()) {
 		for (const auto& m : doc["models"].GetArray()) {
-			ApplyModelEntry(scene, m);
+			ApplyModelEntry(scene, m, sceneVersion);
 		}
 	}
 	return true;
@@ -639,6 +676,10 @@ bool SceneStateIO::LoadAsync(Scene& scene, Camera& camera, const std::string& pa
 	Document doc;
 	doc.Parse(text.c_str());
 	if (doc.HasParseError() || !doc.IsObject()) return false;
+	g_pendingSceneVersion =
+		doc.HasMember("version") && doc["version"].IsInt()
+		? doc["version"].GetInt()
+		: 1;
 
 	// 先复用同步加载逻辑中的 camera/lights 恢复，保证行为一致
 	// 这里直接调用一次同步逻辑处理 lights/camera，然后仅对 models 改为分帧。
@@ -738,7 +779,7 @@ bool SceneStateIO::LoadAsync(Scene& scene, Camera& camera, const std::string& pa
 				++g_totalAsyncModelCount;
 			}
 			else {
-				ApplyModelEntry(scene, m);
+				ApplyModelEntry(scene, m, g_pendingSceneVersion);
 			}
 		}
 	}
@@ -786,6 +827,7 @@ void SceneStateIO::CancelAsyncLoads()
 		g_pendingModelJsonQueue.pop();
 	}
 	g_totalAsyncModelCount = 0;
+	g_pendingSceneVersion = kCurrentSceneVersion;
 }
 
 void SceneStateIO::UpdateAsyncLoads(Scene& scene, int maxModelsPerFrame) {
@@ -796,7 +838,7 @@ void SceneStateIO::UpdateAsyncLoads(Scene& scene, int maxModelsPerFrame) {
 		Document mdoc;
 		mdoc.Parse(oneModelJson.c_str());
 		if (!mdoc.HasParseError() && mdoc.IsObject()) {
-			ApplyModelEntry(scene, mdoc);
+			ApplyModelEntry(scene, mdoc, g_pendingSceneVersion);
 		}
 	}
 }

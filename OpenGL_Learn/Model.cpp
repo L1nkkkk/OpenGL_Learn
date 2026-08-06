@@ -38,6 +38,29 @@ namespace {
 		return directoryName == "bistro";
 	}
 
+	bool ContainsCaseInsensitive(
+		const std::string& value,
+		const std::string& needle)
+	{
+		std::string lowerValue = value;
+		std::string lowerNeedle = needle;
+		std::transform(
+			lowerValue.begin(),
+			lowerValue.end(),
+			lowerValue.begin(),
+			[](unsigned char character) {
+				return static_cast<char>(std::tolower(character));
+			});
+		std::transform(
+			lowerNeedle.begin(),
+			lowerNeedle.end(),
+			lowerNeedle.begin(),
+			[](unsigned char character) {
+				return static_cast<char>(std::tolower(character));
+			});
+		return lowerValue.find(lowerNeedle) != std::string::npos;
+	}
+
 	std::vector<Texture> ReclassifyTextures(
 		const std::vector<Texture>& source,
 		const std::string& typeName)
@@ -760,7 +783,12 @@ void Model::BuildMeshLists()
 		}
 		if (isCutout) {
 			isTransparent = false;
-			mat->SetRenderState({ true,true,false,BlendMode::None,CullMode::Back });
+			RenderState cutoutState = mat->GetRenderState();
+			cutoutState.depthTest = true;
+			cutoutState.depthWrite = true;
+			cutoutState.stencilTest = false;
+			cutoutState.blendMode = BlendMode::None;
+			mat->SetRenderState(cutoutState);
 		}
 		else if (isTransparent) {
 			mat->SetRenderState({ true,false,false,BlendMode::AlphaBlend,CullMode::None});
@@ -953,6 +981,18 @@ void Model::prosessMaterial(aiMaterial* mat,Material* material)
 	aiColor3D emissiveColor(0.0f, 0.0f, 0.0f);
 	float shininess = 0.0f;
 	float opacity = 1.0f;
+	aiString importedMaterialName;
+	mat->Get(AI_MATKEY_NAME, importedMaterialName);
+	const bool usesBistroConvention =
+		UsesAmazonBistroMaterialConvention(directory);
+	const bool bistroDoubleSidedMaterial =
+		usesBistroConvention &&
+		ContainsCaseInsensitive(importedMaterialName.C_Str(), ".doublesided");
+	int assimpTwoSided = 0;
+	const bool importedDoubleSided =
+		bistroDoubleSidedMaterial ||
+		(mat->Get(AI_MATKEY_TWOSIDED, assimpTwoSided) == AI_SUCCESS &&
+			assimpTwoSided != 0);
 	if (mat->Get(AI_MATKEY_COLOR_AMBIENT, color) == AI_SUCCESS)
 		material->AddProperty("ambient", MaterialProperty::CreateVec3(glm::vec3(color.r, color.g, color.b)));
 	if (mat->Get(AI_MATKEY_COLOR_DIFFUSE, diffuseColor) == AI_SUCCESS)
@@ -1064,8 +1104,6 @@ void Model::prosessMaterial(aiMaterial* mat,Material* material)
 		if (emissiveTextures.empty()) {
 			emissiveTextures = loadMaterialTextures(mat, aiTextureType_EMISSIVE, "texture_emissive");
 		}
-		const bool usesBistroConvention =
-			UsesAmazonBistroMaterialConvention(directory);
 		if (usesBistroConvention && !specularTextures.empty()) {
 			// Bistro's texture named "Specular" is actually an ORM payload:
 			// R = occlusion amount, G = roughness, B = metalness.
@@ -1157,11 +1195,20 @@ void Model::prosessMaterial(aiMaterial* mat,Material* material)
 		material->AddProperty("opacity", MaterialProperty::CreateFloat(opacity));
 	}
 	// OBJ map_d is often a separate grayscale image rather than alpha embedded
-	// in the diffuse texture. Enable cutout whenever that mask is present.
+	// in the diffuse texture. Amazon Bistro instead stores foliage coverage in
+	// BaseColor alpha and identifies those materials with a .DoubleSided suffix.
 	const bool hasOpacityTexture = !opacityTextures.empty();
-	bool autoCutout = opacity < 0.999f || hasOpacityTexture;
+	const bool hasBistroBaseColorCutout =
+		bistroDoubleSidedMaterial && !diffuseTextures.empty();
+	const bool autoCutout =
+		opacity < 0.999f || hasOpacityTexture || hasBistroBaseColorCutout;
 	material->AddProperty("useAlphaCutoff", MaterialProperty::CreateBool(autoCutout));
 	material->AddProperty("alphaCutoff", MaterialProperty::CreateFloat(autoCutout ? 0.4f : 0.0f, 0.0f, 1.0f, 0.01f));
+	if (importedDoubleSided) {
+		RenderState renderState = material->GetRenderState();
+		renderState.cullMode = CullMode::None;
+		material->SetRenderState(renderState);
+	}
 
 	material->AddProperty("useBloom", MaterialProperty::CreateBool(false));
 }
