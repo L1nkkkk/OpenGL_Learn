@@ -1,115 +1,213 @@
-# OpenGL Learn
+# OpenGL Learn · Render Lab
 
-基于 OpenGL 3.3 的 3D 渲染学习项目，支持前向渲染与延迟渲染，包含完整的编辑器界面和常用光照、后处理功能。
+一个基于 **OpenGL 3.3 / C++17** 的交互式渲染实验室。项目已经不只是教程代码集合：它同时包含可操作的渲染编辑器、Forward / Deferred 渲染器、经典大场景导入，以及带截图、GPU 计时和资源遥测的可重复实验工具。
 
-## 功能特性
+![OpenGL Learn Render Lab](OpenGL_Learn/docs/editor-ui-ab-font.png)
+
+## 项目定位
+
+这个仓库主要用于三类工作：
+
+- **实时渲染实现**：PBR、IBL、多光源、阴影、SSAO、Bloom、MSAA 等功能；
+- **编辑器内调试**：场景、材质、光源、FBO Attachment、Profiler 和确定性运动时间轴；
+- **可复现实验**：固定相机与工作负载、独立进程采样、CPU/GPU Zone、P95/P99、截图和资源生命周期验收。
+
+## 核心能力
 
 ### 渲染管线
-- **前向渲染 / 延迟渲染**：可切换，延迟渲染写入 GBuffer（位置、法线、Albedo、材质参数、Emissive）
-- **光体积优化**：点光源采用模板缓冲 + 球体几何体，仅对光体积内像素计算光照
-- **多 Pass 架构**：Geometry Pass → Lighting Pass → Forward（天空盒、透明、轮廓线）
 
-### 光照
-- 平行光、点光源、聚光灯
-- PCF / PCSS 软阴影
-- 点光源立方体贴图阴影
-- Metallic-roughness PBR（Cook-Torrance / GGX / Smith / Schlick）
-- Image-based lighting：irradiance cubemap、prefilter cubemap、BRDF LUT
-- PBR 实现、性能与验收详见 [OpenGL_Learn/PBR_IBL.md](OpenGL_Learn/PBR_IBL.md)
+- 可在运行时切换 **Forward** 与 **Deferred**；
+- Deferred Geometry / Lighting / Forward Composite 多 Pass 架构；
+- 点光源模板光体积与全屏/体积光照路径；
+- Frustum Culling、不透明物体排序与 GL 状态缓存；
+- 多 Render Target 调试，可直接检查 GBuffer、SSAO 和后处理结果。
 
-### 后处理
-- HDR
-- 伽马校正
-- 泛光（Bloom）
-- 抗锯齿（Default / MSAA）
-- AO（Ambient Occlusion）
-  - 已实现 **SSAO Render Pass**：基于延迟渲染 GBuffer 的 `gPosition + gNormal`，使用 kernel + noise 生成遮挡因子。
-  - SSAO 结果已接入延迟光照合成（`defer` / `deferDirLightVolume` / `lightVolume`）。
-  - 当前采用 **AO 仅作用 ambient 分量** 的策略，避免对高光与直接光照造成过度压暗。
-  - 可在 Viewport 的 FBO 调试视图中选择 `SSAORenderPass` 观察灰度遮挡图（白=无遮挡，暗=遮挡）。
+### 光照、材质与后处理
 
-### 编辑器界面（ImGui + Docking）
-- 场景面板：光源、模型、材质管理
-- 设置面板：渲染模式、光照、后处理参数
-- 视口：多 FBO 调试、宽高比选择
-- 资源浏览器：Models / Materials / Shaders
-- 材质 XML 编辑器
+- Directional、Point、Spot 三类光源；
+- Metallic-Roughness PBR：Cook-Torrance、GGX、Smith、Schlick；
+- IBL：Irradiance Cubemap、Prefilter Cubemap、BRDF LUT；
+- Phong、PBR、Mirror、Explode 等材质/着色路径；
+- HDR、Gamma、Bloom、MSAA；
+- SSAO Full Resolution，以及实验性的 Half Resolution + Bilateral Upsample；
+- Assimp OBJ/MTL 导入，支持 Base Color、Normal、Metallic、Roughness、AO、Emissive 和 Alpha Cutout；
+- 已适配 Sponza 的独立 `map_d` 遮罩，以及 Amazon Bistro 的 BC5 Normal、Packed ORM、Emissive 和 BaseColor Alpha 植被材质约定。
 
-### 模型与材质
-- Assimp 加载 OBJ 模型
-- XML 材质系统，支持热重载
-- PBR / Phong / Mirror / Grass / Explode 等着色器
-- Assimp 导入 base color、normal、metallic、roughness、AO、emissive 材质数据
-- 材质面板支持按 Mesh 实时切换贴图（系统文件浏览器）
+### 阴影系统
 
-### 场景存档与加载优化
-- Scene JSON 按模型来源区分：`file`（文件模型）/`generated`（程序生成模型）
-- 持久化并恢复模型状态：transform、active、shader、outline、材质参数
-- 持久化并恢复灯光参数：Point/Direction/Spot（含阴影开关与衰减参数）
-- 分帧异步恢复文件模型，降低启动卡顿峰值
-- 启动与 UI 显示模型加载进度（Settings + 窗口标题）
-- 纹理缓存与模型网格缓存，减少重复加载带来的内存占用
+- Directional / Spot 2D Shadow Map 与 Point Cubemap Shadow；
+- Hard、PCF、PCSS 过滤；
+- Per-Light Dirty Cache；
+- Point Light 空间关联与 Per-Face 增量缓存；
+- 完整失效规则、资源释放遥测和确定性 Motion Timeline A/B 工作负载。
+
+### 编辑器
+
+- ImGui Docking 布局与中文字体回退；
+- Scene Browser：新建、打开、保存、另存为和 Last Session 恢复；
+- Classic Scene 安装检测与一键载入；
+- Renderer、Model、Material Inspector；
+- Shader / Material 热重载；
+- Assets Browser：Models、Materials、Shaders；
+- Profiler：Frame、Zones、Render、Memory；
+- Motion Timeline：预览阴影缓存命中、更新和 Point Face 提交。
+
+### 性能与验收基础设施
+
+- 无交互 Runtime Benchmark，固定 warm-up/sample 并自动退出；
+- CPU/GPU Frame 与 Zone 原始样本、Median、P95、P99；
+- Draw、Triangle、Uniform、状态切换、缓存命中等渲染计数；
+- Process Working Set / Private Bytes，以及 Texture、Mesh、Render Target 资源遥测；
+- Classic Scene、Shadow、SSAO、Opaque Sorting 等自动化实验脚本；
+- 画面截图、差分图、JSON、CSV 和 HTML 报告。
+
+## 快速开始
+
+### 环境要求
+
+- Windows 10/11 x64；
+- Visual Studio 2022，安装“使用 C++ 的桌面开发”和 v143 工具集；
+- 支持 OpenGL 3.3 的 GPU 与驱动；
+- C++17；
+- PowerShell 5.1+；
+- 运行 Classic Scene 准备流程时需要 Python + Pillow，以及 Assimp CLI。
+
+### 第三方依赖
+
+仓库没有完整提交本地二进制依赖。当前工程默认使用以下布局：
+
+```text
+workspace/
+├── OpenGL_Learn/                 # 本仓库
+│   ├── includes/                 # GLAD / GLFW / GLM / Assimp 头文件
+│   ├── libs/                     # GLFW / Assimp 库与 DLL
+│   └── OpenGL_Learn/
+│       └── OpenGL_Learn.vcxproj
+└── imgui-docking/                # Dear ImGui docking 分支
+```
+
+当前链接名称：
+
+- Debug：`glfw3d.lib`、`assimp-vc143-mtd.lib`；
+- Release：`glfw3.lib`、`assimp-vc143-mt.lib`；
+- 系统库：`opengl32.lib`。
+
+> 新机器首次构建前，请检查 [`OpenGL_Learn.vcxproj`](OpenGL_Learn/OpenGL_Learn.vcxproj) 中的 Include、Library、`glad.c` 和 `imgui-docking` 路径。工程仍包含本机相对路径约定，并不是开箱即用的包管理配置。
+
+### 编译
+
+在 **Developer PowerShell for VS 2022** 中，可以直接构建已跟踪的 Visual C++ Project：
+
+```powershell
+msbuild .\OpenGL_Learn\OpenGL_Learn.vcxproj `
+  /m /p:Configuration=Release /p:Platform=x64
+```
+
+也可以在 Visual Studio 中打开 `OpenGL_Learn/OpenGL_Learn.vcxproj`，或将它加入本地 Solution 后构建。
+
+> 仓库目前没有跟踪根目录的 `OpenGL_Learn.sln`，但现有自动化脚本仍默认从该 Solution 构建，并使用根目录 `x64/Release/`。若要直接运行这些脚本，请先在仓库根目录创建同名 Solution，再加入 `OpenGL_Learn/OpenGL_Learn.vcxproj`。后续应将这个构建入口清理并纳入版本控制。
+
+### 运行
+
+资源路径以 `OpenGL_Learn/` 为工作目录。直接构建 vcxproj 时可以这样启动：
+
+```powershell
+Set-Location .\OpenGL_Learn
+.\x64\Release\OpenGL_Learn.exe
+```
+
+如果通过仓库根目录的本地 Solution 构建，输出可能位于根目录 `x64/`；此时仍应保持 `OpenGL_Learn/` 为工作目录，再按实际输出路径启动程序。
+
+### 基本操作
+
+- `M`：进入/退出摄像机控制；
+- `W/A/S/D`：移动摄像机；
+- 鼠标：在摄像机控制模式下调整视角；
+- `Esc`：退出。
+
+## 经典场景
+
+经典场景资源不提交到 Git。来源、哈希、相机和预期三角形数量记录在 [`classic-scenes.manifest.json`](OpenGL_Learn/classic-scenes.manifest.json)。
+
+| 场景 | 预期三角形 | 用途 |
+|---|---:|---|
+| Crytek Sponza | 262,267 | 经典全局光照/材质测试 |
+| Amazon Lumberyard Bistro Exterior | 2,832,120 | 制作级室外场景 |
+| Amazon Lumberyard Bistro Interior | 1,046,609 | 制作级室内场景 |
+| San Miguel 2.1 Low-Poly | 5,617,451 | 大型研究场景 |
+
+从 `OpenGL_Learn/` 目录运行完整准备与验收：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File .\tools\Test-ClassicScenes.ps1
+```
+
+首次运行会下载并校验官方归档、准备 Bistro OBJ/纹理、构建 Release x64，并为每个场景生成截图与 JSON 报告。生成的资源、缓存和 `benchmark-results/` 均被 Git 忽略。详细协议见 [`CLASSIC_SCENE_VALIDATION.md`](OpenGL_Learn/CLASSIC_SCENE_VALIDATION.md)。
+
+## Runtime Benchmark
+
+已有 `saved/last_scene.json` 时，可在 `OpenGL_Learn/` 下运行：
+
+```powershell
+.\x64\Release\OpenGL_Learn.exe `
+  --performance-benchmark `
+  --benchmark-label local-check `
+  --benchmark-output benchmark-results\local-check.json
+```
+
+默认执行 300 帧 warm-up 和 1200 帧采样。它会冻结输入、请求 `glfwSwapInterval(0)`、排空 GPU Timestamp Query、写入完整 JSON 后自动退出。正式优化结论必须遵循 [`PERFORMANCE_OPTIMIZATION_PROTOCOL.md`](OpenGL_Learn/PERFORMANCE_OPTIMIZATION_PROTOCOL.md) 的平衡 A/B 流程，不能只比较一次 FPS。
 
 ## 项目结构
 
-```
+```text
 OpenGL_Learn/
-├── OpenGL_Learn/           # 主工程
-│   ├── shaders/            # GLSL 着色器
-│   ├── models/             # 模型资源
-│   ├── materials/          # 材质 XML
-│   ├── DeferRenderPass.*   # 延迟渲染
-│   ├── ForwardRenderPass.* # 前向渲染
-│   ├── ImageBasedLighting.* # IBL 预计算与资源生命周期
-│   ├── PostprocessRenderPass.*
-│   ├── Scene.*             # 场景管理
-│   ├── Model.* / Light.*   # 模型与光源
-│   ├── mygui.h             # ImGui 界面
-│   └── ...
-├── includes/               # 第三方头文件
-├── libs/                   # 第三方库
-└── OpenGL_Learn.sln
+├── README.md
+└── OpenGL_Learn/
+    ├── OpenGL_Learn.vcxproj
+    ├── test.cpp                       # 程序入口与自动化参数
+    ├── Scene.* / Model.* / Light.*
+    ├── ForwardRenderPass.*
+    ├── DeferRenderPass.*
+    ├── SSAORenderPass.*
+    ├── PostprocessRenderPass.*
+    ├── EditorSceneManager.*
+    ├── EditorMotionTimeline.*
+    ├── shaders/
+    ├── materials/
+    ├── models/
+    ├── tools/                         # 自动化与报告脚本
+    ├── docs/                          # 截图和实验证据
+    └── classic-scenes.manifest.json
 ```
 
-## 依赖
+## 文档导航
 
-- **OpenGL 3.3**：GLAD 加载
-- **GLFW**：窗口与输入
-- **GLM**：数学库
-- **Assimp**：模型加载
-- **ImGui (Docking)**：编辑器 UI
-- **stb_image**：纹理加载
+| 主题 | 文档 |
+|---|---|
+| 架构概览 | [`architecture_overview.html`](OpenGL_Learn/architecture_overview.html) |
+| 编辑器布局与交互 | [`EDITOR_UI_REDESIGN_CN.md`](OpenGL_Learn/EDITOR_UI_REDESIGN_CN.md) |
+| PBR / IBL | [`PBR_IBL.md`](OpenGL_Learn/PBR_IBL.md) |
+| 经典场景验收 | [`CLASSIC_SCENE_VALIDATION.md`](OpenGL_Learn/CLASSIC_SCENE_VALIDATION.md) |
+| Runtime Benchmark | [`RUNTIME_BENCHMARK.md`](OpenGL_Learn/RUNTIME_BENCHMARK.md) |
+| 性能实验规范 | [`PERFORMANCE_OPTIMIZATION_PROTOCOL.md`](OpenGL_Learn/PERFORMANCE_OPTIMIZATION_PROTOCOL.md) |
+| Per-Light 阴影缓存 | [`PER_LIGHT_SHADOW_CACHE_TECHNICAL_PRINCIPLES_CN.md`](OpenGL_Learn/PER_LIGHT_SHADOW_CACHE_TECHNICAL_PRINCIPLES_CN.md) |
+| Point Per-Face 缓存 | [`POINT_SHADOW_CACHE_3WAY_REPORT_CN.md`](OpenGL_Learn/POINT_SHADOW_CACHE_3WAY_REPORT_CN.md) |
+| 阴影运动时间轴 | [`SHADOW_MOTION_TIMELINE_CN.md`](OpenGL_Learn/SHADOW_MOTION_TIMELINE_CN.md) |
+| 内存基准 | [`MEMORY_BENCHMARK.md`](OpenGL_Learn/MEMORY_BENCHMARK.md) |
+| SSAO RenderDoc 验收 | [`SSAO_RENDERDOC_ACCEPTANCE_20260731.md`](OpenGL_Learn/docs/SSAO_RENDERDOC_ACCEPTANCE_20260731.md) |
 
-## 构建
+## 已知限制
 
-### 环境要求
-- Windows 10+
-- Visual Studio 2022（v143 工具集）
-- C++17
+- 当前是 Windows / Visual Studio 工程，尚未提供 CMake 或跨平台构建；
+- Directional Shadow 仍是单张 Shadow Map；CSM 目前只有设计文档，尚未作为完成特性；
+- Classic Scene 验收覆盖静态几何与材质，不覆盖动画、蒙皮、LOD、Streaming 和 Occlusion；
+- 经典场景使用确定性的测试灯光，不复刻原项目的 Lightmap、Probe 和制作级后处理；
+- Bistro DDS 目前会被转换并以未压缩纹理上传。Exterior 的纹理估算约 **4.2 GiB**，Debug 进程的 Private Bytes 可达到约 **5–6 GiB**；这是当前资源管线限制，不代表模型文件损坏；
+- 性能数据只对记录的硬件、驱动、分辨率、提交与实验协议有效。
 
-### 配置
-1. 将 `glm`、`assimp` 头文件放入 `includes/`
-2. 将 `glad.c`、`glfw3.lib`、`assimp-vc143-mtd.lib` 等库放入 `libs/`
-3. 确认 vcxproj 中 `AdditionalIncludeDirectories`、`AdditionalLibraryDirectories` 指向正确路径
-4. ImGui 路径：项目引用 `..\..\imgui-docking\`，请根据本地路径调整
+## 资源与许可
 
-### 编译
-```bash
-# 使用 MSBuild
-msbuild OpenGL_Learn.sln /p:Configuration=Release /p:Platform=x64
-```
+本仓库用于个人图形学习与实验，目前没有单独提交代码许可证。GLFW、GLM、Assimp、Dear ImGui、stb 等第三方组件遵循各自许可证。
 
-或在 Visual Studio 中打开 `OpenGL_Learn.sln` 直接构建。
-
-### 运行
-编译完成后，从 `OpenGL_Learn/x64/Release/` 或 `Debug/` 运行 `OpenGL_Learn.exe`。程序需在可执行文件所在目录或项目根目录找到 `shaders/`、`models/`、`materials/` 等资源路径。
-
-## 操作说明
-
-- **WASD**：摄像机移动
-- **鼠标**：视角控制（按 M 切换鼠标锁定）
-- **ESC**：退出
-
-## 许可证
-
-学习项目，仅供个人使用。
+Sponza、San Miguel 和 Amazon Lumberyard Bistro 不随仓库分发；下载来源、署名、许可说明和 SHA-256 均记录在 [`classic-scenes.manifest.json`](OpenGL_Learn/classic-scenes.manifest.json)。
