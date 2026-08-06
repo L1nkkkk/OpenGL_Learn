@@ -68,6 +68,6 @@
 - 截图阈值：最大通道差 `0`、变化像素 `0`。
 - 源码 Commit：`a298e37e953310364376b631e85840ee2ef353ff`；`gitDirty=false`。
 - 可执行文件 SHA-256：`a0a07672d367fcc74a9a6ec16b6003f821fee69bc062a95fe5fc49514949dd38`。
-- 原始 Manifest：[point-shadow-cache-correctness-1080p-a298e37/manifest.json](benchmark-results/shadow-optimizations/point-shadow-cache-correctness-1080p-a298e37/manifest.json)。
+- 已提交数据汇总：[point-shadow-cache-correctness-summary-cn.json](docs/benchmark-images/shadow-optimizations/point-shadow-cache-correctness-1080p-a298e37/point-shadow-cache-correctness-summary-cn.json)。
 
 结论：关键失效路径均能让 C 在采样前完成必要更新，并最终与 B 的屏幕结果、六面深度内容和 Renderer-owned 资源占用完全一致；未观察到资源失败或保守 fallback。

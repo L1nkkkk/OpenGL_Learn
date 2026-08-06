@@ -24,6 +24,77 @@ namespace {
 		return std::filesystem::exists(path, error);
 	}
 
+	bool UsesAmazonBistroMaterialConvention(const std::string& modelDirectory)
+	{
+		std::string directoryName =
+			std::filesystem::path(modelDirectory).filename().string();
+		std::transform(
+			directoryName.begin(),
+			directoryName.end(),
+			directoryName.begin(),
+			[](unsigned char value) {
+				return static_cast<char>(std::tolower(value));
+			});
+		return directoryName == "bistro";
+	}
+
+	std::vector<Texture> ReclassifyTextures(
+		const std::vector<Texture>& source,
+		const std::string& typeName)
+	{
+		std::vector<Texture> textures = source;
+		for (Texture& texture : textures) {
+			texture.type = typeName;
+		}
+		return textures;
+	}
+
+	std::string BuildCompanionTexturePath(
+		const std::vector<Texture>& baseColorTextures,
+		const std::string& sourceSuffix,
+		const std::string& destinationSuffix)
+	{
+		if (baseColorTextures.empty()) {
+			return {};
+		}
+
+		const std::filesystem::path sourcePath(
+			baseColorTextures.front().path.C_Str());
+		std::string stem = sourcePath.stem().string();
+		std::string lowerStem = stem;
+		std::transform(
+			lowerStem.begin(),
+			lowerStem.end(),
+			lowerStem.begin(),
+			[](unsigned char value) {
+				return static_cast<char>(std::tolower(value));
+			});
+
+		std::string lowerSuffix = sourceSuffix;
+		std::transform(
+			lowerSuffix.begin(),
+			lowerSuffix.end(),
+			lowerSuffix.begin(),
+			[](unsigned char value) {
+				return static_cast<char>(std::tolower(value));
+			});
+		if (lowerStem.size() < lowerSuffix.size() ||
+			lowerStem.compare(
+				lowerStem.size() - lowerSuffix.size(),
+				lowerSuffix.size(),
+				lowerSuffix) != 0) {
+			return {};
+		}
+
+		stem.replace(
+			stem.size() - sourceSuffix.size(),
+			sourceSuffix.size(),
+			destinationSuffix);
+		return (
+			sourcePath.parent_path() /
+			(stem + sourcePath.extension().string())).string();
+	}
+
 	constexpr unsigned int kModelImportFlags =
 		aiProcess_Triangulate |
 		aiProcess_FlipUVs |
@@ -901,7 +972,13 @@ void Model::prosessMaterial(aiMaterial* mat,Material* material)
 		diffuseTextures = loadMaterialTextures(mat, aiTextureType_DIFFUSE, "texture_diffuse");
 	}
 	material->AddProperty("texture_diffuse", MaterialProperty::CreateTexture(diffuseTextures));
-	material->AddProperty("texture_specular", MaterialProperty::CreateTexture(loadMaterialTextures(mat, aiTextureType_SPECULAR, "texture_specular")));
+	auto specularTextures = loadMaterialTextures(
+		mat,
+		aiTextureType_SPECULAR,
+		"texture_specular");
+	material->AddProperty(
+		"texture_specular",
+		MaterialProperty::CreateTexture(specularTextures));
 	auto normalTextures = loadMaterialTextures(mat, aiTextureType_NORMALS, "texture_normal");
 	if (normalTextures.empty()) {
 		// Assimp exposes OBJ map_Bump as HEIGHT for both real height maps and
@@ -987,6 +1064,44 @@ void Model::prosessMaterial(aiMaterial* mat,Material* material)
 		if (emissiveTextures.empty()) {
 			emissiveTextures = loadMaterialTextures(mat, aiTextureType_EMISSIVE, "texture_emissive");
 		}
+		const bool usesBistroConvention =
+			UsesAmazonBistroMaterialConvention(directory);
+		if (usesBistroConvention && !specularTextures.empty()) {
+			// Bistro's texture named "Specular" is actually an ORM payload:
+			// R = occlusion amount, G = roughness, B = metalness.
+			metallicTextures = ReclassifyTextures(
+				specularTextures,
+				"texture_metallic");
+			roughnessTextures = ReclassifyTextures(
+				specularTextures,
+				"texture_roughness");
+			aoTextures = ReclassifyTextures(
+				specularTextures,
+				"texture_ao");
+			// MTL has no metallic/roughness factors for this convention. Unit
+			// factors preserve the authored channel values instead of scaling them
+			// by the legacy Ks/Ns defaults.
+			metallic = 1.0f;
+			roughness = 1.0f;
+		}
+		if (emissiveTextures.empty() && usesBistroConvention) {
+			const std::string companionEmissive = BuildCompanionTexturePath(
+				diffuseTextures,
+				"_BaseColor",
+				"_Emissive");
+			if (!companionEmissive.empty()) {
+				emissiveTextures = loadConventionalTexture(
+					{ companionEmissive },
+					"texture_emissive",
+					true);
+				if (!emissiveTextures.empty() &&
+					emissiveColor.r <= 0.0f &&
+					emissiveColor.g <= 0.0f &&
+					emissiveColor.b <= 0.0f) {
+					emissiveColor = aiColor3D(1.0f, 1.0f, 1.0f);
+				}
+			}
+		}
 		if (metallicTextures.empty()) {
 			metallicTextures = loadConventionalTexture(
 				{ "metallic.png", "metallic.jpg", "metalness.png", "metalness.jpg" },
@@ -1032,6 +1147,9 @@ void Model::prosessMaterial(aiMaterial* mat,Material* material)
 			emissiveColor.g,
 			emissiveColor.b)));
 		material->AddProperty("metallicRoughnessPacked", MaterialProperty::CreateBool(packedMetallicRoughness));
+		material->AddProperty(
+			"occlusionMapStoresOcclusion",
+			MaterialProperty::CreateBool(usesBistroConvention));
 		material->AddProperty("texture_metallic", MaterialProperty::CreateTexture(metallicTextures));
 		material->AddProperty("texture_roughness", MaterialProperty::CreateTexture(roughnessTextures));
 		material->AddProperty("texture_ao", MaterialProperty::CreateTexture(aoTextures));

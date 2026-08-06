@@ -20,7 +20,7 @@ from PIL import Image, ImageChops, ImageDraw, ImageFont
 
 
 VARIANTS = {
-    "A": "A 全局重绘",
+    "A": "A 无缓存全量重绘",
     "B": "B Per-Light",
     "C": "C Per-Light + Per-Face",
 }
@@ -928,6 +928,7 @@ def write_report(
     scene_data: dict[str, Any],
     correctness: dict[str, Any],
 ) -> None:
+    summary_path = output_dir / "point-shadow-cache-3way-summary-cn.json"
     performance_chart = output_dir / "three-way-performance.png"
     work_chart = output_dir / "three-way-work.png"
     histogram_chart = output_dir / "point-face-update-histogram.png"
@@ -985,7 +986,7 @@ def write_report(
             "",
             "| 档位 | 缓存粒度 | 典型行为 |",
             "|---|---|---|",
-            "| A 全局重绘 | 无缓存控制路径 | 每帧更新 Directional、Point、Spot；Point 固定 6 Face |",
+            "| A 无缓存全量重绘 | 无缓存控制路径 | 每帧更新 Directional、Point、Spot；Point 固定 6 Face |",
             "| B Per-Light | 当前灯光级 Revision Cache | Point 移动时只更新 Point，但仍固定 6 Face；Caster Revision 仍可能使多灯失效 |",
             "| C Per-Light + Per-Face | 空间 Caster 签名、Face Dirty/Valid/Required Mask | Point 只绘制 `required & stale` 的 Face，未需求 Face 延迟物化 |",
             "",
@@ -1000,7 +1001,7 @@ def write_report(
             [
                 f"### {scene['displayName']}",
                 "",
-                "| 指标 | A 全局重绘 | B Per-Light | C Per-Face | A→B | B→C | A→C |",
+                "| 指标 | A 无缓存全量重绘 | B Per-Light | C Per-Face | A→B | B→C | A→C |",
                 "|---|---:|---:|---:|---:|---:|---:|",
             ]
         )
@@ -1117,12 +1118,15 @@ def write_report(
             "",
             "性能模式允许未被当前 Receiver 采样的 Face 暂时保留旧内容，但这些 Face 带有无效签名，未来进入 Required Mask 时必须先重建。报告同时运行独立 PCSS 审计：强制六面全部物化，验证 Per-Face 路径最终与 Six-face 基准路径完全收敛。",
             "",
+            "Deferred→Required、Point 移动、局部 Caster、FBO Resize/Replace、Shader Reload 与 SceneTopologyRevision/ABA 的逐项证据见 [Point Shadow Cache 正确性与失效规则审计报告](POINT_SHADOW_CACHE_CORRECTNESS_AUDIT_CN.md)。",
+            "",
             "独立进程截图审计还暴露并修复了一个与阴影缓存无关的可重复性问题：Opaque 批次原先按 Shader/Material 内存地址排序，不同进程可能改变少量共面像素的先后覆盖。现在改为按场景首次出现顺序生成稳定批次键，以下屏幕比较继续使用严格 `0` 像素差门禁，没有放宽容差。",
             "",
             "| 场景 | A/B 屏幕像素 | B/C 屏幕像素 | B 重复运行截图 | Force-All PCSS 最终截图 | PCSS 六面深度 Hash |",
             "|---|---|---|---|---|---|",
         ]
     )
+    audit_montages: list[tuple[str, Path]] = []
     for scene_id, scene in scene_data.items():
         screen = correctness["screenshots"][scene_id]
         audit = correctness["materializedAudit"].get(scene_id, {})
@@ -1134,13 +1138,15 @@ def write_report(
             f"{'六面完全一致' if audit.get('allSixFacesExact') else '未通过/未运行'} |"
         )
         if audit.get("montage"):
-            lines.extend(
-                [
-                    "",
-                    f"![{scene['displayName']} Force-All PCSS 最终截图]("
-                    f"{markdown_path(Path(audit['montage']), report_path)})",
-                ]
-            )
+            audit_montages.append((scene["displayName"], Path(audit["montage"])))
+    for display_name, montage_path in audit_montages:
+        lines.extend(
+            [
+                "",
+                f"![{display_name} Force-All PCSS 最终截图]("
+                f"{markdown_path(montage_path, report_path)})",
+            ]
+        )
     lines.extend(
         [
             "",
@@ -1197,12 +1203,13 @@ def write_report(
             f"- 被测源码 Commit：`{provenance['gitHead']}`；`gitDirty={str(provenance['gitDirty']).lower()}`。",
             f"- Release 可执行文件 SHA-256：`{provenance['executableSha256']}`。",
             f"- 两组性能实验来源一致性：`{'通过' if provenance_ok else '未通过'}`。",
+            f"- 已提交数据汇总：[point-shadow-cache-3way-summary-cn.json]({markdown_path(summary_path, report_path)})。",
             "",
             "## 7. UI 手动验证与一键复现",
             "",
             "- 打开 `Motion Timeline`，点击 `Prepare 3-light test`。它会临时建立一组 Directional/Point/Spot 阴影灯和一个红色局部运动 Caster；退出测试时可恢复原场景。",
             "- `Profile` 选择 `Cache 3-way phases` 后，轨迹依次执行“点光源+相机 / 局部遮挡物+相机 / 仅相机”。右侧实时显示 Required、Rendered、Face hits 与 Deferred。",
-            "- 顶部 A/B/C 按钮分别切换全局重绘、Per-Light、Per-Light + Per-Face。正式测试仍以脚本的独立进程数据为准。",
+            "- 顶部 A/B/C 按钮分别切换无缓存全量重绘、Per-Light、Per-Light + Per-Face。正式测试仍以脚本的独立进程数据为准。",
             "",
             "```powershell",
             ".\\tools\\Test-PointShadowCache3Way.ps1 -SkipBuild -BatchId point-shadow-cache-3way-1080p-final -Width 1920 -Height 1080 -MeasuredFrames 1800 -ExternalWarmupFrames 300 -InternalWarmupFrames 300 -FormalRunsPerVariant 3 -TimelineCycleFrames 1800 -SceneIds sponza,san-miguel",

@@ -613,6 +613,14 @@ public:
 		if (!m_rendererPanelVisible) {
 			return;
 		}
+		if (m_ssaoProfilerSettleFrames > 0) {
+			--m_ssaoProfilerSettleFrames;
+			if (m_ssaoProfilerSettleFrames == 0) {
+				// GPU timer results arrive asynchronously. Clear once more after
+				// the old preset's pending queries and target recreation have drained.
+				PerformanceProfiler::GetInstance().ResetStatistics();
+			}
+		}
 		if (SceneStateIO::HasPendingAsyncLoads()) {
 			const int pending = SceneStateIO::GetPendingAsyncLoadCount();
 			const int total = SceneStateIO::GetTotalAsyncLoadCount();
@@ -652,29 +660,133 @@ public:
 					&properties.FORWARD_NORMAL_BUFFER);
 			}
 			else {
-				ImGui::Checkbox("SSAO", &properties.SSAO);
+				if (ImGui::Checkbox("SSAO", &properties.SSAO)) {
+					PerformanceProfiler::GetInstance().ResetStatistics();
+					m_ssaoProfilerSettleFrames = 24;
+				}
 				if (properties.SSAO) {
 					ImGui::Indent();
-					ImGui::DragFloat(
+					struct SSAOComparisonPreset {
+						const char* label;
+						int mode;
+						int samples;
+						float radius;
+						float bias;
+					};
+					static const SSAOComparisonPreset comparisonPresets[] = {
+						{ "Full-64 (reference)", SSAOProperty::LegacyFull, 64, 0.35f, 0.025f },
+						{ "Full-32 (medium)", SSAOProperty::LegacyFull, 32, 0.35f, 0.025f },
+						{ "Half-64 + bilateral (experimental)", SSAOProperty::HalfBilateral, 64, 0.35f, 0.025f },
+						{ "Half-64 raw (diagnostic)", SSAOProperty::HalfRaw, 64, 0.35f, 0.025f },
+					};
+
+					int activePreset = -1;
+					for (int presetIndex = 0;
+						presetIndex < IM_ARRAYSIZE(comparisonPresets);
+						++presetIndex) {
+						const auto& preset = comparisonPresets[presetIndex];
+						if (properties.SSAO_MODE == preset.mode &&
+							properties.SSAO_KERNEL_SIZE == preset.samples &&
+							std::abs(properties.SSAO_RADIUS - preset.radius) < 0.00001f &&
+							std::abs(properties.SSAO_BIAS - preset.bias) < 0.00001f) {
+							activePreset = presetIndex;
+							break;
+						}
+					}
+
+					bool ssaoSettingsChanged = false;
+					const char* presetPreview = activePreset >= 0
+						? comparisonPresets[activePreset].label
+						: "Custom";
+					ImGui::SetNextItemWidth(-1.0f);
+					if (ImGui::BeginCombo(
+						"Comparison preset##ssao",
+						presetPreview)) {
+						for (int presetIndex = 0;
+							presetIndex < IM_ARRAYSIZE(comparisonPresets);
+							++presetIndex) {
+							const bool selected = activePreset == presetIndex;
+							if (ImGui::Selectable(
+								comparisonPresets[presetIndex].label,
+								selected)) {
+								const auto& preset = comparisonPresets[presetIndex];
+								ssaoSettingsChanged =
+									properties.SSAO_MODE != preset.mode ||
+									properties.SSAO_KERNEL_SIZE != preset.samples ||
+									std::abs(properties.SSAO_RADIUS - preset.radius) >= 0.00001f ||
+									std::abs(properties.SSAO_BIAS - preset.bias) >= 0.00001f;
+								properties.SSAO_MODE = preset.mode;
+								properties.SSAO_KERNEL_SIZE = preset.samples;
+								properties.SSAO_RADIUS = preset.radius;
+								properties.SSAO_BIAS = preset.bias;
+							}
+							if (selected) {
+								ImGui::SetItemDefaultFocus();
+							}
+						}
+						ImGui::EndCombo();
+					}
+
+					const bool halfResolution =
+						properties.SSAO_MODE != SSAOProperty::LegacyFull;
+					const bool bilateral =
+						properties.SSAO_MODE == SSAOProperty::HalfBilateral;
+					const int generateWidth = halfResolution
+						? (properties.SCREEN_WIDTH + 1) / 2
+						: properties.SCREEN_WIDTH;
+					const int generateHeight = halfResolution
+						? (properties.SCREEN_HEIGHT + 1) / 2
+						: properties.SCREEN_HEIGHT;
+					const int outputWidth = bilateral
+						? properties.SCREEN_WIDTH
+						: generateWidth;
+					const int outputHeight = bilateral
+						? properties.SCREEN_HEIGHT
+						: generateHeight;
+					ImGui::TextDisabled(
+						"Generate %dx%d -> AO %dx%d | %d samples",
+						generateWidth,
+						generateHeight,
+						outputWidth,
+						outputHeight,
+						properties.SSAO_KERNEL_SIZE);
+					ImGui::TextDisabled(
+						"Full-32 uses the fixed 64-sample kernel prefix.");
+					if (m_ssaoProfilerSettleFrames > 0) {
+						ImGui::TextColored(
+							ImVec4(0.91f, 0.72f, 0.33f, 1.0f),
+							"Profiler settling: %d frames",
+							m_ssaoProfilerSettleFrames);
+					}
+					else {
+						ImGui::TextDisabled(
+							"Preset changes discard transition-frame timing history.");
+					}
+
+					ssaoSettingsChanged |= ImGui::DragFloat(
 						"Radius##ssao",
 						&properties.SSAO_RADIUS,
 						0.01f,
 						0.05f,
 						2.0f,
 						"%.3f");
-					ImGui::DragFloat(
+					ssaoSettingsChanged |= ImGui::DragFloat(
 						"Bias##ssao",
 						&properties.SSAO_BIAS,
 						0.001f,
 						0.0f,
 						0.2f,
 						"%.4f");
-					ImGui::DragInt(
+					ssaoSettingsChanged |= ImGui::DragInt(
 						"Kernel##ssao",
 						&properties.SSAO_KERNEL_SIZE,
 						1.0f,
 						8,
 						64);
+					if (ssaoSettingsChanged) {
+						PerformanceProfiler::GetInstance().ResetStatistics();
+						m_ssaoProfilerSettleFrames = 24;
+					}
 					ImGui::Unindent();
 				}
 				ImGui::Checkbox("Light volumes", &properties.LIGHT_VOLUME);
@@ -3106,6 +3218,7 @@ private:
 	bool m_layoutInitialized = false;
 	bool m_requestLayoutReset = false;
 	bool m_rendererPanelVisible = true;
+	int m_ssaoProfilerSettleFrames = 0;
 	bool m_assetBrowserCacheInitialized = false;
 	std::string m_editorFontDescription;
 	EditorMotionTimelineController m_motionTimeline;

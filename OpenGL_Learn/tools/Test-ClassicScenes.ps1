@@ -300,8 +300,8 @@ function Write-Reports {
 
     $notes = @{
         "sponza" = "Pass. Interior framing, diffuse color, normal detail, and independent OBJ opacity masks are visible."
-        "bistro-exterior" = "Pass. Street geometry is intact. The engine does not yet fully interpret Bistro's packed AO/roughness/metalness Specular map or DirectX normals."
-        "bistro-interior" = "Pass. Bar, cabinets, and props are visible. Materials look cool and gray for the same packed-map reason as the exterior."
+        "bistro-exterior" = "Pass. Street geometry is intact. Packed AO/roughness/metalness, BC5 DirectX normals, and companion emissive maps use Bistro's authored conventions."
+        "bistro-interior" = "Pass. Bar, cabinets, and props are visible with Bistro's packed PBR and normal-map conventions applied."
         "san-miguel" = "Pass. All 323 source PNGs load. The 703-pixel-wide RGB texture exercises the GL_UNPACK_ALIGNMENT fix."
     }
 

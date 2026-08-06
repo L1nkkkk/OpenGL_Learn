@@ -542,6 +542,7 @@ protected:
 			shader.setFloat("material.alphaCutoff", 0.0f);
 			shader.setBool("material.useAlphaCutoff", false);
 			shader.setBool("material.metallicRoughnessPacked", false);
+			shader.setBool("material.occlusionMapStoresOcclusion", false);
 			shader.setBool("material.usePBR", pbrMaterial);
 		}
 

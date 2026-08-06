@@ -164,7 +164,10 @@ public:
 	void ResetStatistics();
 
 private:
-	static constexpr std::size_t kGpuQueryLatency = 4;
+	// Keep enough timestamp pairs in flight for benchmark runs without forcing
+	// a synchronous read when the driver queues several frames. Fixed-scene
+	// captures still reject any zone whose sample count is incomplete.
+	static constexpr std::size_t kGpuQueryLatency = 16;
 	static constexpr std::size_t kFrameHistorySize = 240;
 
 	struct GpuQuerySlot {

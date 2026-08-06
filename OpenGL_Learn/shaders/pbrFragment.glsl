@@ -66,6 +66,7 @@ struct Material {
 	float alphaCutoff;
 	bool useAlphaCutoff;
 	bool metallicRoughnessPacked;
+	bool occlusionMapStoresOcclusion;
 	sampler2D texture_diffuse1;
 	bool use_texture_diffuse;
 	sampler2D texture_normal1;
@@ -163,6 +164,19 @@ vec3 FresnelSchlickRoughness(float cosTheta, vec3 f0, float roughness)
 {
 	return f0 + (max(vec3(1.0 - roughness), f0) - f0) *
 		pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+vec3 DecodeTangentSpaceNormal(vec3 encodedNormal)
+{
+	// Pillow exposes Bistro's BC5 DirectX normals as RG with a zero-filled B
+	// channel. Reconstruct +Z and convert DirectX +Y to the OpenGL convention.
+	if (encodedNormal.b <= (1.0 / 255.0)) {
+		vec2 xy = encodedNormal.rg * 2.0 - 1.0;
+		xy.y = -xy.y;
+		float z = sqrt(max(1.0 - dot(xy, xy), 0.0));
+		return normalize(vec3(xy, z));
+	}
+	return normalize(encodedNormal * 2.0 - 1.0);
 }
 
 vec3 EvaluateDirect(
@@ -284,7 +298,12 @@ void main()
 	metallic = clamp(metallic, 0.0, 1.0);
 	roughness = clamp(roughness, 0.04, 1.0);
 	float ao = material.ao;
-	if (material.use_texture_ao) ao *= texture(material.texture_ao1, fs_in.TexCoords).r;
+	if (material.use_texture_ao) {
+		float occlusionSample = texture(material.texture_ao1, fs_in.TexCoords).r;
+		ao *= material.occlusionMapStoresOcclusion
+			? 1.0 - occlusionSample
+			: occlusionSample;
+	}
 	ao = clamp(ao, 0.0, 1.0);
 	vec3 emissive = material.emissive;
 	if (material.use_texture_emissive)
@@ -292,7 +311,8 @@ void main()
 
 	vec3 normal = normalize(fs_in.Normal);
 	if (material.use_texture_normal) {
-		normal = texture(material.texture_normal1, fs_in.TexCoords).rgb * 2.0 - 1.0;
+		normal = DecodeTangentSpaceNormal(
+			texture(material.texture_normal1, fs_in.TexCoords).rgb);
 		normal = normalize(fs_in.TBN * normal);
 	}
 	vec3 viewDir = normalize(viewPos - fs_in.FragPos);

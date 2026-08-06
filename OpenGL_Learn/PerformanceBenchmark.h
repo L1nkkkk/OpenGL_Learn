@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <cstdint>
 #include <string>
 
 struct PerformanceBenchmarkOptions {
@@ -36,6 +37,17 @@ struct PerformanceBenchmarkMetadata {
 	bool autoReloadMaterials = false;
 	bool inputFrozen = true;
 	bool gpuTimingSupported = false;
+	bool submissionStressScene = false;
+	int submissionStressObjectCount = 0;
+	int submissionStressDynamicObjectCount = 0;
+	int submissionStressMaterialCount = 0;
+	std::uint32_t submissionStressSeed = 0;
+	std::string opaqueSortMode;
+	std::string submissionStressRenderPath;
+	std::string submissionStressGeometrySet;
+	bool submissionStressCollectionBreakdown = false;
+	std::string opaqueSubmissionSignature;
+	bool opaqueSubmissionSignatureValid = false;
 };
 
 bool ParsePerformanceBenchmarkOptions(
@@ -53,6 +65,7 @@ public:
 		Clock::time_point applicationStart);
 
 	void SetMetadata(const PerformanceBenchmarkMetadata& metadata);
+	void SetOpaqueSubmissionSignature(std::uint64_t signature);
 	bool OnFrameBoundary(bool sceneReady);
 	void Abort();
 
