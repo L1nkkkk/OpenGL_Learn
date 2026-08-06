@@ -1,0 +1,65 @@
+﻿{
+    "schemaVersion":  1,
+    "generatedUtc":  "2026-08-05T02:57:19.7452442Z",
+    "executable":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\x64\\Release\\OpenGL_Learn.exe",
+    "executableSha256":  "736DD47EBD3362714CC4C8E654594B7646ED55D36A5B6CA4CEC7AFEC83125235",
+    "records":  [
+                    {
+                        "name":  "default-deferred-representative",
+                        "startedUtc":  "2026-08-05T02:57:07.5341460Z",
+                        "endedUtc":  "2026-08-05T02:57:08.9525957Z",
+                        "exitCode":  0,
+                        "log":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\point-light-tile-cluster-runtime-boundary\\tile-cluster-runtime-boundary-formal-20260805\\final-smoke\\logs\\default-deferred-representative.log"
+                    },
+                    {
+                        "name":  "explicit-coalesced-control",
+                        "startedUtc":  "2026-08-05T02:57:09.0361150Z",
+                        "endedUtc":  "2026-08-05T02:57:10.4354612Z",
+                        "exitCode":  0,
+                        "log":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\point-light-tile-cluster-runtime-boundary\\tile-cluster-runtime-boundary-formal-20260805\\final-smoke\\logs\\explicit-coalesced-control.log"
+                    },
+                    {
+                        "name":  "explicit-legacy2n-control",
+                        "startedUtc":  "2026-08-05T02:57:10.4404660Z",
+                        "endedUtc":  "2026-08-05T02:57:11.8317130Z",
+                        "exitCode":  0,
+                        "log":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\point-light-tile-cluster-runtime-boundary\\tile-cluster-runtime-boundary-formal-20260805\\final-smoke\\logs\\explicit-legacy2n-control.log"
+                    },
+                    {
+                        "name":  "analytic-screen-high-overlap",
+                        "startedUtc":  "2026-08-05T02:57:11.8387101Z",
+                        "endedUtc":  "2026-08-05T02:57:13.2220805Z",
+                        "exitCode":  0,
+                        "log":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\point-light-tile-cluster-runtime-boundary\\tile-cluster-runtime-boundary-formal-20260805\\final-smoke\\logs\\analytic-screen-high-overlap.log"
+                    },
+                    {
+                        "name":  "analytic-screen-edge-cases",
+                        "startedUtc":  "2026-08-05T02:57:13.2270791Z",
+                        "endedUtc":  "2026-08-05T02:57:14.6039304Z",
+                        "exitCode":  0,
+                        "log":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\point-light-tile-cluster-runtime-boundary\\tile-cluster-runtime-boundary-formal-20260805\\final-smoke\\logs\\analytic-screen-edge-cases.log"
+                    },
+                    {
+                        "name":  "resource-forward-deferred-resize-effects",
+                        "startedUtc":  "2026-08-05T02:57:14.6090473Z",
+                        "endedUtc":  "2026-08-05T02:57:17.0068838Z",
+                        "exitCode":  0,
+                        "log":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\point-light-tile-cluster-runtime-boundary\\tile-cluster-runtime-boundary-formal-20260805\\final-smoke\\logs\\resource-forward-deferred-resize-effects.log"
+                    },
+                    {
+                        "name":  "classic-sponza-pbr-forward",
+                        "startedUtc":  "2026-08-05T02:57:17.0105877Z",
+                        "endedUtc":  "2026-08-05T02:57:18.4047784Z",
+                        "exitCode":  0,
+                        "log":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\point-light-tile-cluster-runtime-boundary\\tile-cluster-runtime-boundary-formal-20260805\\final-smoke\\logs\\classic-sponza-pbr-forward.log"
+                    },
+                    {
+                        "name":  "classic-sponza-pbr-deferred",
+                        "startedUtc":  "2026-08-05T02:57:18.4097809Z",
+                        "endedUtc":  "2026-08-05T02:57:19.7412435Z",
+                        "exitCode":  0,
+                        "log":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\point-light-tile-cluster-runtime-boundary\\tile-cluster-runtime-boundary-formal-20260805\\final-smoke\\logs\\classic-sponza-pbr-deferred.log"
+                    }
+                ],
+    "success":  true
+}

@@ -1,0 +1,1336 @@
+{
+  "schemaVersion": 1,
+  "batchId": "gbuffer-position-formal-20260801-v3",
+  "decision": {
+    "label": "NO-GO（质量/性能未通过）",
+    "summary": "候选未通过质量、性能的事前门槛；保持当前显式 gPosition 为默认。",
+    "memoryPass": true,
+    "memorySavedBytes": 16588800,
+    "memorySavedMiB": 15.8203125,
+    "qualityPass": false,
+    "lifecyclePass": true,
+    "invariantPass": true,
+    "performancePass": false,
+    "gpuFrameSceneConditionGates": [
+      {
+        "scene": "san-miguel",
+        "condition": "ssao-off",
+        "medianPass": true,
+        "p95Pass": true,
+        "pass": true
+      },
+      {
+        "scene": "san-miguel",
+        "condition": "ssao-on",
+        "medianPass": false,
+        "p95Pass": false,
+        "pass": false
+      },
+      {
+        "scene": "sponza",
+        "condition": "ssao-off",
+        "medianPass": true,
+        "p95Pass": true,
+        "pass": true
+      },
+      {
+        "scene": "sponza",
+        "condition": "ssao-on",
+        "medianPass": false,
+        "p95Pass": false,
+        "pass": false
+      }
+    ],
+    "formalPairCountPass": true,
+    "failedGates": [
+      "quality",
+      "performance"
+    ]
+  },
+  "performanceGroups": [
+    {
+      "timingDomain": "cpu",
+      "scene": "san-miguel",
+      "condition": "ssao-off",
+      "metric": "CPU Frame",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 5.263,
+      "candidateMedianOfProcessMedians": 5.0488,
+      "pairedMedianDeltaMilliseconds": -0.2090500000000004,
+      "pairedMedianDeltaPercent": -3.9869549047841626,
+      "controlMedianOfProcessP95": 5.892445,
+      "candidateMedianOfProcessP95": 5.779235,
+      "pairedP95DeltaMilliseconds": -0.17091499999999993,
+      "pairedP95DeltaPercent": -2.902815177894343
+    },
+    {
+      "timingDomain": "cpu",
+      "scene": "san-miguel",
+      "condition": "ssao-off",
+      "metric": "Deferred Lighting",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.0126,
+      "candidateMedianOfProcessMedians": 0.0127,
+      "pairedMedianDeltaMilliseconds": 9.99999999999994e-05,
+      "pairedMedianDeltaPercent": 0.7936507936507888,
+      "controlMedianOfProcessP95": 0.0171,
+      "candidateMedianOfProcessP95": 0.0183,
+      "pairedP95DeltaMilliseconds": 0.001400000000000002,
+      "pairedP95DeltaPercent": 8.284023668639065
+    },
+    {
+      "timingDomain": "cpu",
+      "scene": "san-miguel",
+      "condition": "ssao-off",
+      "metric": "Deferred Pass",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 1.3256,
+      "candidateMedianOfProcessMedians": 1.3463,
+      "pairedMedianDeltaMilliseconds": -0.015700000000000047,
+      "pairedMedianDeltaPercent": -1.152716593245231,
+      "controlMedianOfProcessP95": 1.676085,
+      "candidateMedianOfProcessP95": 1.767025,
+      "pairedP95DeltaMilliseconds": 0.06397000000000008,
+      "pairedP95DeltaPercent": 3.7561910801471523
+    },
+    {
+      "timingDomain": "cpu",
+      "scene": "san-miguel",
+      "condition": "ssao-off",
+      "metric": "Depth/Stencil Copy",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.0006,
+      "candidateMedianOfProcessMedians": 0.0007,
+      "pairedMedianDeltaMilliseconds": 0.0,
+      "pairedMedianDeltaPercent": 0.0,
+      "controlMedianOfProcessP95": 0.0011,
+      "candidateMedianOfProcessP95": 0.0012,
+      "pairedP95DeltaMilliseconds": 9.999999999999983e-05,
+      "pairedP95DeltaPercent": 9.090909090909074
+    },
+    {
+      "timingDomain": "cpu",
+      "scene": "san-miguel",
+      "condition": "ssao-off",
+      "metric": "G-Buffer Geometry",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.8341,
+      "candidateMedianOfProcessMedians": 0.85175,
+      "pairedMedianDeltaMilliseconds": -0.0040000000000000036,
+      "pairedMedianDeltaPercent": -0.4674262342974004,
+      "controlMedianOfProcessP95": 1.108825,
+      "candidateMedianOfProcessP95": 1.19113,
+      "pairedP95DeltaMilliseconds": 0.06952000000000003,
+      "pairedP95DeltaPercent": 6.198232897352915
+    },
+    {
+      "timingDomain": "cpu",
+      "scene": "san-miguel",
+      "condition": "ssao-on",
+      "metric": "CPU Frame",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 7.76525,
+      "candidateMedianOfProcessMedians": 8.1612,
+      "pairedMedianDeltaMilliseconds": 0.39594999999999914,
+      "pairedMedianDeltaPercent": 5.098998744406157,
+      "controlMedianOfProcessP95": 8.602015,
+      "candidateMedianOfProcessP95": 8.945935,
+      "pairedP95DeltaMilliseconds": 0.3583850000000002,
+      "pairedP95DeltaPercent": 4.182816820202546
+    },
+    {
+      "timingDomain": "cpu",
+      "scene": "san-miguel",
+      "condition": "ssao-on",
+      "metric": "Deferred Lighting",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.0118,
+      "candidateMedianOfProcessMedians": 0.0121,
+      "pairedMedianDeltaMilliseconds": 0.00040000000000000105,
+      "pairedMedianDeltaPercent": 3.3898305084745854,
+      "controlMedianOfProcessP95": 0.0149,
+      "candidateMedianOfProcessP95": 0.0154,
+      "pairedP95DeltaMilliseconds": 0.0005000000000000004,
+      "pairedP95DeltaPercent": 3.3557046979865803
+    },
+    {
+      "timingDomain": "cpu",
+      "scene": "san-miguel",
+      "condition": "ssao-on",
+      "metric": "Deferred Pass",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 1.3881,
+      "candidateMedianOfProcessMedians": 1.38795,
+      "pairedMedianDeltaMilliseconds": -0.016799999999999926,
+      "pairedMedianDeltaPercent": -1.1959423384943888,
+      "controlMedianOfProcessP95": 1.773625,
+      "candidateMedianOfProcessP95": 1.770815,
+      "pairedP95DeltaMilliseconds": -0.02222499999999994,
+      "pairedP95DeltaPercent": -1.2395150136081705
+    },
+    {
+      "timingDomain": "cpu",
+      "scene": "san-miguel",
+      "condition": "ssao-on",
+      "metric": "Depth/Stencil Copy",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.0007,
+      "candidateMedianOfProcessMedians": 0.0006,
+      "pairedMedianDeltaMilliseconds": -0.00010000000000000005,
+      "pairedMedianDeltaPercent": -14.285714285714294,
+      "controlMedianOfProcessP95": 0.0011,
+      "candidateMedianOfProcessP95": 0.001,
+      "pairedP95DeltaMilliseconds": -0.00010000000000000005,
+      "pairedP95DeltaPercent": -9.090909090909095
+    },
+    {
+      "timingDomain": "cpu",
+      "scene": "san-miguel",
+      "condition": "ssao-on",
+      "metric": "G-Buffer Geometry",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.84955,
+      "candidateMedianOfProcessMedians": 0.85405,
+      "pairedMedianDeltaMilliseconds": 0.0016999999999999238,
+      "pairedMedianDeltaPercent": 0.2001059384379876,
+      "controlMedianOfProcessP95": 1.154435,
+      "candidateMedianOfProcessP95": 1.15459,
+      "pairedP95DeltaMilliseconds": 0.005889999999999951,
+      "pairedP95DeltaPercent": 0.5102062913892901
+    },
+    {
+      "timingDomain": "cpu",
+      "scene": "san-miguel",
+      "condition": "ssao-on",
+      "metric": "SSAO Generate",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.0078,
+      "candidateMedianOfProcessMedians": 0.0077,
+      "pairedMedianDeltaMilliseconds": 0.0002999999999999999,
+      "pairedMedianDeltaPercent": 4.109589041095889,
+      "controlMedianOfProcessP95": 0.0096,
+      "candidateMedianOfProcessP95": 0.0095,
+      "pairedP95DeltaMilliseconds": 0.0003949999999999995,
+      "pairedP95DeltaPercent": 4.435710275126328
+    },
+    {
+      "timingDomain": "cpu",
+      "scene": "sponza",
+      "condition": "ssao-off",
+      "metric": "CPU Frame",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 2.1991,
+      "candidateMedianOfProcessMedians": 2.09525,
+      "pairedMedianDeltaMilliseconds": -0.10420000000000007,
+      "pairedMedianDeltaPercent": -4.754734200319419,
+      "controlMedianOfProcessP95": 2.574835,
+      "candidateMedianOfProcessP95": 2.549375,
+      "pairedP95DeltaMilliseconds": -0.03810499999999983,
+      "pairedP95DeltaPercent": -1.4846315986332208
+    },
+    {
+      "timingDomain": "cpu",
+      "scene": "sponza",
+      "condition": "ssao-off",
+      "metric": "Deferred Lighting",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.0095,
+      "candidateMedianOfProcessMedians": 0.0096,
+      "pairedMedianDeltaMilliseconds": -9.99999999999994e-05,
+      "pairedMedianDeltaPercent": -1.030927835051558,
+      "controlMedianOfProcessP95": 0.012205,
+      "candidateMedianOfProcessP95": 0.012905,
+      "pairedP95DeltaMilliseconds": 0.0001999999999999988,
+      "pairedP95DeltaPercent": 1.639344262295072
+    },
+    {
+      "timingDomain": "cpu",
+      "scene": "sponza",
+      "condition": "ssao-off",
+      "metric": "Deferred Pass",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.20845,
+      "candidateMedianOfProcessMedians": 0.21015,
+      "pairedMedianDeltaMilliseconds": 0.0024500000000000077,
+      "pairedMedianDeltaPercent": 1.1878787878787918,
+      "controlMedianOfProcessP95": 0.290015,
+      "candidateMedianOfProcessP95": 0.29513,
+      "pairedP95DeltaMilliseconds": 0.006589999999999985,
+      "pairedP95DeltaPercent": 2.2722962605382424
+    },
+    {
+      "timingDomain": "cpu",
+      "scene": "sponza",
+      "condition": "ssao-off",
+      "metric": "Depth/Stencil Copy",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.0004,
+      "candidateMedianOfProcessMedians": 0.0004,
+      "pairedMedianDeltaMilliseconds": 0.0,
+      "pairedMedianDeltaPercent": 0.0,
+      "controlMedianOfProcessP95": 0.0006,
+      "candidateMedianOfProcessP95": 0.0007,
+      "pairedP95DeltaMilliseconds": 0.00010000000000000005,
+      "pairedP95DeltaPercent": 16.66666666666668
+    },
+    {
+      "timingDomain": "cpu",
+      "scene": "sponza",
+      "condition": "ssao-off",
+      "metric": "G-Buffer Geometry",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.0963,
+      "candidateMedianOfProcessMedians": 0.0981,
+      "pairedMedianDeltaMilliseconds": 0.0032999999999999974,
+      "pairedMedianDeltaPercent": 3.495762711864404,
+      "controlMedianOfProcessP95": 0.13751,
+      "candidateMedianOfProcessP95": 0.14252,
+      "pairedP95DeltaMilliseconds": 0.0050100000000000144,
+      "pairedP95DeltaPercent": 3.643371391171562
+    },
+    {
+      "timingDomain": "cpu",
+      "scene": "sponza",
+      "condition": "ssao-on",
+      "metric": "CPU Frame",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 4.4901,
+      "candidateMedianOfProcessMedians": 5.177,
+      "pairedMedianDeltaMilliseconds": 0.6868999999999996,
+      "pairedMedianDeltaPercent": 15.298100265027498,
+      "controlMedianOfProcessP95": 4.997015,
+      "candidateMedianOfProcessP95": 5.670655,
+      "pairedP95DeltaMilliseconds": 0.6703900000000003,
+      "pairedP95DeltaPercent": 13.337362405355988
+    },
+    {
+      "timingDomain": "cpu",
+      "scene": "sponza",
+      "condition": "ssao-on",
+      "metric": "Deferred Lighting",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.0104,
+      "candidateMedianOfProcessMedians": 0.0109,
+      "pairedMedianDeltaMilliseconds": 0.0002999999999999999,
+      "pairedMedianDeltaPercent": 2.884615384615384,
+      "controlMedianOfProcessP95": 0.013805,
+      "candidateMedianOfProcessP95": 0.015905,
+      "pairedP95DeltaMilliseconds": 0.0020999999999999994,
+      "pairedP95DeltaPercent": 15.211879753712418
+    },
+    {
+      "timingDomain": "cpu",
+      "scene": "sponza",
+      "condition": "ssao-on",
+      "metric": "Deferred Pass",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.2533,
+      "candidateMedianOfProcessMedians": 0.26635,
+      "pairedMedianDeltaMilliseconds": 0.017349999999999977,
+      "pairedMedianDeltaPercent": 6.675644478645624,
+      "controlMedianOfProcessP95": 0.386345,
+      "candidateMedianOfProcessP95": 0.39264,
+      "pairedP95DeltaMilliseconds": 0.011385000000000034,
+      "pairedP95DeltaPercent": 3.0852404373806035
+    },
+    {
+      "timingDomain": "cpu",
+      "scene": "sponza",
+      "condition": "ssao-on",
+      "metric": "Depth/Stencil Copy",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.0005,
+      "candidateMedianOfProcessMedians": 0.0005,
+      "pairedMedianDeltaMilliseconds": 0.0,
+      "pairedMedianDeltaPercent": 0.0,
+      "controlMedianOfProcessP95": 0.0009,
+      "candidateMedianOfProcessP95": 0.0009,
+      "pairedP95DeltaMilliseconds": 9.999999999999994e-05,
+      "pairedP95DeltaPercent": 11.111111111111118
+    },
+    {
+      "timingDomain": "cpu",
+      "scene": "sponza",
+      "condition": "ssao-on",
+      "metric": "G-Buffer Geometry",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.10995,
+      "candidateMedianOfProcessMedians": 0.121,
+      "pairedMedianDeltaMilliseconds": 0.010950000000000001,
+      "pairedMedianDeltaPercent": 9.900542495479206,
+      "controlMedianOfProcessP95": 0.189505,
+      "candidateMedianOfProcessP95": 0.200305,
+      "pairedP95DeltaMilliseconds": 0.008900000000000019,
+      "pairedP95DeltaPercent": 4.649826284579828
+    },
+    {
+      "timingDomain": "cpu",
+      "scene": "sponza",
+      "condition": "ssao-on",
+      "metric": "SSAO Generate",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.0064,
+      "candidateMedianOfProcessMedians": 0.007,
+      "pairedMedianDeltaMilliseconds": 0.0005999999999999998,
+      "pairedMedianDeltaPercent": 9.374999999999996,
+      "controlMedianOfProcessP95": 0.0087,
+      "candidateMedianOfProcessP95": 0.0097,
+      "pairedP95DeltaMilliseconds": 0.0011000000000000003,
+      "pairedP95DeltaPercent": 12.790697674418608
+    },
+    {
+      "timingDomain": "gpu",
+      "scene": "san-miguel",
+      "condition": "ssao-off",
+      "metric": "Deferred Lighting",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.164352,
+      "candidateMedianOfProcessMedians": 0.162496,
+      "pairedMedianDeltaMilliseconds": -0.0018559999999999965,
+      "pairedMedianDeltaPercent": -1.129283489096571,
+      "controlMedianOfProcessP95": 0.301248,
+      "candidateMedianOfProcessP95": 0.165984,
+      "pairedP95DeltaMilliseconds": -0.135582,
+      "pairedP95DeltaPercent": -44.97245042070297
+    },
+    {
+      "timingDomain": "gpu",
+      "scene": "san-miguel",
+      "condition": "ssao-off",
+      "metric": "Deferred Pass",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 2.6636,
+      "candidateMedianOfProcessMedians": 2.474288,
+      "pairedMedianDeltaMilliseconds": -0.19041600000000036,
+      "pairedMedianDeltaPercent": -7.145172910662838,
+      "controlMedianOfProcessP95": 2.946739,
+      "candidateMedianOfProcessP95": 2.708856,
+      "pairedP95DeltaMilliseconds": -0.23788300000000007,
+      "pairedP95DeltaPercent": -8.072754322659728
+    },
+    {
+      "timingDomain": "gpu",
+      "scene": "san-miguel",
+      "condition": "ssao-off",
+      "metric": "Depth/Stencil Copy",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.050208,
+      "candidateMedianOfProcessMedians": 0.056816,
+      "pairedMedianDeltaMilliseconds": 0.006607999999999996,
+      "pairedMedianDeltaPercent": 13.161249203314204,
+      "controlMedianOfProcessP95": 0.165002,
+      "candidateMedianOfProcessP95": 0.42396,
+      "pairedP95DeltaMilliseconds": 0.258644,
+      "pairedP95DeltaPercent": 156.75203936921974
+    },
+    {
+      "timingDomain": "gpu",
+      "scene": "san-miguel",
+      "condition": "ssao-off",
+      "metric": "G-Buffer Geometry",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 2.414976,
+      "candidateMedianOfProcessMedians": 2.10816,
+      "pairedMedianDeltaMilliseconds": -0.3069599999999997,
+      "pairedMedianDeltaPercent": -12.710685323580844,
+      "controlMedianOfProcessP95": 2.674787,
+      "candidateMedianOfProcessP95": 2.43221,
+      "pairedP95DeltaMilliseconds": -0.23908999999999958,
+      "pairedP95DeltaPercent": -8.967212235524608
+    },
+    {
+      "timingDomain": "gpu",
+      "scene": "san-miguel",
+      "condition": "ssao-off",
+      "metric": "GPU Frame",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 2.791424,
+      "candidateMedianOfProcessMedians": 2.600576,
+      "pairedMedianDeltaMilliseconds": -0.19134399999999996,
+      "pairedMedianDeltaPercent": -6.853491504054555,
+      "controlMedianOfProcessP95": 3.072235,
+      "candidateMedianOfProcessP95": 2.844192,
+      "pairedP95DeltaMilliseconds": -0.23266700000000018,
+      "pairedP95DeltaPercent": -7.596406752390585
+    },
+    {
+      "timingDomain": "gpu",
+      "scene": "san-miguel",
+      "condition": "ssao-on",
+      "metric": "Deferred Lighting",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.171776,
+      "candidateMedianOfProcessMedians": 0.16736,
+      "pairedMedianDeltaMilliseconds": -0.0045439999999999925,
+      "pairedMedianDeltaPercent": -2.6433358153387894,
+      "controlMedianOfProcessP95": 0.177171,
+      "candidateMedianOfProcessP95": 0.171552,
+      "pairedP95DeltaMilliseconds": -0.005569000000000018,
+      "pairedP95DeltaPercent": -3.1469855280482464
+    },
+    {
+      "timingDomain": "gpu",
+      "scene": "san-miguel",
+      "condition": "ssao-on",
+      "metric": "Deferred Pass",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 5.621392,
+      "candidateMedianOfProcessMedians": 5.946224,
+      "pairedMedianDeltaMilliseconds": 0.3248319999999998,
+      "pairedMedianDeltaPercent": 5.778497567862192,
+      "controlMedianOfProcessP95": 5.950014,
+      "candidateMedianOfProcessP95": 6.332341,
+      "pairedP95DeltaMilliseconds": 0.3747400000000001,
+      "pairedP95DeltaPercent": 6.298136441359634
+    },
+    {
+      "timingDomain": "gpu",
+      "scene": "san-miguel",
+      "condition": "ssao-on",
+      "metric": "Depth/Stencil Copy",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.059744,
+      "candidateMedianOfProcessMedians": 0.049536,
+      "pairedMedianDeltaMilliseconds": -0.010208000000000002,
+      "pairedMedianDeltaPercent": -17.086234600964115,
+      "controlMedianOfProcessP95": 0.062144,
+      "candidateMedianOfProcessP95": 0.057477,
+      "pairedP95DeltaMilliseconds": -0.004577999999999999,
+      "pairedP95DeltaPercent": -7.377921031426267
+    },
+    {
+      "timingDomain": "gpu",
+      "scene": "san-miguel",
+      "condition": "ssao-on",
+      "metric": "G-Buffer Geometry",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 2.417712,
+      "candidateMedianOfProcessMedians": 2.206336,
+      "pairedMedianDeltaMilliseconds": -0.21089599999999997,
+      "pairedMedianDeltaPercent": -8.724690058711783,
+      "controlMedianOfProcessP95": 2.656117,
+      "candidateMedianOfProcessP95": 2.471533,
+      "pairedP95DeltaMilliseconds": -0.1914699999999998,
+      "pairedP95DeltaPercent": -7.190003165599131
+    },
+    {
+      "timingDomain": "gpu",
+      "scene": "san-miguel",
+      "condition": "ssao-on",
+      "metric": "GPU Frame",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 5.71224,
+      "candidateMedianOfProcessMedians": 6.038304,
+      "pairedMedianDeltaMilliseconds": 0.3251519999999992,
+      "pairedMedianDeltaPercent": 5.692197806814826,
+      "controlMedianOfProcessP95": 6.038946,
+      "candidateMedianOfProcessP95": 6.42764,
+      "pairedP95DeltaMilliseconds": 0.3819150000000002,
+      "pairedP95DeltaPercent": 6.324199620264864
+    },
+    {
+      "timingDomain": "gpu",
+      "scene": "san-miguel",
+      "condition": "ssao-on",
+      "metric": "SSAO Generate",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 2.87368,
+      "candidateMedianOfProcessMedians": 3.392944,
+      "pairedMedianDeltaMilliseconds": 0.5210879999999998,
+      "pairedMedianDeltaPercent": 18.138136466134032,
+      "controlMedianOfProcessP95": 3.177904,
+      "candidateMedianOfProcessP95": 3.786283,
+      "pairedP95DeltaMilliseconds": 0.6080130000000001,
+      "pairedP95DeltaPercent": 19.13251627487804
+    },
+    {
+      "timingDomain": "gpu",
+      "scene": "sponza",
+      "condition": "ssao-off",
+      "metric": "Deferred Lighting",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.137568,
+      "candidateMedianOfProcessMedians": 0.130336,
+      "pairedMedianDeltaMilliseconds": -0.0072319999999999884,
+      "pairedMedianDeltaPercent": -5.25703652012095,
+      "controlMedianOfProcessP95": 0.273536,
+      "candidateMedianOfProcessP95": 0.131552,
+      "pairedP95DeltaMilliseconds": -0.141984,
+      "pairedP95DeltaPercent": -51.90687880205896
+    },
+    {
+      "timingDomain": "gpu",
+      "scene": "sponza",
+      "condition": "ssao-off",
+      "metric": "Deferred Pass",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.661888,
+      "candidateMedianOfProcessMedians": 0.556448,
+      "pairedMedianDeltaMilliseconds": -0.10540800000000006,
+      "pairedMedianDeltaPercent": -15.925352929800821,
+      "controlMedianOfProcessP95": 0.799048,
+      "candidateMedianOfProcessP95": 0.691616,
+      "pairedP95DeltaMilliseconds": -0.10765400000000003,
+      "pairedP95DeltaPercent": -13.47278261130746
+    },
+    {
+      "timingDomain": "gpu",
+      "scene": "sponza",
+      "condition": "ssao-off",
+      "metric": "Depth/Stencil Copy",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.049408,
+      "candidateMedianOfProcessMedians": 0.048512,
+      "pairedMedianDeltaMilliseconds": -0.000896000000000001,
+      "pairedMedianDeltaPercent": -1.8134715025906756,
+      "controlMedianOfProcessP95": 0.050208,
+      "candidateMedianOfProcessP95": 0.049699,
+      "pairedP95DeltaMilliseconds": -0.0005420000000000008,
+      "pairedP95DeltaPercent": -1.0795092415551322
+    },
+    {
+      "timingDomain": "gpu",
+      "scene": "sponza",
+      "condition": "ssao-off",
+      "metric": "G-Buffer Geometry",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.449008,
+      "candidateMedianOfProcessMedians": 0.351648,
+      "pairedMedianDeltaMilliseconds": -0.097296,
+      "pairedMedianDeltaPercent": -21.669101664112887,
+      "controlMedianOfProcessP95": 0.45216,
+      "candidateMedianOfProcessP95": 0.354178,
+      "pairedP95DeltaMilliseconds": -0.09775800000000001,
+      "pairedP95DeltaPercent": -21.620222929936308
+    },
+    {
+      "timingDomain": "gpu",
+      "scene": "sponza",
+      "condition": "ssao-off",
+      "metric": "GPU Frame",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.78768,
+      "candidateMedianOfProcessMedians": 0.682368,
+      "pairedMedianDeltaMilliseconds": -0.10547200000000001,
+      "pairedMedianDeltaPercent": -13.38748984565394,
+      "controlMedianOfProcessP95": 0.927234,
+      "candidateMedianOfProcessP95": 0.822754,
+      "pairedP95DeltaMilliseconds": -0.10390299999999997,
+      "pairedP95DeltaPercent": -11.216919678810239
+    },
+    {
+      "timingDomain": "gpu",
+      "scene": "sponza",
+      "condition": "ssao-on",
+      "metric": "Deferred Lighting",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.144736,
+      "candidateMedianOfProcessMedians": 0.137952,
+      "pairedMedianDeltaMilliseconds": -0.006784000000000012,
+      "pairedMedianDeltaPercent": -4.687154543444625,
+      "controlMedianOfProcessP95": 0.147107,
+      "candidateMedianOfProcessP95": 0.140704,
+      "pairedP95DeltaMilliseconds": -0.006754999999999983,
+      "pairedP95DeltaPercent": -4.591895694970317
+    },
+    {
+      "timingDomain": "gpu",
+      "scene": "sponza",
+      "condition": "ssao-on",
+      "metric": "Deferred Pass",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 3.065776,
+      "candidateMedianOfProcessMedians": 3.773088,
+      "pairedMedianDeltaMilliseconds": 0.7035999999999998,
+      "pairedMedianDeltaPercent": 22.9501437808894,
+      "controlMedianOfProcessP95": 3.397325,
+      "candidateMedianOfProcessP95": 4.140008,
+      "pairedP95DeltaMilliseconds": 0.7480640000000003,
+      "pairedP95DeltaPercent": 21.982137221448742
+    },
+    {
+      "timingDomain": "gpu",
+      "scene": "sponza",
+      "condition": "ssao-on",
+      "metric": "Depth/Stencil Copy",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.055968,
+      "candidateMedianOfProcessMedians": 0.049312,
+      "pairedMedianDeltaMilliseconds": -0.006655999999999995,
+      "pairedMedianDeltaPercent": -11.892510005717545,
+      "controlMedianOfProcessP95": 0.057888,
+      "candidateMedianOfProcessP95": 0.055392,
+      "pairedP95DeltaMilliseconds": -0.002496000000000005,
+      "pairedP95DeltaPercent": -4.311774461028201
+    },
+    {
+      "timingDomain": "gpu",
+      "scene": "sponza",
+      "condition": "ssao-on",
+      "metric": "G-Buffer Geometry",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 0.450336,
+      "candidateMedianOfProcessMedians": 0.357792,
+      "pairedMedianDeltaMilliseconds": -0.09251200000000004,
+      "pairedMedianDeltaPercent": -20.542883535848798,
+      "controlMedianOfProcessP95": 0.454144,
+      "candidateMedianOfProcessP95": 0.359872,
+      "pairedP95DeltaMilliseconds": -0.09427200000000002,
+      "pairedP95DeltaPercent": -20.762562548453033
+    },
+    {
+      "timingDomain": "gpu",
+      "scene": "sponza",
+      "condition": "ssao-on",
+      "metric": "GPU Frame",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 3.151344,
+      "candidateMedianOfProcessMedians": 3.858144,
+      "pairedMedianDeltaMilliseconds": 0.7031520000000002,
+      "pairedMedianDeltaPercent": 22.312765600962642,
+      "controlMedianOfProcessP95": 3.484624,
+      "candidateMedianOfProcessP95": 4.225214,
+      "pairedP95DeltaMilliseconds": 0.7472799999999999,
+      "pairedP95DeltaPercent": 21.418938769660706
+    },
+    {
+      "timingDomain": "gpu",
+      "scene": "sponza",
+      "condition": "ssao-on",
+      "metric": "SSAO Generate",
+      "pairCount": 3,
+      "controlMedianOfProcessMedians": 2.381248,
+      "candidateMedianOfProcessMedians": 3.201152,
+      "pairedMedianDeltaMilliseconds": 0.8176000000000001,
+      "pairedMedianDeltaPercent": 34.334936974225286,
+      "controlMedianOfProcessP95": 2.686474,
+      "candidateMedianOfProcessP95": 3.560752,
+      "pairedP95DeltaMilliseconds": 0.8765839999999998,
+      "pairedP95DeltaPercent": 32.5352657392128
+    }
+  ],
+  "quality": [
+    {
+      "scene": "sponza",
+      "condition": "ssao-off",
+      "cameraSignature": "365C8986189894CC62947B217B199DD61394551C2D6DA18299D04107B49ECA86",
+      "ldr": {
+        "count": 6220800,
+        "mae": 4.7589869281045754e-05,
+        "p95": 0.0,
+        "p99": 0.0039215686274509665,
+        "max": 0.0117647058823529,
+        "ssim": 0.9999968952183254,
+        "changedPixels": 71059,
+        "changedPixelRatio": 0.03426842206790123,
+        "edgeChannelMae": 5.0711243909413327e-05,
+        "edgePixelCount": 1908718,
+        "backgroundChannelMae": 0.0,
+        "backgroundPixelCount": 0
+      },
+      "ao": null,
+      "worldPosition": {
+        "count": 2073600,
+        "mae": 0.001813625268074428,
+        "p95": 0.003657475383484119,
+        "p99": 0.0039092694133818435,
+        "max": 0.004418702165886889
+      },
+      "viewPosition": {
+        "count": 2073600,
+        "mae": 0.001813822638284627,
+        "p95": 0.003657753500964189,
+        "p99": 0.0039095450059939375,
+        "max": 0.004418945895287968
+      },
+      "depthBuckets": [
+        {
+          "name": "near",
+          "quantileMinimum": 0,
+          "quantileMaximum": 0.3333333333333333,
+          "minimum": 0.2791801739609374,
+          "maximum": 1.3800187652089848,
+          "p95Threshold": 0.01,
+          "world": {
+            "count": 691159,
+            "mae": 0.00204805792946463,
+            "p95": 0.00376400289863816,
+            "p99": 0.0039266767936663284,
+            "max": 0.004052958566795556
+          },
+          "view": {
+            "count": 691159,
+            "mae": 0.0020483057228534675,
+            "p95": 0.003764288810719839,
+            "p99": 0.003926961488119565,
+            "max": 0.0040532308752915785
+          },
+          "pass": true
+        },
+        {
+          "name": "mid",
+          "quantileMinimum": 0.3333333333333333,
+          "quantileMaximum": 0.6666666666666666,
+          "minimum": 1.3800187652089848,
+          "maximum": 2.849517769148438,
+          "p95Threshold": 0.03,
+          "world": {
+            "count": 691240,
+            "mae": 0.0020743706119983633,
+            "p95": 0.0037045591479167267,
+            "p99": 0.003944109394099026,
+            "max": 0.004418702165886889
+          },
+          "view": {
+            "count": 691240,
+            "mae": 0.002074600396780184,
+            "p95": 0.003704799580019474,
+            "p99": 0.003944378773479428,
+            "max": 0.004418945895287968
+          },
+          "pass": true
+        },
+        {
+          "name": "far",
+          "quantileMinimum": 0.6666666666666666,
+          "quantileMaximum": 1,
+          "minimum": 2.849517769148438,
+          "maximum": 11.844501006805665,
+          "p95Threshold": 0.1,
+          "world": {
+            "count": 691201,
+            "mae": 0.0013184467956072698,
+            "p95": 0.0024353662360464086,
+            "p99": 0.0034554628872160422,
+            "max": 0.0042611215371173685
+          },
+          "view": {
+            "count": 691201,
+            "mae": 0.0013185613293021697,
+            "p95": 0.0024354086558941715,
+            "p99": 0.003455267734465945,
+            "max": 0.004260940513716299
+          },
+          "pass": true
+        }
+      ],
+      "backgroundMaskMismatchPixels": 0,
+      "attachments": [
+        {
+          "attachment": "depth",
+          "controlSha256": "79C9585168DB02B8149ACBA231565FC65EBD5FD2EFFC1D10BEAC78D7CE6E50F3",
+          "candidateSha256": "79C9585168DB02B8149ACBA231565FC65EBD5FD2EFFC1D10BEAC78D7CE6E50F3",
+          "identical": true
+        },
+        {
+          "attachment": "normal",
+          "controlSha256": "373C882E01C8135792C891441D34A0713094EF85C22F4B472F54BD8293382469",
+          "candidateSha256": "373C882E01C8135792C891441D34A0713094EF85C22F4B472F54BD8293382469",
+          "identical": true
+        },
+        {
+          "attachment": "albedo",
+          "controlSha256": "F15658239A52190DFA9F6CE69202877C78E34C1CFBC77A987E690BBC52B85461",
+          "candidateSha256": "F15658239A52190DFA9F6CE69202877C78E34C1CFBC77A987E690BBC52B85461",
+          "identical": true
+        },
+        {
+          "attachment": "material",
+          "controlSha256": "41BBC6D818A5488BBB10B566A371702805CFB61FB0BF13FD906D6AA2A8959F97",
+          "candidateSha256": "41BBC6D818A5488BBB10B566A371702805CFB61FB0BF13FD906D6AA2A8959F97",
+          "identical": true
+        },
+        {
+          "attachment": "material-alpha",
+          "controlSha256": "CECBC7D814D9B7BD82F9A246D3871AFA880569BA03F3F1B90E5B43D6B5B7D460",
+          "candidateSha256": "CECBC7D814D9B7BD82F9A246D3871AFA880569BA03F3F1B90E5B43D6B5B7D460",
+          "identical": true
+        },
+        {
+          "attachment": "emissive",
+          "controlSha256": "8F87846BA94CA141D7640E62A17234738F782BB504CE51B74DD07B2055F98C4E",
+          "candidateSha256": "8F87846BA94CA141D7640E62A17234738F782BB504CE51B74DD07B2055F98C4E",
+          "identical": true
+        }
+      ],
+      "passes": {
+        "ldr": true,
+        "ao": true,
+        "position": true,
+        "background": true,
+        "attachments": true
+      },
+      "pass": true
+    },
+    {
+      "scene": "sponza",
+      "condition": "ssao-on",
+      "cameraSignature": "365C8986189894CC62947B217B199DD61394551C2D6DA18299D04107B49ECA86",
+      "ldr": {
+        "count": 6220800,
+        "mae": 0.00034225974340353424,
+        "p95": 0.0039215686274509665,
+        "p99": 0.003921568627451022,
+        "max": 0.047058823529411764,
+        "ssim": 0.9999705547635811,
+        "changedPixels": 271412,
+        "changedPixelRatio": 0.13088927469135803,
+        "edgeChannelMae": 0.000309014173404704,
+        "edgePixelCount": 1908718,
+        "backgroundChannelMae": 0.0,
+        "backgroundPixelCount": 0
+      },
+      "ao": {
+        "count": 2073600,
+        "mae": 0.001846519222965947,
+        "p95": 0.015625,
+        "p99": 0.02978515625,
+        "max": 0.1533203125
+      },
+      "worldPosition": {
+        "count": 2073600,
+        "mae": 0.001813625268074428,
+        "p95": 0.003657475383484119,
+        "p99": 0.0039092694133818435,
+        "max": 0.004418702165886889
+      },
+      "viewPosition": {
+        "count": 2073600,
+        "mae": 0.001813822638284627,
+        "p95": 0.003657753500964189,
+        "p99": 0.0039095450059939375,
+        "max": 0.004418945895287968
+      },
+      "depthBuckets": [
+        {
+          "name": "near",
+          "quantileMinimum": 0,
+          "quantileMaximum": 0.3333333333333333,
+          "minimum": 0.2791801739609374,
+          "maximum": 1.3800187652089848,
+          "p95Threshold": 0.01,
+          "world": {
+            "count": 691159,
+            "mae": 0.00204805792946463,
+            "p95": 0.00376400289863816,
+            "p99": 0.0039266767936663284,
+            "max": 0.004052958566795556
+          },
+          "view": {
+            "count": 691159,
+            "mae": 0.0020483057228534675,
+            "p95": 0.003764288810719839,
+            "p99": 0.003926961488119565,
+            "max": 0.0040532308752915785
+          },
+          "pass": true
+        },
+        {
+          "name": "mid",
+          "quantileMinimum": 0.3333333333333333,
+          "quantileMaximum": 0.6666666666666666,
+          "minimum": 1.3800187652089848,
+          "maximum": 2.849517769148438,
+          "p95Threshold": 0.03,
+          "world": {
+            "count": 691240,
+            "mae": 0.0020743706119983633,
+            "p95": 0.0037045591479167267,
+            "p99": 0.003944109394099026,
+            "max": 0.004418702165886889
+          },
+          "view": {
+            "count": 691240,
+            "mae": 0.002074600396780184,
+            "p95": 0.003704799580019474,
+            "p99": 0.003944378773479428,
+            "max": 0.004418945895287968
+          },
+          "pass": true
+        },
+        {
+          "name": "far",
+          "quantileMinimum": 0.6666666666666666,
+          "quantileMaximum": 1,
+          "minimum": 2.849517769148438,
+          "maximum": 11.844501006805665,
+          "p95Threshold": 0.1,
+          "world": {
+            "count": 691201,
+            "mae": 0.0013184467956072698,
+            "p95": 0.0024353662360464086,
+            "p99": 0.0034554628872160422,
+            "max": 0.0042611215371173685
+          },
+          "view": {
+            "count": 691201,
+            "mae": 0.0013185613293021697,
+            "p95": 0.0024354086558941715,
+            "p99": 0.003455267734465945,
+            "max": 0.004260940513716299
+          },
+          "pass": true
+        }
+      ],
+      "backgroundMaskMismatchPixels": 0,
+      "attachments": [
+        {
+          "attachment": "depth",
+          "controlSha256": "79C9585168DB02B8149ACBA231565FC65EBD5FD2EFFC1D10BEAC78D7CE6E50F3",
+          "candidateSha256": "79C9585168DB02B8149ACBA231565FC65EBD5FD2EFFC1D10BEAC78D7CE6E50F3",
+          "identical": true
+        },
+        {
+          "attachment": "normal",
+          "controlSha256": "373C882E01C8135792C891441D34A0713094EF85C22F4B472F54BD8293382469",
+          "candidateSha256": "373C882E01C8135792C891441D34A0713094EF85C22F4B472F54BD8293382469",
+          "identical": true
+        },
+        {
+          "attachment": "albedo",
+          "controlSha256": "F15658239A52190DFA9F6CE69202877C78E34C1CFBC77A987E690BBC52B85461",
+          "candidateSha256": "F15658239A52190DFA9F6CE69202877C78E34C1CFBC77A987E690BBC52B85461",
+          "identical": true
+        },
+        {
+          "attachment": "material",
+          "controlSha256": "41BBC6D818A5488BBB10B566A371702805CFB61FB0BF13FD906D6AA2A8959F97",
+          "candidateSha256": "41BBC6D818A5488BBB10B566A371702805CFB61FB0BF13FD906D6AA2A8959F97",
+          "identical": true
+        },
+        {
+          "attachment": "material-alpha",
+          "controlSha256": "CECBC7D814D9B7BD82F9A246D3871AFA880569BA03F3F1B90E5B43D6B5B7D460",
+          "candidateSha256": "CECBC7D814D9B7BD82F9A246D3871AFA880569BA03F3F1B90E5B43D6B5B7D460",
+          "identical": true
+        },
+        {
+          "attachment": "emissive",
+          "controlSha256": "8F87846BA94CA141D7640E62A17234738F782BB504CE51B74DD07B2055F98C4E",
+          "candidateSha256": "8F87846BA94CA141D7640E62A17234738F782BB504CE51B74DD07B2055F98C4E",
+          "identical": true
+        }
+      ],
+      "passes": {
+        "ldr": false,
+        "ao": false,
+        "position": true,
+        "background": true,
+        "attachments": true
+      },
+      "pass": false
+    },
+    {
+      "scene": "san-miguel",
+      "condition": "ssao-off",
+      "cameraSignature": "8731DFBF748DA65AAC6F3E2C739E606E2F0A1DBB032EC48ACCFA56755567A5B1",
+      "ldr": {
+        "count": 6220800,
+        "mae": 8.084831154684096e-05,
+        "p95": 0.0,
+        "p99": 0.0039215686274509665,
+        "max": 0.30980392156862746,
+        "ssim": 0.9999917758215007,
+        "changedPixels": 113666,
+        "changedPixelRatio": 0.054815779320987655,
+        "edgeChannelMae": 8.518567399557697e-05,
+        "edgePixelCount": 1931237,
+        "backgroundChannelMae": 0.0,
+        "backgroundPixelCount": 246
+      },
+      "ao": null,
+      "worldPosition": {
+        "count": 2073354,
+        "mae": 0.0011933364201845566,
+        "p95": 0.002051567486884725,
+        "p99": 0.002339502011112459,
+        "max": 0.004319120343272816
+      },
+      "viewPosition": {
+        "count": 2073354,
+        "mae": 0.0011933462016922958,
+        "p95": 0.002051569236397117,
+        "p99": 0.0023395064190944634,
+        "max": 0.004319141454414339
+      },
+      "depthBuckets": [
+        {
+          "name": "near",
+          "quantileMinimum": 0,
+          "quantileMaximum": 0.3333333333333333,
+          "minimum": 0.3947387871333006,
+          "maximum": 1.1249456854689126,
+          "p95Threshold": 0.01,
+          "world": {
+            "count": 691118,
+            "mae": 0.0012677743520872506,
+            "p95": 0.0020390029385634334,
+            "p99": 0.0023269626767434977,
+            "max": 0.0028557674122681887
+          },
+          "view": {
+            "count": 691118,
+            "mae": 0.0012677722931684155,
+            "p95": 0.0020389958255023597,
+            "p99": 0.002326951712724444,
+            "max": 0.0028557671365720596
+          },
+          "pass": true
+        },
+        {
+          "name": "mid",
+          "quantileMinimum": 0.3333333333333333,
+          "quantileMaximum": 0.6666666666666666,
+          "minimum": 1.1249456854689126,
+          "maximum": 2.3758738402161454,
+          "p95Threshold": 0.03,
+          "world": {
+            "count": 691118,
+            "mae": 0.0013054571515372798,
+            "p95": 0.00210049978388136,
+            "p99": 0.0023896734705996744,
+            "max": 0.0028565258699676157
+          },
+          "view": {
+            "count": 691118,
+            "mae": 0.0013054623237416612,
+            "p95": 0.0021004984993027416,
+            "p99": 0.0023896633757059366,
+            "max": 0.0028565264193662326
+          },
+          "pass": true
+        },
+        {
+          "name": "far",
+          "quantileMinimum": 0.6666666666666666,
+          "quantileMaximum": 1,
+          "minimum": 2.3758738402161454,
+          "maximum": 7.0216548241904295,
+          "p95Threshold": 0.1,
+          "world": {
+            "count": 691118,
+            "mae": 0.0010067777569291402,
+            "p95": 0.0019588334305489217,
+            "p99": 0.0022818833465504114,
+            "max": 0.004319120343272816
+          },
+          "view": {
+            "count": 691118,
+            "mae": 0.0010068039881668107,
+            "p95": 0.0019588453999654304,
+            "p99": 0.0022819096358344076,
+            "max": 0.004319141454414339
+          },
+          "pass": true
+        }
+      ],
+      "backgroundMaskMismatchPixels": 0,
+      "attachments": [
+        {
+          "attachment": "depth",
+          "controlSha256": "20C6F78C8059243389B1449FD54155CE966E48061E4976924E3EE140EAA0745B",
+          "candidateSha256": "20C6F78C8059243389B1449FD54155CE966E48061E4976924E3EE140EAA0745B",
+          "identical": true
+        },
+        {
+          "attachment": "normal",
+          "controlSha256": "2E0E283D97F12813D405173C923959F48272D86AB27AA5C1AD403520F46F4021",
+          "candidateSha256": "2E0E283D97F12813D405173C923959F48272D86AB27AA5C1AD403520F46F4021",
+          "identical": true
+        },
+        {
+          "attachment": "albedo",
+          "controlSha256": "5D3DD66D8A1686AA90637644F6CA3AA5C95665670ABCA86854295FA47F03E7D3",
+          "candidateSha256": "5D3DD66D8A1686AA90637644F6CA3AA5C95665670ABCA86854295FA47F03E7D3",
+          "identical": true
+        },
+        {
+          "attachment": "material",
+          "controlSha256": "B6A42E170ACDA89845025E174E7AEF4635FC3D8C19E14C345CE85F2B59DB75F4",
+          "candidateSha256": "B6A42E170ACDA89845025E174E7AEF4635FC3D8C19E14C345CE85F2B59DB75F4",
+          "identical": true
+        },
+        {
+          "attachment": "material-alpha",
+          "controlSha256": "236D398AA82E2573211B318ECAED34AB0A01D91A5D98A0F9B2264562F2507E90",
+          "candidateSha256": "236D398AA82E2573211B318ECAED34AB0A01D91A5D98A0F9B2264562F2507E90",
+          "identical": true
+        },
+        {
+          "attachment": "emissive",
+          "controlSha256": "8F87846BA94CA141D7640E62A17234738F782BB504CE51B74DD07B2055F98C4E",
+          "candidateSha256": "8F87846BA94CA141D7640E62A17234738F782BB504CE51B74DD07B2055F98C4E",
+          "identical": true
+        }
+      ],
+      "passes": {
+        "ldr": false,
+        "ao": true,
+        "position": true,
+        "background": true,
+        "attachments": true
+      },
+      "pass": false
+    },
+    {
+      "scene": "san-miguel",
+      "condition": "ssao-on",
+      "cameraSignature": "8731DFBF748DA65AAC6F3E2C739E606E2F0A1DBB032EC48ACCFA56755567A5B1",
+      "ldr": {
+        "count": 6220800,
+        "mae": 0.0022946459190672152,
+        "p95": 0.0117647058823529,
+        "p99": 0.023529411764705854,
+        "max": 0.3137254901960784,
+        "ssim": 0.9992933631507662,
+        "changedPixels": 934345,
+        "changedPixelRatio": 0.4505907600308642,
+        "edgeChannelMae": 0.002402320885728762,
+        "edgePixelCount": 1931237,
+        "backgroundChannelMae": 0.0,
+        "backgroundPixelCount": 246
+      },
+      "ao": {
+        "count": 2073600,
+        "mae": 0.009430135587851206,
+        "p95": 0.031494140625,
+        "p99": 0.05712890625,
+        "max": 0.1748046875
+      },
+      "worldPosition": {
+        "count": 2073354,
+        "mae": 0.0011933364201845566,
+        "p95": 0.002051567486884725,
+        "p99": 0.002339502011112459,
+        "max": 0.004319120343272816
+      },
+      "viewPosition": {
+        "count": 2073354,
+        "mae": 0.0011933462016922958,
+        "p95": 0.002051569236397117,
+        "p99": 0.0023395064190944634,
+        "max": 0.004319141454414339
+      },
+      "depthBuckets": [
+        {
+          "name": "near",
+          "quantileMinimum": 0,
+          "quantileMaximum": 0.3333333333333333,
+          "minimum": 0.3947387871333006,
+          "maximum": 1.1249456854689126,
+          "p95Threshold": 0.01,
+          "world": {
+            "count": 691118,
+            "mae": 0.0012677743520872506,
+            "p95": 0.0020390029385634334,
+            "p99": 0.0023269626767434977,
+            "max": 0.0028557674122681887
+          },
+          "view": {
+            "count": 691118,
+            "mae": 0.0012677722931684155,
+            "p95": 0.0020389958255023597,
+            "p99": 0.002326951712724444,
+            "max": 0.0028557671365720596
+          },
+          "pass": true
+        },
+        {
+          "name": "mid",
+          "quantileMinimum": 0.3333333333333333,
+          "quantileMaximum": 0.6666666666666666,
+          "minimum": 1.1249456854689126,
+          "maximum": 2.3758738402161454,
+          "p95Threshold": 0.03,
+          "world": {
+            "count": 691118,
+            "mae": 0.0013054571515372798,
+            "p95": 0.00210049978388136,
+            "p99": 0.0023896734705996744,
+            "max": 0.0028565258699676157
+          },
+          "view": {
+            "count": 691118,
+            "mae": 0.0013054623237416612,
+            "p95": 0.0021004984993027416,
+            "p99": 0.0023896633757059366,
+            "max": 0.0028565264193662326
+          },
+          "pass": true
+        },
+        {
+          "name": "far",
+          "quantileMinimum": 0.6666666666666666,
+          "quantileMaximum": 1,
+          "minimum": 2.3758738402161454,
+          "maximum": 7.0216548241904295,
+          "p95Threshold": 0.1,
+          "world": {
+            "count": 691118,
+            "mae": 0.0010067777569291402,
+            "p95": 0.0019588334305489217,
+            "p99": 0.0022818833465504114,
+            "max": 0.004319120343272816
+          },
+          "view": {
+            "count": 691118,
+            "mae": 0.0010068039881668107,
+            "p95": 0.0019588453999654304,
+            "p99": 0.0022819096358344076,
+            "max": 0.004319141454414339
+          },
+          "pass": true
+        }
+      ],
+      "backgroundMaskMismatchPixels": 0,
+      "attachments": [
+        {
+          "attachment": "depth",
+          "controlSha256": "20C6F78C8059243389B1449FD54155CE966E48061E4976924E3EE140EAA0745B",
+          "candidateSha256": "20C6F78C8059243389B1449FD54155CE966E48061E4976924E3EE140EAA0745B",
+          "identical": true
+        },
+        {
+          "attachment": "normal",
+          "controlSha256": "2E0E283D97F12813D405173C923959F48272D86AB27AA5C1AD403520F46F4021",
+          "candidateSha256": "2E0E283D97F12813D405173C923959F48272D86AB27AA5C1AD403520F46F4021",
+          "identical": true
+        },
+        {
+          "attachment": "albedo",
+          "controlSha256": "5D3DD66D8A1686AA90637644F6CA3AA5C95665670ABCA86854295FA47F03E7D3",
+          "candidateSha256": "5D3DD66D8A1686AA90637644F6CA3AA5C95665670ABCA86854295FA47F03E7D3",
+          "identical": true
+        },
+        {
+          "attachment": "material",
+          "controlSha256": "B6A42E170ACDA89845025E174E7AEF4635FC3D8C19E14C345CE85F2B59DB75F4",
+          "candidateSha256": "B6A42E170ACDA89845025E174E7AEF4635FC3D8C19E14C345CE85F2B59DB75F4",
+          "identical": true
+        },
+        {
+          "attachment": "material-alpha",
+          "controlSha256": "236D398AA82E2573211B318ECAED34AB0A01D91A5D98A0F9B2264562F2507E90",
+          "candidateSha256": "236D398AA82E2573211B318ECAED34AB0A01D91A5D98A0F9B2264562F2507E90",
+          "identical": true
+        },
+        {
+          "attachment": "emissive",
+          "controlSha256": "8F87846BA94CA141D7640E62A17234738F782BB504CE51B74DD07B2055F98C4E",
+          "candidateSha256": "8F87846BA94CA141D7640E62A17234738F782BB504CE51B74DD07B2055F98C4E",
+          "identical": true
+        }
+      ],
+      "passes": {
+        "ldr": false,
+        "ao": false,
+        "position": true,
+        "background": true,
+        "attachments": true
+      },
+      "pass": false
+    }
+  ],
+  "validationErrors": [],
+  "lifecycleErrors": []
+}

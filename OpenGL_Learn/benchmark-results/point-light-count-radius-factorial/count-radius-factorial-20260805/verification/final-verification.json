@@ -1,0 +1,23 @@
+﻿{
+    "schemaVersion":  1,
+    "releaseBuild":  {
+                         "passed":  true,
+                         "executableSha256":  "F5C4B77E544C51747CE6741B5D2387AEAB9EEA4D736F22D3271B58E07C1D573F"
+                     },
+    "defaultSmoke":  {
+                         "passed":  true,
+                         "result":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\point-light-count-radius-factorial\\count-radius-factorial-20260805\\verification\\default-smoke\\result.json",
+                         "log":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\point-light-count-radius-factorial\\count-radius-factorial-20260805\\verification\\default-smoke\\run.log",
+                         "renderMode":  "analytic-screen",
+                         "renderModeExplicit":  false,
+                         "targetRadiusExplicit":  false,
+                         "generatorVersion":  "point-light-heavy-xorshift32-v1",
+                         "glErrorCount":  0
+                     },
+    "residualProcesses":  {
+                              "renderer":  0,
+                              "renderDoc":  0
+                          },
+    "runtimeCandidateImplemented":  false,
+    "defaultChanged":  false
+}

@@ -1,0 +1,362 @@
+{
+  "schemaVersion": 2,
+  "passed": true,
+  "postCaptureAmendment": true,
+  "method": "frozen raw verifier logic rerun with one documented static-source predicate corrected",
+  "amendmentReason": "the frozen predicate compared discard with the uniform declaration; the corrected predicate compares discard with the first texelFetch(gridMetadata)",
+  "protocolSha256": "B8350E5F8648BBCC4E2396C5FB2454872C846107ACD5BD6167E35630603C9C79",
+  "preCaptureManifestSha256": "99F1120CF0192222EAF8AF8CC83DE3FC8C78FAC789E9216FB83CB99E6620E74E",
+  "captureManifestSha256": "4C6A63C2AFF80037213B519E36E6F96CAA2FCFC91696EF8FBA4C27114F9ED2CC",
+  "aggregateSha256BeforeVerification": "4FFAC6AB08F0EEC739DC593C6C23B50B3603CC797C975F1B9607E20C4463AD09",
+  "amendmentSha256": "B64ECA6BF14D0E81FB0F46503A706C1033BFA8349F0430E1CFF38F7EA4A72ECC",
+  "frozenVerifierSha256": "0B258B1D0F8532D152222A4CA7A488C40791DC3C3583BC88529469F9772C8C29",
+  "postCaptureVerifierSha256": "121D9ACE82933C064B311F4A0C2408CB6E970AFD530C23807BB8536D4D4801AB",
+  "frozenVerifierFailureLogSha256": "BC971AC7822140D57ABCBCFCA36BB2FD564CE184CA9C628E74E7D656BFF305AE",
+  "knownFrozenVerifierFailureReproduced": true,
+  "artifactCount": 180,
+  "processCount": 60,
+  "comparisonCount": 10,
+  "motionPairCount": 15,
+  "signatureGroupCount": 5,
+  "qualityPairCount": 30,
+  "qualityAllPassed": true,
+  "worstQuality": {
+    "maxChannelLsb": 2,
+    "meanChannelLsb": 0.06638599537037038,
+    "p99ChannelLsb": 1.0
+  },
+  "decision": {
+    "verdict": "conditional-go",
+    "staticTileWins": 4,
+    "staticAnalyticWins": 0,
+    "movingTileWins": 0,
+    "movingAnalyticWins": 5
+  },
+  "comparisons": [
+    {
+      "cell": "low-boundary",
+      "camera": "static",
+      "winner": "tie",
+      "direction": "tile-faster",
+      "significant": false,
+      "medianPairedDeltaMs": -0.03695000000000004,
+      "medianPairedRelativePercent": -2.168554492634547,
+      "pairs": [
+        {
+          "round": 1,
+          "analyticMedianMs": 1.7039,
+          "tileMedianMs": 1.66695,
+          "tileMinusAnalyticMs": -0.03695000000000004,
+          "tileRelativePercent": -2.168554492634547
+        },
+        {
+          "round": 2,
+          "analyticMedianMs": 1.7176,
+          "tileMedianMs": 1.715,
+          "tileMinusAnalyticMs": -0.0025999999999999357,
+          "tileRelativePercent": -0.15137401024685235
+        },
+        {
+          "round": 3,
+          "analyticMedianMs": 1.7082,
+          "tileMedianMs": 1.6689,
+          "tileMinusAnalyticMs": -0.03929999999999989,
+          "tileRelativePercent": -2.3006673691605135
+        }
+      ]
+    },
+    {
+      "cell": "low-boundary",
+      "camera": "moving",
+      "winner": "analytic",
+      "direction": "analytic-faster",
+      "significant": true,
+      "medianPairedDeltaMs": 0.14555000000000007,
+      "medianPairedRelativePercent": 8.575637059949925,
+      "pairs": [
+        {
+          "round": 1,
+          "analyticMedianMs": 1.69725,
+          "tileMedianMs": 1.8428,
+          "tileMinusAnalyticMs": 0.14555000000000007,
+          "tileRelativePercent": 8.575637059949925
+        },
+        {
+          "round": 2,
+          "analyticMedianMs": 1.69615,
+          "tileMedianMs": 1.8372,
+          "tileMinusAnalyticMs": 0.1410499999999999,
+          "tileRelativePercent": 8.315891872770681
+        },
+        {
+          "round": 3,
+          "analyticMedianMs": 1.6951,
+          "tileMedianMs": 1.84085,
+          "tileMinusAnalyticMs": 0.14575000000000005,
+          "tileRelativePercent": 8.598312783906557
+        }
+      ]
+    },
+    {
+      "cell": "low-radius",
+      "camera": "static",
+      "winner": "tile",
+      "direction": "tile-faster",
+      "significant": true,
+      "medianPairedDeltaMs": -0.15185000000000004,
+      "medianPairedRelativePercent": -8.191945620802203,
+      "pairs": [
+        {
+          "round": 1,
+          "analyticMedianMs": 1.8553,
+          "tileMedianMs": 1.69815,
+          "tileMinusAnalyticMs": -0.1571499999999999,
+          "tileRelativePercent": -8.470328248800728
+        },
+        {
+          "round": 2,
+          "analyticMedianMs": 1.8470499999999999,
+          "tileMedianMs": 1.7034,
+          "tileMinusAnalyticMs": -0.14364999999999983,
+          "tileRelativePercent": -7.777266451909794
+        },
+        {
+          "round": 3,
+          "analyticMedianMs": 1.85365,
+          "tileMedianMs": 1.7018,
+          "tileMinusAnalyticMs": -0.15185000000000004,
+          "tileRelativePercent": -8.191945620802203
+        }
+      ]
+    },
+    {
+      "cell": "low-radius",
+      "camera": "moving",
+      "winner": "analytic",
+      "direction": "analytic-faster",
+      "significant": true,
+      "medianPairedDeltaMs": 0.9675500000000001,
+      "medianPairedRelativePercent": 52.8268406540908,
+      "pairs": [
+        {
+          "round": 1,
+          "analyticMedianMs": 1.8310499999999998,
+          "tileMedianMs": 2.8462500000000004,
+          "tileMinusAnalyticMs": 1.0152000000000005,
+          "tileRelativePercent": 55.44359793561075
+        },
+        {
+          "round": 2,
+          "analyticMedianMs": 1.8336000000000001,
+          "tileMedianMs": 2.7811500000000002,
+          "tileMinusAnalyticMs": 0.9475500000000001,
+          "tileRelativePercent": 51.677028795811516
+        },
+        {
+          "round": 3,
+          "analyticMedianMs": 1.83155,
+          "tileMedianMs": 2.7991,
+          "tileMinusAnalyticMs": 0.9675500000000001,
+          "tileRelativePercent": 52.8268406540908
+        }
+      ]
+    },
+    {
+      "cell": "wide-coverage",
+      "camera": "static",
+      "winner": "tile",
+      "direction": "tile-faster",
+      "significant": true,
+      "medianPairedDeltaMs": -1.60515,
+      "medianPairedRelativePercent": -36.53590085014852,
+      "pairs": [
+        {
+          "round": 1,
+          "analyticMedianMs": 4.39335,
+          "tileMedianMs": 2.7882,
+          "tileMinusAnalyticMs": -1.60515,
+          "tileRelativePercent": -36.53590085014852
+        },
+        {
+          "round": 2,
+          "analyticMedianMs": 4.3826,
+          "tileMedianMs": 2.77325,
+          "tileMinusAnalyticMs": -1.60935,
+          "tileRelativePercent": -36.7213526217314
+        },
+        {
+          "round": 3,
+          "analyticMedianMs": 4.36515,
+          "tileMedianMs": 2.776,
+          "tileMinusAnalyticMs": -1.58915,
+          "tileRelativePercent": -36.40539271273611
+        }
+      ]
+    },
+    {
+      "cell": "wide-coverage",
+      "camera": "moving",
+      "winner": "analytic",
+      "direction": "analytic-faster",
+      "significant": true,
+      "medianPairedDeltaMs": 7.60765,
+      "medianPairedRelativePercent": 174.46461209522604,
+      "pairs": [
+        {
+          "round": 1,
+          "analyticMedianMs": 4.4031,
+          "tileMedianMs": 12.01075,
+          "tileMinusAnalyticMs": 7.60765,
+          "tileRelativePercent": 172.7794054189094
+        },
+        {
+          "round": 2,
+          "analyticMedianMs": 4.3496500000000005,
+          "tileMedianMs": 11.93825,
+          "tileMinusAnalyticMs": 7.5886,
+          "tileRelativePercent": 174.46461209522604
+        },
+        {
+          "round": 3,
+          "analyticMedianMs": 4.31725,
+          "tileMedianMs": 11.999849999999999,
+          "tileMinusAnalyticMs": 7.682599999999999,
+          "tileRelativePercent": 177.95124211013956
+        }
+      ]
+    },
+    {
+      "cell": "representative",
+      "camera": "static",
+      "winner": "tile",
+      "direction": "tile-faster",
+      "significant": true,
+      "medianPairedDeltaMs": -4.5352500000000004,
+      "medianPairedRelativePercent": -50.311726922778256,
+      "pairs": [
+        {
+          "round": 1,
+          "analyticMedianMs": 9.0143,
+          "tileMedianMs": 4.47905,
+          "tileMinusAnalyticMs": -4.5352500000000004,
+          "tileRelativePercent": -50.311726922778256
+        },
+        {
+          "round": 2,
+          "analyticMedianMs": 9.030750000000001,
+          "tileMedianMs": 4.45935,
+          "tileMinusAnalyticMs": -4.5714000000000015,
+          "tileRelativePercent": -50.62038036707916
+        },
+        {
+          "round": 3,
+          "analyticMedianMs": 8.92485,
+          "tileMedianMs": 4.49055,
+          "tileMinusAnalyticMs": -4.4342999999999995,
+          "tileRelativePercent": -49.684868653254675
+        }
+      ]
+    },
+    {
+      "cell": "representative",
+      "camera": "moving",
+      "winner": "analytic",
+      "direction": "analytic-faster",
+      "significant": true,
+      "medianPairedDeltaMs": 27.098,
+      "medianPairedRelativePercent": 304.1114184870743,
+      "pairs": [
+        {
+          "round": 1,
+          "analyticMedianMs": 8.932649999999999,
+          "tileMedianMs": 35.7894,
+          "tileMinusAnalyticMs": 26.85675,
+          "tileRelativePercent": 300.65825930714857
+        },
+        {
+          "round": 2,
+          "analyticMedianMs": 8.91055,
+          "tileMedianMs": 36.00855,
+          "tileMinusAnalyticMs": 27.098,
+          "tileRelativePercent": 304.1114184870743
+        },
+        {
+          "round": 3,
+          "analyticMedianMs": 8.8588,
+          "tileMedianMs": 36.3992,
+          "tileMinusAnalyticMs": 27.540399999999998,
+          "tileRelativePercent": 310.88183501151394
+        }
+      ]
+    },
+    {
+      "cell": "heavy",
+      "camera": "static",
+      "winner": "tile",
+      "direction": "tile-faster",
+      "significant": true,
+      "medianPairedDeltaMs": -12.178650000000001,
+      "medianPairedRelativePercent": -51.48217897747088,
+      "pairs": [
+        {
+          "round": 1,
+          "analyticMedianMs": 23.522750000000002,
+          "tileMedianMs": 11.45795,
+          "tileMinusAnalyticMs": -12.064800000000002,
+          "tileRelativePercent": -51.28992145901309
+        },
+        {
+          "round": 2,
+          "analyticMedianMs": 23.65605,
+          "tileMedianMs": 11.4774,
+          "tileMinusAnalyticMs": -12.178650000000001,
+          "tileRelativePercent": -51.48217897747088
+        },
+        {
+          "round": 3,
+          "analyticMedianMs": 23.63345,
+          "tileMedianMs": 11.43895,
+          "tileMinusAnalyticMs": -12.1945,
+          "tileRelativePercent": -51.598475889047094
+        }
+      ]
+    },
+    {
+      "cell": "heavy",
+      "camera": "moving",
+      "winner": "analytic",
+      "direction": "analytic-faster",
+      "significant": true,
+      "medianPairedDeltaMs": 69.19385,
+      "medianPairedRelativePercent": 295.9533744518824,
+      "pairs": [
+        {
+          "round": 1,
+          "analyticMedianMs": 23.5579,
+          "tileMedianMs": 93.2783,
+          "tileMinusAnalyticMs": 69.7204,
+          "tileRelativePercent": 295.9533744518824
+        },
+        {
+          "round": 2,
+          "analyticMedianMs": 23.2982,
+          "tileMedianMs": 92.49205,
+          "tileMinusAnalyticMs": 69.19385,
+          "tileRelativePercent": 296.99225691255117
+        },
+        {
+          "round": 3,
+          "analyticMedianMs": 23.3173,
+          "tileMedianMs": 92.2641,
+          "tileMinusAnalyticMs": 68.9468,
+          "tileRelativePercent": 295.68946661920546
+        }
+      ]
+    }
+  ],
+  "sourceContract": {
+    "exactSpherePredicate": true,
+    "invalidGBufferDiscardBeforeFirstMetadataFetch": true,
+    "defaultRemainsAnalyticScreen": true
+  }
+}

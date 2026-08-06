@@ -1,0 +1,65 @@
+﻿{
+    "schemaVersion":  1,
+    "generatedUtc":  "2026-08-05T13:24:45.5662148Z",
+    "executable":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\x64\\Release\\OpenGL_Learn.exe",
+    "executableSha256":  "3CB1CA6986DCF27DA90A9AC4F8988BFD71D172A250498ABE2B9C0CA760588BAB",
+    "records":  [
+                    {
+                        "name":  "default-deferred-representative",
+                        "startedUtc":  "2026-08-05T13:24:33.6775038Z",
+                        "endedUtc":  "2026-08-05T13:24:35.1179958Z",
+                        "exitCode":  0,
+                        "log":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\point-light-grid-slice-count\\grid-slice-count-formal-20260805\\final-smoke\\logs\\default-deferred-representative.log"
+                    },
+                    {
+                        "name":  "explicit-coalesced-control",
+                        "startedUtc":  "2026-08-05T13:24:35.1852698Z",
+                        "endedUtc":  "2026-08-05T13:24:36.5311119Z",
+                        "exitCode":  0,
+                        "log":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\point-light-grid-slice-count\\grid-slice-count-formal-20260805\\final-smoke\\logs\\explicit-coalesced-control.log"
+                    },
+                    {
+                        "name":  "explicit-legacy2n-control",
+                        "startedUtc":  "2026-08-05T13:24:36.5364206Z",
+                        "endedUtc":  "2026-08-05T13:24:37.8922849Z",
+                        "exitCode":  0,
+                        "log":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\point-light-grid-slice-count\\grid-slice-count-formal-20260805\\final-smoke\\logs\\explicit-legacy2n-control.log"
+                    },
+                    {
+                        "name":  "analytic-screen-high-overlap",
+                        "startedUtc":  "2026-08-05T13:24:37.8964201Z",
+                        "endedUtc":  "2026-08-05T13:24:39.2269826Z",
+                        "exitCode":  0,
+                        "log":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\point-light-grid-slice-count\\grid-slice-count-formal-20260805\\final-smoke\\logs\\analytic-screen-high-overlap.log"
+                    },
+                    {
+                        "name":  "analytic-screen-edge-cases",
+                        "startedUtc":  "2026-08-05T13:24:39.2314898Z",
+                        "endedUtc":  "2026-08-05T13:24:40.5548254Z",
+                        "exitCode":  0,
+                        "log":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\point-light-grid-slice-count\\grid-slice-count-formal-20260805\\final-smoke\\logs\\analytic-screen-edge-cases.log"
+                    },
+                    {
+                        "name":  "resource-forward-deferred-resize-effects",
+                        "startedUtc":  "2026-08-05T13:24:40.5590049Z",
+                        "endedUtc":  "2026-08-05T13:24:42.8313574Z",
+                        "exitCode":  0,
+                        "log":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\point-light-grid-slice-count\\grid-slice-count-formal-20260805\\final-smoke\\logs\\resource-forward-deferred-resize-effects.log"
+                    },
+                    {
+                        "name":  "classic-sponza-pbr-forward",
+                        "startedUtc":  "2026-08-05T13:24:42.8343606Z",
+                        "endedUtc":  "2026-08-05T13:24:44.2115339Z",
+                        "exitCode":  0,
+                        "log":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\point-light-grid-slice-count\\grid-slice-count-formal-20260805\\final-smoke\\logs\\classic-sponza-pbr-forward.log"
+                    },
+                    {
+                        "name":  "classic-sponza-pbr-deferred",
+                        "startedUtc":  "2026-08-05T13:24:44.2195488Z",
+                        "endedUtc":  "2026-08-05T13:24:45.5619889Z",
+                        "exitCode":  0,
+                        "log":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\benchmark-results\\point-light-grid-slice-count\\grid-slice-count-formal-20260805\\final-smoke\\logs\\classic-sponza-pbr-deferred.log"
+                    }
+                ],
+    "success":  true
+}

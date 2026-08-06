@@ -1,0 +1,48 @@
+﻿{
+    "schemaVersion":  1,
+    "generatedUtc":  "2026-08-04T15:03:13.8643833Z",
+    "releaseBuild":  {
+                         "success":  true,
+                         "exitCode":  0,
+                         "configuration":  "Release",
+                         "architecture":  "x64",
+                         "solution":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn.sln",
+                         "log":  "verification/release-build.log"
+                     },
+    "executable":  {
+                       "path":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\x64\\Release\\OpenGL_Learn.exe",
+                       "sha256":  "EA40321A9CDE239AE223C1FBFFD43DCDE560CEC562B982CD4EF8069B4DBB4BB6",
+                       "capturedSha256":  "EA40321A9CDE239AE223C1FBFFD43DCDE560CEC562B982CD4EF8069B4DBB4BB6",
+                       "matchesCapturedExecutable":  true
+                   },
+    "smoke":  {
+                  "success":  true,
+                  "exitCode":  0,
+                  "resultSuccess":  true,
+                  "buildConfiguration":  "Release",
+                  "architecture":  "x64",
+                  "resolution":  [
+                                     640,
+                                     360
+                                 ],
+                  "pointLightCount":  16,
+                  "coverage":  "small-local",
+                  "seed":  "0x21D3F3A5",
+                  "warmupFrames":  2,
+                  "sampleFrames":  1,
+                  "renderModeArgumentPassed":  false,
+                  "renderMode":  "analytic-screen",
+                  "renderModeExplicit":  false,
+                  "stencilLifecycleClean":  true,
+                  "glErrorCount":  0,
+                  "result":  "verification/smoke.json",
+                  "capture":  "verification/smoke.ppm",
+                  "log":  "verification/smoke.log"
+              },
+    "processCleanup":  {
+                           "remainingRendererProcesses":  0,
+                           "passed":  true
+                       },
+    "runtimeCandidateImplemented":  false,
+    "defaultChanged":  false
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "amendment": "VERIFICATION_AMENDMENT_CN.md",
+  "amendmentSha256": "B64ECA6BF14D0E81FB0F46503A706C1033BFA8349F0430E1CFF38F7EA4A72ECC",
+  "frozenVerifier": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\tools\\verify_analytic_tile_ab.py",
+  "frozenVerifierSha256": "0B258B1D0F8532D152222A4CA7A488C40791DC3C3583BC88529469F9772C8C29",
+  "postCaptureVerifier": "C:\\Users\\Link\\Dev\\OpenGL_Learn\\OpenGL_Learn\\tools\\verify_analytic_tile_ab_postcapture.py",
+  "postCaptureVerifierSha256": "121D9ACE82933C064B311F4A0C2408CB6E970AFD530C23807BB8536D4D4801AB",
+  "captureManifestSha256": "4C6A63C2AFF80037213B519E36E6F96CAA2FCFC91696EF8FBA4C27114F9ED2CC",
+  "verificationResultSha256": "1EB40D8D146632C9D63EACC24E0CF739E4702F649A37662B8F7887A26FA89AFB"
+}

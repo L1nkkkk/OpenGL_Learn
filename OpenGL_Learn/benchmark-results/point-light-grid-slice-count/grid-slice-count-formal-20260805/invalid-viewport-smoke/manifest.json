@@ -1,0 +1,47 @@
+{
+  "actualResolution": [
+    5758,
+    64
+  ],
+  "invalidPixelCount": 13504,
+  "invalidPixelRatio": 0.03664466828759986,
+  "records": [
+    {
+      "actualResolution": [
+        5758,
+        64
+      ],
+      "captureSha256": "7C15DDF54FDE546401C9FFBA5CC834081719CF3178DA372D2368E4E5304F062E",
+      "csrSignature": "0x49e2f020c791d20c",
+      "invalidPixelCount": 13504,
+      "invalidPixelRatio": 0.03664466828759986,
+      "positionSha256": "F20B03157605156682B38F38195EF92510EA97BC89366E304117E6D466F70F49",
+      "sliceCount": 1,
+      "validPixelCount": 355008,
+      "validitySha256": "E4FE430D8144D0971BE4DF1D54DFEBB6D34C0EEE1D02BF6F1ED91182A4B21EB2"
+    },
+    {
+      "actualResolution": [
+        5758,
+        64
+      ],
+      "captureSha256": "7C15DDF54FDE546401C9FFBA5CC834081719CF3178DA372D2368E4E5304F062E",
+      "csrSignature": "0x530ef2fcd3bae0ba",
+      "invalidPixelCount": 13504,
+      "invalidPixelRatio": 0.03664466828759986,
+      "positionSha256": "F20B03157605156682B38F38195EF92510EA97BC89366E304117E6D466F70F49",
+      "sliceCount": 8,
+      "validPixelCount": 355008,
+      "validitySha256": "E4FE430D8144D0971BE4DF1D54DFEBB6D34C0EEE1D02BF6F1ED91182A4B21EB2"
+    }
+  ],
+  "requestedResolution": [
+    16384,
+    64
+  ],
+  "s1S8GBufferExact": true,
+  "s1S8OutputExact": true,
+  "schemaVersion": 1,
+  "success": true,
+  "validPixelCount": 355008
+}

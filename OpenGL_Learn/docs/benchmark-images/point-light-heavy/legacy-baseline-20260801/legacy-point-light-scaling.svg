@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="520" viewBox="0 0 900 520">
+<rect width="100%" height="100%" fill="white"/>
+<text x="450" y="24" text-anchor="middle" font-family="sans-serif" font-size="18">Legacy Point-Light-Heavy（进程合并 Median）</text>
+<line x1="80" y1="40" x2="80" y2="450" stroke="#111"/>
+<line x1="80" y1="450" x2="870" y2="450" stroke="#111"/>
+<line x1="80" y1="450.00" x2="870" y2="450.00" stroke="#e5e7eb"/>
+<text x="72" y="454.00" text-anchor="end" font-family="sans-serif" font-size="12">0.0</text>
+<line x1="80" y1="368.00" x2="870" y2="368.00" stroke="#e5e7eb"/>
+<text x="72" y="372.00" text-anchor="end" font-family="sans-serif" font-size="12">5.5</text>
+<line x1="80" y1="286.00" x2="870" y2="286.00" stroke="#e5e7eb"/>
+<text x="72" y="290.00" text-anchor="end" font-family="sans-serif" font-size="12">11.0</text>
+<line x1="80" y1="204.00" x2="870" y2="204.00" stroke="#e5e7eb"/>
+<text x="72" y="208.00" text-anchor="end" font-family="sans-serif" font-size="12">16.5</text>
+<line x1="80" y1="122.00" x2="870" y2="122.00" stroke="#e5e7eb"/>
+<text x="72" y="126.00" text-anchor="end" font-family="sans-serif" font-size="12">22.0</text>
+<line x1="80" y1="40.00" x2="870" y2="40.00" stroke="#e5e7eb"/>
+<text x="72" y="44.00" text-anchor="end" font-family="sans-serif" font-size="12">27.5</text>
+<line x1="80" y1="201.23" x2="870" y2="201.23" stroke="#7c3aed" stroke-dasharray="7 5"/>
+<text x="866" y="195.23" text-anchor="end" font-family="sans-serif" font-size="12" fill="#7c3aed">60 FPS = 16.67 ms</text>
+<text x="80.00" y="474" text-anchor="middle" font-family="sans-serif" font-size="13">16</text>
+<text x="343.33" y="474" text-anchor="middle" font-family="sans-serif" font-size="13">64</text>
+<text x="606.67" y="474" text-anchor="middle" font-family="sans-serif" font-size="13">256</text>
+<text x="870.00" y="474" text-anchor="middle" font-family="sans-serif" font-size="13">512</text>
+<polyline points="80.00,408.93 343.33,378.90 606.67,254.78 870.00,93.48" fill="none" stroke="#2563eb" stroke-width="3"/>
+<circle cx="80.00" cy="408.93" r="4" fill="#2563eb"/>
+<circle cx="343.33" cy="378.90" r="4" fill="#2563eb"/>
+<circle cx="606.67" cy="254.78" r="4" fill="#2563eb"/>
+<circle cx="870.00" cy="93.48" r="4" fill="#2563eb"/>
+<line x1="92" y1="496" x2="120" y2="496" stroke="#2563eb" stroke-width="3"/>
+<text x="128" y="501" font-family="sans-serif" font-size="13">CPU Frame</text>
+<polyline points="80.00,427.37 343.33,396.48 606.67,273.23 870.00,112.84" fill="none" stroke="#dc2626" stroke-width="3"/>
+<circle cx="80.00" cy="427.37" r="4" fill="#dc2626"/>
+<circle cx="343.33" cy="396.48" r="4" fill="#dc2626"/>
+<circle cx="606.67" cy="273.23" r="4" fill="#dc2626"/>
+<circle cx="870.00" cy="112.84" r="4" fill="#dc2626"/>
+<line x1="302" y1="496" x2="330" y2="496" stroke="#dc2626" stroke-width="3"/>
+<text x="338" y="501" font-family="sans-serif" font-size="13">GPU Frame</text>
+<polyline points="80.00,437.41 343.33,406.99 606.67,284.72 870.00,124.47" fill="none" stroke="#059669" stroke-width="3"/>
+<circle cx="80.00" cy="437.41" r="4" fill="#059669"/>
+<circle cx="343.33" cy="406.99" r="4" fill="#059669"/>
+<circle cx="606.67" cy="284.72" r="4" fill="#059669"/>
+<circle cx="870.00" cy="124.47" r="4" fill="#059669"/>
+<line x1="512" y1="496" x2="540" y2="496" stroke="#059669" stroke-width="3"/>
+<text x="548" y="501" font-family="sans-serif" font-size="13">Point Lights GPU</text>
+<text x="475.0" y="478" text-anchor="middle" font-family="sans-serif" font-size="13">点光源数量</text>
+<text x="18" y="245.0" transform="rotate(-90 18 245.0)" text-anchor="middle" font-family="sans-serif" font-size="13">毫秒</text>
+</svg>

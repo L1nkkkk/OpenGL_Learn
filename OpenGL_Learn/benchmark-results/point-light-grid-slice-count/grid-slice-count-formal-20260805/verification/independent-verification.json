@@ -1,0 +1,3597 @@
+{
+  "schemaVersion": 1,
+  "passed": true,
+  "method": "independent NumPy float32 side-plane/log-Z rebuild for every unique N/R/S + compiled streaming FNV + three full G-buffer truths + image gates",
+  "protocolSha256": "35D6356C86F43D4F5568636FA26A06C13C442C4220521CA0FD5EE63AE1A8B0E9",
+  "captureManifestSha256": "B7D001D313B3859F802AD97920677D078C8018A50BDEA3B3CCE67241490376C4",
+  "correctnessManifestSha256": "922430124DFA26A018E742453CBBA38B2D26C72DBA4DD6A377BE021E11DED826",
+  "fnvHelperSourceSha256": "8D9B20074E97B14C52441DB729F46DAD8569C7065FF531E8F867126A2575E71F",
+  "fnvHelperExecutableSha256": "56D0D73D22177642A199686F6FB269A79813CA52C2C6DABD64DE09FB785D0D57",
+  "csrCellsVerified": 125,
+  "csr": [
+    {
+      "lightCount": 32,
+      "radius": 1.5,
+      "submissionSignature": "0xb209d486bb03f1c2",
+      "slices": {
+        "1": {
+          "values": {
+            "logicalCells": 8160,
+            "nonEmptyCells": 7739,
+            "totalIndices": 23177,
+            "maximumLightsPerCell": 9,
+            "averageLightsPerCell": 2.8403186274509804,
+            "metadataBytes": 65280,
+            "indexBytes": 92708,
+            "lightBytes": 2048,
+            "residentBytes": 160036,
+            "csrSignature": "0x2eacfa811f5840e3"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "2": {
+          "values": {
+            "logicalCells": 16320,
+            "nonEmptyCells": 13789,
+            "totalIndices": 31053,
+            "maximumLightsPerCell": 8,
+            "averageLightsPerCell": 1.9027573529411765,
+            "metadataBytes": 130560,
+            "indexBytes": 124212,
+            "lightBytes": 2048,
+            "residentBytes": 256820,
+            "csrSignature": "0x41642abd5057cce1"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "4": {
+          "values": {
+            "logicalCells": 32640,
+            "nonEmptyCells": 20078,
+            "totalIndices": 37365,
+            "maximumLightsPerCell": 8,
+            "averageLightsPerCell": 1.1447610294117647,
+            "metadataBytes": 261120,
+            "indexBytes": 149460,
+            "lightBytes": 2048,
+            "residentBytes": 412628,
+            "csrSignature": "0xa0563c5cb56842a8"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "8": {
+          "values": {
+            "logicalCells": 65280,
+            "nonEmptyCells": 35857,
+            "totalIndices": 56588,
+            "maximumLightsPerCell": 6,
+            "averageLightsPerCell": 0.8668504901960784,
+            "metadataBytes": 522240,
+            "indexBytes": 226352,
+            "lightBytes": 2048,
+            "residentBytes": 750640,
+            "csrSignature": "0x866b0f7cb392aa9b"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "16": {
+          "values": {
+            "logicalCells": 130560,
+            "nonEmptyCells": 66582,
+            "totalIndices": 95323,
+            "maximumLightsPerCell": 4,
+            "averageLightsPerCell": 0.730108762254902,
+            "metadataBytes": 1044480,
+            "indexBytes": 381292,
+            "lightBytes": 2048,
+            "residentBytes": 1427820,
+            "csrSignature": "0x6656c772c7a36705"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        }
+      }
+    },
+    {
+      "lightCount": 32,
+      "radius": 3.0,
+      "submissionSignature": "0x52ebef0e6f5d97ee",
+      "slices": {
+        "1": {
+          "values": {
+            "logicalCells": 8160,
+            "nonEmptyCells": 8160,
+            "totalIndices": 111802,
+            "maximumLightsPerCell": 23,
+            "averageLightsPerCell": 13.701225490196078,
+            "metadataBytes": 65280,
+            "indexBytes": 447208,
+            "lightBytes": 2048,
+            "residentBytes": 514536,
+            "csrSignature": "0x5309b76de5637f56"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "2": {
+          "values": {
+            "logicalCells": 16320,
+            "nonEmptyCells": 16320,
+            "totalIndices": 170211,
+            "maximumLightsPerCell": 20,
+            "averageLightsPerCell": 10.429595588235294,
+            "metadataBytes": 130560,
+            "indexBytes": 680844,
+            "lightBytes": 2048,
+            "residentBytes": 813452,
+            "csrSignature": "0xfe196a59ad11a654"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "4": {
+          "values": {
+            "logicalCells": 32640,
+            "nonEmptyCells": 25463,
+            "totalIndices": 242167,
+            "maximumLightsPerCell": 20,
+            "averageLightsPerCell": 7.419332107843137,
+            "metadataBytes": 261120,
+            "indexBytes": 968668,
+            "lightBytes": 2048,
+            "residentBytes": 1231836,
+            "csrSignature": "0xcb8def64c6476eb3"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "8": {
+          "values": {
+            "logicalCells": 65280,
+            "nonEmptyCells": 49635,
+            "totalIndices": 377544,
+            "maximumLightsPerCell": 14,
+            "averageLightsPerCell": 5.783455882352941,
+            "metadataBytes": 522240,
+            "indexBytes": 1510176,
+            "lightBytes": 2048,
+            "residentBytes": 2034464,
+            "csrSignature": "0x159ee4c84448a81c"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "16": {
+          "values": {
+            "logicalCells": 130560,
+            "nonEmptyCells": 97241,
+            "totalIndices": 681665,
+            "maximumLightsPerCell": 12,
+            "averageLightsPerCell": 5.221086090686274,
+            "metadataBytes": 1044480,
+            "indexBytes": 2726660,
+            "lightBytes": 2048,
+            "residentBytes": 3773188,
+            "csrSignature": "0x07c78e859bdc2c63"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        }
+      }
+    },
+    {
+      "lightCount": 32,
+      "radius": 6.0,
+      "submissionSignature": "0x19796dae85361846",
+      "slices": {
+        "1": {
+          "values": {
+            "logicalCells": 8160,
+            "nonEmptyCells": 8160,
+            "totalIndices": 208779,
+            "maximumLightsPerCell": 32,
+            "averageLightsPerCell": 25.585661764705883,
+            "metadataBytes": 65280,
+            "indexBytes": 835116,
+            "lightBytes": 2048,
+            "residentBytes": 902444,
+            "csrSignature": "0xe4961274b8f121a4"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "2": {
+          "values": {
+            "logicalCells": 16320,
+            "nonEmptyCells": 16320,
+            "totalIndices": 356379,
+            "maximumLightsPerCell": 31,
+            "averageLightsPerCell": 21.836948529411764,
+            "metadataBytes": 130560,
+            "indexBytes": 1425516,
+            "lightBytes": 2048,
+            "residentBytes": 1558124,
+            "csrSignature": "0x385ed6e68381e548"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "4": {
+          "values": {
+            "logicalCells": 32640,
+            "nonEmptyCells": 32253,
+            "totalIndices": 501466,
+            "maximumLightsPerCell": 31,
+            "averageLightsPerCell": 15.363541666666666,
+            "metadataBytes": 261120,
+            "indexBytes": 2005864,
+            "lightBytes": 2048,
+            "residentBytes": 2269032,
+            "csrSignature": "0xf365d2a63b799dfe"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "8": {
+          "values": {
+            "logicalCells": 65280,
+            "nonEmptyCells": 56733,
+            "totalIndices": 880141,
+            "maximumLightsPerCell": 28,
+            "averageLightsPerCell": 13.482552083333333,
+            "metadataBytes": 522240,
+            "indexBytes": 3520564,
+            "lightBytes": 2048,
+            "residentBytes": 4044852,
+            "csrSignature": "0xbf570a026928300c"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "16": {
+          "values": {
+            "logicalCells": 130560,
+            "nonEmptyCells": 105693,
+            "totalIndices": 1616500,
+            "maximumLightsPerCell": 24,
+            "averageLightsPerCell": 12.381280637254902,
+            "metadataBytes": 1044480,
+            "indexBytes": 6466000,
+            "lightBytes": 2048,
+            "residentBytes": 7512528,
+            "csrSignature": "0xf9465652e8324aaa"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        }
+      }
+    },
+    {
+      "lightCount": 32,
+      "radius": 8.0,
+      "submissionSignature": "0xeda737553d2456b6",
+      "slices": {
+        "1": {
+          "values": {
+            "logicalCells": 8160,
+            "nonEmptyCells": 8160,
+            "totalIndices": 241412,
+            "maximumLightsPerCell": 32,
+            "averageLightsPerCell": 29.58480392156863,
+            "metadataBytes": 65280,
+            "indexBytes": 965648,
+            "lightBytes": 2048,
+            "residentBytes": 1032976,
+            "csrSignature": "0x8ddc71c9924f8daa"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "2": {
+          "values": {
+            "logicalCells": 16320,
+            "nonEmptyCells": 16320,
+            "totalIndices": 439632,
+            "maximumLightsPerCell": 32,
+            "averageLightsPerCell": 26.938235294117646,
+            "metadataBytes": 130560,
+            "indexBytes": 1758528,
+            "lightBytes": 2048,
+            "residentBytes": 1891136,
+            "csrSignature": "0x1a50235f69c5992c"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "4": {
+          "values": {
+            "logicalCells": 32640,
+            "nonEmptyCells": 32640,
+            "totalIndices": 643984,
+            "maximumLightsPerCell": 32,
+            "averageLightsPerCell": 19.729901960784314,
+            "metadataBytes": 261120,
+            "indexBytes": 2575936,
+            "lightBytes": 2048,
+            "residentBytes": 2839104,
+            "csrSignature": "0xddb2b8a717ff706a"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "8": {
+          "values": {
+            "logicalCells": 65280,
+            "nonEmptyCells": 57120,
+            "totalIndices": 1163108,
+            "maximumLightsPerCell": 31,
+            "averageLightsPerCell": 17.8172181372549,
+            "metadataBytes": 522240,
+            "indexBytes": 4652432,
+            "lightBytes": 2048,
+            "residentBytes": 5176720,
+            "csrSignature": "0xd3191e9a443a7c64"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "16": {
+          "values": {
+            "logicalCells": 130560,
+            "nonEmptyCells": 106080,
+            "totalIndices": 2163502,
+            "maximumLightsPerCell": 31,
+            "averageLightsPerCell": 16.57094056372549,
+            "metadataBytes": 1044480,
+            "indexBytes": 8654008,
+            "lightBytes": 2048,
+            "residentBytes": 9700536,
+            "csrSignature": "0x57630180225d23a6"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        }
+      }
+    },
+    {
+      "lightCount": 32,
+      "radius": 12.0,
+      "submissionSignature": "0x58e66a291636bd22",
+      "slices": {
+        "1": {
+          "values": {
+            "logicalCells": 8160,
+            "nonEmptyCells": 8160,
+            "totalIndices": 260032,
+            "maximumLightsPerCell": 32,
+            "averageLightsPerCell": 31.866666666666667,
+            "metadataBytes": 65280,
+            "indexBytes": 1040128,
+            "lightBytes": 2048,
+            "residentBytes": 1107456,
+            "csrSignature": "0xc50e32688cc8ffac"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "2": {
+          "values": {
+            "logicalCells": 16320,
+            "nonEmptyCells": 16320,
+            "totalIndices": 504832,
+            "maximumLightsPerCell": 32,
+            "averageLightsPerCell": 30.933333333333334,
+            "metadataBytes": 130560,
+            "indexBytes": 2019328,
+            "lightBytes": 2048,
+            "residentBytes": 2151936,
+            "csrSignature": "0xd91787ce43f6b55c"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "4": {
+          "values": {
+            "logicalCells": 32640,
+            "nonEmptyCells": 32640,
+            "totalIndices": 870944,
+            "maximumLightsPerCell": 32,
+            "averageLightsPerCell": 26.683333333333334,
+            "metadataBytes": 261120,
+            "indexBytes": 3483776,
+            "lightBytes": 2048,
+            "residentBytes": 3746944,
+            "csrSignature": "0xe126430a5cc96f7a"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "8": {
+          "values": {
+            "logicalCells": 65280,
+            "nonEmptyCells": 57120,
+            "totalIndices": 1596096,
+            "maximumLightsPerCell": 32,
+            "averageLightsPerCell": 24.45,
+            "metadataBytes": 522240,
+            "indexBytes": 6384384,
+            "lightBytes": 2048,
+            "residentBytes": 6908672,
+            "csrSignature": "0x40764f33f4ccabbc"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "16": {
+          "values": {
+            "logicalCells": 130560,
+            "nonEmptyCells": 114240,
+            "totalIndices": 3020832,
+            "maximumLightsPerCell": 32,
+            "averageLightsPerCell": 23.1375,
+            "metadataBytes": 1044480,
+            "indexBytes": 12083328,
+            "lightBytes": 2048,
+            "residentBytes": 13129856,
+            "csrSignature": "0x37f04f5109b88d94"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        }
+      }
+    },
+    {
+      "lightCount": 64,
+      "radius": 1.5,
+      "submissionSignature": "0x367f3599a962eda3",
+      "slices": {
+        "1": {
+          "values": {
+            "logicalCells": 8160,
+            "nonEmptyCells": 8160,
+            "totalIndices": 51734,
+            "maximumLightsPerCell": 16,
+            "averageLightsPerCell": 6.339950980392157,
+            "metadataBytes": 65280,
+            "indexBytes": 206936,
+            "lightBytes": 4096,
+            "residentBytes": 276312,
+            "csrSignature": "0xb46f962a0a1b79d8"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "2": {
+          "values": {
+            "logicalCells": 16320,
+            "nonEmptyCells": 16320,
+            "totalIndices": 74195,
+            "maximumLightsPerCell": 15,
+            "averageLightsPerCell": 4.5462622549019605,
+            "metadataBytes": 130560,
+            "indexBytes": 296780,
+            "lightBytes": 4096,
+            "residentBytes": 431436,
+            "csrSignature": "0x25c25997512c66d7"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "4": {
+          "values": {
+            "logicalCells": 32640,
+            "nonEmptyCells": 24649,
+            "totalIndices": 92829,
+            "maximumLightsPerCell": 15,
+            "averageLightsPerCell": 2.844025735294118,
+            "metadataBytes": 261120,
+            "indexBytes": 371316,
+            "lightBytes": 4096,
+            "residentBytes": 636532,
+            "csrSignature": "0xd6587cf63da83d1f"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "8": {
+          "values": {
+            "logicalCells": 65280,
+            "nonEmptyCells": 47241,
+            "totalIndices": 139148,
+            "maximumLightsPerCell": 10,
+            "averageLightsPerCell": 2.1315563725490194,
+            "metadataBytes": 522240,
+            "indexBytes": 556592,
+            "lightBytes": 4096,
+            "residentBytes": 1082928,
+            "csrSignature": "0xb60fca9e2a00327e"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "16": {
+          "values": {
+            "logicalCells": 130560,
+            "nonEmptyCells": 87415,
+            "totalIndices": 226690,
+            "maximumLightsPerCell": 8,
+            "averageLightsPerCell": 1.7362898284313726,
+            "metadataBytes": 1044480,
+            "indexBytes": 906760,
+            "lightBytes": 4096,
+            "residentBytes": 1955336,
+            "csrSignature": "0x339762858170ba87"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        }
+      }
+    },
+    {
+      "lightCount": 64,
+      "radius": 3.0,
+      "submissionSignature": "0xd9b47755f237ef3f",
+      "slices": {
+        "1": {
+          "values": {
+            "logicalCells": 8160,
+            "nonEmptyCells": 8160,
+            "totalIndices": 200493,
+            "maximumLightsPerCell": 43,
+            "averageLightsPerCell": 24.570220588235294,
+            "metadataBytes": 65280,
+            "indexBytes": 801972,
+            "lightBytes": 4096,
+            "residentBytes": 871348,
+            "csrSignature": "0xab682b1ef0a6dea0"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "2": {
+          "values": {
+            "logicalCells": 16320,
+            "nonEmptyCells": 16320,
+            "totalIndices": 315369,
+            "maximumLightsPerCell": 41,
+            "averageLightsPerCell": 19.32408088235294,
+            "metadataBytes": 130560,
+            "indexBytes": 1261476,
+            "lightBytes": 4096,
+            "residentBytes": 1396132,
+            "csrSignature": "0xfc1d9551e0922d32"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "4": {
+          "values": {
+            "logicalCells": 32640,
+            "nonEmptyCells": 26256,
+            "totalIndices": 424202,
+            "maximumLightsPerCell": 41,
+            "averageLightsPerCell": 12.996384803921568,
+            "metadataBytes": 261120,
+            "indexBytes": 1696808,
+            "lightBytes": 4096,
+            "residentBytes": 1962024,
+            "csrSignature": "0x4dcc89003e6db21a"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "8": {
+          "values": {
+            "logicalCells": 65280,
+            "nonEmptyCells": 50736,
+            "totalIndices": 663458,
+            "maximumLightsPerCell": 29,
+            "averageLightsPerCell": 10.16326593137255,
+            "metadataBytes": 522240,
+            "indexBytes": 2653832,
+            "lightBytes": 4096,
+            "residentBytes": 3180168,
+            "csrSignature": "0x13c5a82c26a95d17"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "16": {
+          "values": {
+            "logicalCells": 130560,
+            "nonEmptyCells": 98342,
+            "totalIndices": 1179940,
+            "maximumLightsPerCell": 25,
+            "averageLightsPerCell": 9.037530637254902,
+            "metadataBytes": 1044480,
+            "indexBytes": 4719760,
+            "lightBytes": 4096,
+            "residentBytes": 5768336,
+            "csrSignature": "0x2f787a4378161291"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        }
+      }
+    },
+    {
+      "lightCount": 64,
+      "radius": 6.0,
+      "submissionSignature": "0x3e8d0759fd1ef573",
+      "slices": {
+        "1": {
+          "values": {
+            "logicalCells": 8160,
+            "nonEmptyCells": 8160,
+            "totalIndices": 419885,
+            "maximumLightsPerCell": 64,
+            "averageLightsPerCell": 51.45649509803921,
+            "metadataBytes": 65280,
+            "indexBytes": 1679540,
+            "lightBytes": 4096,
+            "residentBytes": 1748916,
+            "csrSignature": "0x8989d648d36188cc"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "2": {
+          "values": {
+            "logicalCells": 16320,
+            "nonEmptyCells": 16320,
+            "totalIndices": 722059,
+            "maximumLightsPerCell": 62,
+            "averageLightsPerCell": 44.2438112745098,
+            "metadataBytes": 130560,
+            "indexBytes": 2888236,
+            "lightBytes": 4096,
+            "residentBytes": 3022892,
+            "csrSignature": "0x32048c3fbcfead86"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "4": {
+          "values": {
+            "logicalCells": 32640,
+            "nonEmptyCells": 32262,
+            "totalIndices": 1038849,
+            "maximumLightsPerCell": 62,
+            "averageLightsPerCell": 31.82748161764706,
+            "metadataBytes": 261120,
+            "indexBytes": 4155396,
+            "lightBytes": 4096,
+            "residentBytes": 4420612,
+            "csrSignature": "0xc53b7c131cf0161e"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "8": {
+          "values": {
+            "logicalCells": 65280,
+            "nonEmptyCells": 56742,
+            "totalIndices": 1859637,
+            "maximumLightsPerCell": 54,
+            "averageLightsPerCell": 28.487086397058825,
+            "metadataBytes": 522240,
+            "indexBytes": 7438548,
+            "lightBytes": 4096,
+            "residentBytes": 7964884,
+            "csrSignature": "0xe06efe0f32872765"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "16": {
+          "values": {
+            "logicalCells": 130560,
+            "nonEmptyCells": 105702,
+            "totalIndices": 3459650,
+            "maximumLightsPerCell": 50,
+            "averageLightsPerCell": 26.498544730392158,
+            "metadataBytes": 1044480,
+            "indexBytes": 13838600,
+            "lightBytes": 4096,
+            "residentBytes": 14887176,
+            "csrSignature": "0xf3b8935a8bb6b3bc"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        }
+      }
+    },
+    {
+      "lightCount": 64,
+      "radius": 8.0,
+      "submissionSignature": "0xa5e175b0e69b8563",
+      "slices": {
+        "1": {
+          "values": {
+            "logicalCells": 8160,
+            "nonEmptyCells": 8160,
+            "totalIndices": 482864,
+            "maximumLightsPerCell": 64,
+            "averageLightsPerCell": 59.174509803921566,
+            "metadataBytes": 65280,
+            "indexBytes": 1931456,
+            "lightBytes": 4096,
+            "residentBytes": 2000832,
+            "csrSignature": "0xe5486b52f99eb19f"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "2": {
+          "values": {
+            "logicalCells": 16320,
+            "nonEmptyCells": 16320,
+            "totalIndices": 881548,
+            "maximumLightsPerCell": 64,
+            "averageLightsPerCell": 54.01642156862745,
+            "metadataBytes": 130560,
+            "indexBytes": 3526192,
+            "lightBytes": 4096,
+            "residentBytes": 3660848,
+            "csrSignature": "0xe22cb43f58d07aa2"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "4": {
+          "values": {
+            "logicalCells": 32640,
+            "nonEmptyCells": 32640,
+            "totalIndices": 1327352,
+            "maximumLightsPerCell": 64,
+            "averageLightsPerCell": 40.66642156862745,
+            "metadataBytes": 261120,
+            "indexBytes": 5309408,
+            "lightBytes": 4096,
+            "residentBytes": 5574624,
+            "csrSignature": "0x1f3da8e15499429e"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "8": {
+          "values": {
+            "logicalCells": 65280,
+            "nonEmptyCells": 57120,
+            "totalIndices": 2404324,
+            "maximumLightsPerCell": 61,
+            "averageLightsPerCell": 36.83094362745098,
+            "metadataBytes": 522240,
+            "indexBytes": 9617296,
+            "lightBytes": 4096,
+            "residentBytes": 10143632,
+            "csrSignature": "0xea89a5b96b8f5511"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "16": {
+          "values": {
+            "logicalCells": 130560,
+            "nonEmptyCells": 106080,
+            "totalIndices": 4481346,
+            "maximumLightsPerCell": 60,
+            "averageLightsPerCell": 34.32403492647059,
+            "metadataBytes": 1044480,
+            "indexBytes": 17925384,
+            "lightBytes": 4096,
+            "residentBytes": 18973960,
+            "csrSignature": "0xe031fc4438ca7555"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        }
+      }
+    },
+    {
+      "lightCount": 64,
+      "radius": 12.0,
+      "submissionSignature": "0x7ab8df3c04515f17",
+      "slices": {
+        "1": {
+          "values": {
+            "logicalCells": 8160,
+            "nonEmptyCells": 8160,
+            "totalIndices": 519724,
+            "maximumLightsPerCell": 64,
+            "averageLightsPerCell": 63.69166666666667,
+            "metadataBytes": 65280,
+            "indexBytes": 2078896,
+            "lightBytes": 4096,
+            "residentBytes": 2148272,
+            "csrSignature": "0x21c6afa438d684a5"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "2": {
+          "values": {
+            "logicalCells": 16320,
+            "nonEmptyCells": 16320,
+            "totalIndices": 992596,
+            "maximumLightsPerCell": 64,
+            "averageLightsPerCell": 60.82083333333333,
+            "metadataBytes": 130560,
+            "indexBytes": 3970384,
+            "lightBytes": 4096,
+            "residentBytes": 4105040,
+            "csrSignature": "0x922edff02c65a64b"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "4": {
+          "values": {
+            "logicalCells": 32640,
+            "nonEmptyCells": 32640,
+            "totalIndices": 1716320,
+            "maximumLightsPerCell": 64,
+            "averageLightsPerCell": 52.583333333333336,
+            "metadataBytes": 261120,
+            "indexBytes": 6865280,
+            "lightBytes": 4096,
+            "residentBytes": 7130496,
+            "csrSignature": "0x89dd52b7394f374b"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "8": {
+          "values": {
+            "logicalCells": 65280,
+            "nonEmptyCells": 57120,
+            "totalIndices": 3133644,
+            "maximumLightsPerCell": 64,
+            "averageLightsPerCell": 48.003125,
+            "metadataBytes": 522240,
+            "indexBytes": 12534576,
+            "lightBytes": 4096,
+            "residentBytes": 13060912,
+            "csrSignature": "0x8e9c30ca550c8fa8"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "16": {
+          "values": {
+            "logicalCells": 130560,
+            "nonEmptyCells": 114240,
+            "totalIndices": 5950204,
+            "maximumLightsPerCell": 64,
+            "averageLightsPerCell": 45.57447916666667,
+            "metadataBytes": 1044480,
+            "indexBytes": 23800816,
+            "lightBytes": 4096,
+            "residentBytes": 24849392,
+            "csrSignature": "0x8ee41fe05f5f9f8c"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        }
+      }
+    },
+    {
+      "lightCount": 128,
+      "radius": 1.5,
+      "submissionSignature": "0x19d3fbec8b8ce5d1",
+      "slices": {
+        "1": {
+          "values": {
+            "logicalCells": 8160,
+            "nonEmptyCells": 8160,
+            "totalIndices": 95168,
+            "maximumLightsPerCell": 23,
+            "averageLightsPerCell": 11.662745098039215,
+            "metadataBytes": 65280,
+            "indexBytes": 380672,
+            "lightBytes": 8192,
+            "residentBytes": 454144,
+            "csrSignature": "0xf57493bccbeec47c"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "2": {
+          "values": {
+            "logicalCells": 16320,
+            "nonEmptyCells": 16320,
+            "totalIndices": 123378,
+            "maximumLightsPerCell": 20,
+            "averageLightsPerCell": 7.559926470588235,
+            "metadataBytes": 130560,
+            "indexBytes": 493512,
+            "lightBytes": 8192,
+            "residentBytes": 632264,
+            "csrSignature": "0xf2fc7b7174c2fc8b"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "4": {
+          "values": {
+            "logicalCells": 32640,
+            "nonEmptyCells": 24649,
+            "totalIndices": 156360,
+            "maximumLightsPerCell": 20,
+            "averageLightsPerCell": 4.790441176470588,
+            "metadataBytes": 261120,
+            "indexBytes": 625440,
+            "lightBytes": 8192,
+            "residentBytes": 894752,
+            "csrSignature": "0xa798bab6d800adce"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "8": {
+          "values": {
+            "logicalCells": 65280,
+            "nonEmptyCells": 47816,
+            "totalIndices": 245656,
+            "maximumLightsPerCell": 15,
+            "averageLightsPerCell": 3.7631127450980393,
+            "metadataBytes": 522240,
+            "indexBytes": 982624,
+            "lightBytes": 8192,
+            "residentBytes": 1513056,
+            "csrSignature": "0x0780ab6aa7ae8ed5"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "16": {
+          "values": {
+            "logicalCells": 130560,
+            "nonEmptyCells": 90716,
+            "totalIndices": 404104,
+            "maximumLightsPerCell": 13,
+            "averageLightsPerCell": 3.0951593137254902,
+            "metadataBytes": 1044480,
+            "indexBytes": 1616416,
+            "lightBytes": 8192,
+            "residentBytes": 2669088,
+            "csrSignature": "0x0779b65acbfeffdf"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        }
+      }
+    },
+    {
+      "lightCount": 128,
+      "radius": 3.0,
+      "submissionSignature": "0x1c7984441569cf7d",
+      "slices": {
+        "1": {
+          "values": {
+            "logicalCells": 8160,
+            "nonEmptyCells": 8160,
+            "totalIndices": 379129,
+            "maximumLightsPerCell": 78,
+            "averageLightsPerCell": 46.46188725490196,
+            "metadataBytes": 65280,
+            "indexBytes": 1516516,
+            "lightBytes": 8192,
+            "residentBytes": 1589988,
+            "csrSignature": "0x4049864944c54bfa"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "2": {
+          "values": {
+            "logicalCells": 16320,
+            "nonEmptyCells": 16320,
+            "totalIndices": 574803,
+            "maximumLightsPerCell": 71,
+            "averageLightsPerCell": 35.22077205882353,
+            "metadataBytes": 130560,
+            "indexBytes": 2299212,
+            "lightBytes": 8192,
+            "residentBytes": 2437964,
+            "csrSignature": "0x51739fb97bb1f3b7"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "4": {
+          "values": {
+            "logicalCells": 32640,
+            "nonEmptyCells": 27071,
+            "totalIndices": 785631,
+            "maximumLightsPerCell": 71,
+            "averageLightsPerCell": 24.069577205882354,
+            "metadataBytes": 261120,
+            "indexBytes": 3142524,
+            "lightBytes": 8192,
+            "residentBytes": 3411836,
+            "csrSignature": "0xdbcc8b535f7dea9a"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "8": {
+          "values": {
+            "logicalCells": 65280,
+            "nonEmptyCells": 51551,
+            "totalIndices": 1271267,
+            "maximumLightsPerCell": 53,
+            "averageLightsPerCell": 19.47406556372549,
+            "metadataBytes": 522240,
+            "indexBytes": 5085068,
+            "lightBytes": 8192,
+            "residentBytes": 5615500,
+            "csrSignature": "0x727e3c78d3ea9583"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "16": {
+          "values": {
+            "logicalCells": 130560,
+            "nonEmptyCells": 99363,
+            "totalIndices": 2264510,
+            "maximumLightsPerCell": 46,
+            "averageLightsPerCell": 17.344592524509803,
+            "metadataBytes": 1044480,
+            "indexBytes": 9058040,
+            "lightBytes": 8192,
+            "residentBytes": 10110712,
+            "csrSignature": "0x81ba28b96de64f3a"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        }
+      }
+    },
+    {
+      "lightCount": 128,
+      "radius": 6.0,
+      "submissionSignature": "0x05dc2631034d0af9",
+      "slices": {
+        "1": {
+          "values": {
+            "logicalCells": 8160,
+            "nonEmptyCells": 8160,
+            "totalIndices": 850201,
+            "maximumLightsPerCell": 128,
+            "averageLightsPerCell": 104.19129901960784,
+            "metadataBytes": 65280,
+            "indexBytes": 3400804,
+            "lightBytes": 8192,
+            "residentBytes": 3474276,
+            "csrSignature": "0xa4e35f087962eff3"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "2": {
+          "values": {
+            "logicalCells": 16320,
+            "nonEmptyCells": 16320,
+            "totalIndices": 1474679,
+            "maximumLightsPerCell": 121,
+            "averageLightsPerCell": 90.36023284313725,
+            "metadataBytes": 130560,
+            "indexBytes": 5898716,
+            "lightBytes": 8192,
+            "residentBytes": 6037468,
+            "csrSignature": "0xeb6b723a8cf19714"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "4": {
+          "values": {
+            "logicalCells": 32640,
+            "nonEmptyCells": 32416,
+            "totalIndices": 2110672,
+            "maximumLightsPerCell": 121,
+            "averageLightsPerCell": 64.66519607843138,
+            "metadataBytes": 261120,
+            "indexBytes": 8442688,
+            "lightBytes": 8192,
+            "residentBytes": 8712000,
+            "csrSignature": "0xe66b1a8c65f95d23"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "8": {
+          "values": {
+            "logicalCells": 65280,
+            "nonEmptyCells": 56896,
+            "totalIndices": 3768063,
+            "maximumLightsPerCell": 106,
+            "averageLightsPerCell": 57.72155330882353,
+            "metadataBytes": 522240,
+            "indexBytes": 15072252,
+            "lightBytes": 8192,
+            "residentBytes": 15602684,
+            "csrSignature": "0x9a7ca05112571dcb"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "16": {
+          "values": {
+            "logicalCells": 130560,
+            "nonEmptyCells": 105856,
+            "totalIndices": 6987799,
+            "maximumLightsPerCell": 95,
+            "averageLightsPerCell": 53.52174479166667,
+            "metadataBytes": 1044480,
+            "indexBytes": 27951196,
+            "lightBytes": 8192,
+            "residentBytes": 29003868,
+            "csrSignature": "0x0a360db2ebd92219"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        }
+      }
+    },
+    {
+      "lightCount": 128,
+      "radius": 8.0,
+      "submissionSignature": "0x6f818e07003b6ded",
+      "slices": {
+        "1": {
+          "values": {
+            "logicalCells": 8160,
+            "nonEmptyCells": 8160,
+            "totalIndices": 970578,
+            "maximumLightsPerCell": 128,
+            "averageLightsPerCell": 118.94338235294117,
+            "metadataBytes": 65280,
+            "indexBytes": 3882312,
+            "lightBytes": 8192,
+            "residentBytes": 3955784,
+            "csrSignature": "0x7bbd4f870d8ac677"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "2": {
+          "values": {
+            "logicalCells": 16320,
+            "nonEmptyCells": 16320,
+            "totalIndices": 1788822,
+            "maximumLightsPerCell": 128,
+            "averageLightsPerCell": 109.60919117647059,
+            "metadataBytes": 130560,
+            "indexBytes": 7155288,
+            "lightBytes": 8192,
+            "residentBytes": 7294040,
+            "csrSignature": "0x2168738b563f7318"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "4": {
+          "values": {
+            "logicalCells": 32640,
+            "nonEmptyCells": 32640,
+            "totalIndices": 2706156,
+            "maximumLightsPerCell": 128,
+            "averageLightsPerCell": 82.90919117647059,
+            "metadataBytes": 261120,
+            "indexBytes": 10824624,
+            "lightBytes": 8192,
+            "residentBytes": 11093936,
+            "csrSignature": "0xa37e379312cf3328"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "8": {
+          "values": {
+            "logicalCells": 65280,
+            "nonEmptyCells": 57120,
+            "totalIndices": 4906088,
+            "maximumLightsPerCell": 123,
+            "averageLightsPerCell": 75.15453431372549,
+            "metadataBytes": 522240,
+            "indexBytes": 19624352,
+            "lightBytes": 8192,
+            "residentBytes": 20154784,
+            "csrSignature": "0x49e4801dc99275d0"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "16": {
+          "values": {
+            "logicalCells": 130560,
+            "nonEmptyCells": 106080,
+            "totalIndices": 9152452,
+            "maximumLightsPerCell": 119,
+            "averageLightsPerCell": 70.1015012254902,
+            "metadataBytes": 1044480,
+            "indexBytes": 36609808,
+            "lightBytes": 8192,
+            "residentBytes": 37662480,
+            "csrSignature": "0xe96dbaf1aef7dcea"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        }
+      }
+    },
+    {
+      "lightCount": 128,
+      "radius": 12.0,
+      "submissionSignature": "0xd4398c9e9df536b5",
+      "slices": {
+        "1": {
+          "values": {
+            "logicalCells": 8160,
+            "nonEmptyCells": 8160,
+            "totalIndices": 1040468,
+            "maximumLightsPerCell": 128,
+            "averageLightsPerCell": 127.50833333333334,
+            "metadataBytes": 65280,
+            "indexBytes": 4161872,
+            "lightBytes": 8192,
+            "residentBytes": 4235344,
+            "csrSignature": "0x40bb4ff50d6e2120"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "2": {
+          "values": {
+            "logicalCells": 16320,
+            "nonEmptyCells": 16320,
+            "totalIndices": 2002804,
+            "maximumLightsPerCell": 128,
+            "averageLightsPerCell": 122.72083333333333,
+            "metadataBytes": 130560,
+            "indexBytes": 8011216,
+            "lightBytes": 8192,
+            "residentBytes": 8149968,
+            "csrSignature": "0x7445854718a3ba9d"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "4": {
+          "values": {
+            "logicalCells": 32640,
+            "nonEmptyCells": 32640,
+            "totalIndices": 3402312,
+            "maximumLightsPerCell": 128,
+            "averageLightsPerCell": 104.2375,
+            "metadataBytes": 261120,
+            "indexBytes": 13609248,
+            "lightBytes": 8192,
+            "residentBytes": 13878560,
+            "csrSignature": "0xecf6b51d1ab64fae"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "8": {
+          "values": {
+            "logicalCells": 65280,
+            "nonEmptyCells": 57120,
+            "totalIndices": 6229820,
+            "maximumLightsPerCell": 128,
+            "averageLightsPerCell": 95.43229166666667,
+            "metadataBytes": 522240,
+            "indexBytes": 24919280,
+            "lightBytes": 8192,
+            "residentBytes": 25449712,
+            "csrSignature": "0xc0b383db2d104209"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "16": {
+          "values": {
+            "logicalCells": 130560,
+            "nonEmptyCells": 114240,
+            "totalIndices": 11809016,
+            "maximumLightsPerCell": 128,
+            "averageLightsPerCell": 90.44895833333334,
+            "metadataBytes": 1044480,
+            "indexBytes": 47236064,
+            "lightBytes": 8192,
+            "residentBytes": 48288736,
+            "csrSignature": "0xd896f9fdf0893fe5"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        }
+      }
+    },
+    {
+      "lightCount": 256,
+      "radius": 1.5,
+      "submissionSignature": "0xc4b018ce4b5020d4",
+      "slices": {
+        "1": {
+          "values": {
+            "logicalCells": 8160,
+            "nonEmptyCells": 8160,
+            "totalIndices": 185724,
+            "maximumLightsPerCell": 48,
+            "averageLightsPerCell": 22.76029411764706,
+            "metadataBytes": 65280,
+            "indexBytes": 742896,
+            "lightBytes": 16384,
+            "residentBytes": 824560,
+            "csrSignature": "0x5058b75c5b3c17a2"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "2": {
+          "values": {
+            "logicalCells": 16320,
+            "nonEmptyCells": 16320,
+            "totalIndices": 232162,
+            "maximumLightsPerCell": 42,
+            "averageLightsPerCell": 14.22561274509804,
+            "metadataBytes": 130560,
+            "indexBytes": 928648,
+            "lightBytes": 16384,
+            "residentBytes": 1075592,
+            "csrSignature": "0xde36fbf25f4cefd7"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "4": {
+          "values": {
+            "logicalCells": 32640,
+            "nonEmptyCells": 24908,
+            "totalIndices": 292865,
+            "maximumLightsPerCell": 42,
+            "averageLightsPerCell": 8.972579656862745,
+            "metadataBytes": 261120,
+            "indexBytes": 1171460,
+            "lightBytes": 16384,
+            "residentBytes": 1448964,
+            "csrSignature": "0x1a31cddf12ce33f0"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "8": {
+          "values": {
+            "logicalCells": 65280,
+            "nonEmptyCells": 48619,
+            "totalIndices": 449915,
+            "maximumLightsPerCell": 30,
+            "averageLightsPerCell": 6.892080269607843,
+            "metadataBytes": 522240,
+            "indexBytes": 1799660,
+            "lightBytes": 16384,
+            "residentBytes": 2338284,
+            "csrSignature": "0x7f51d497b85d2aad"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "16": {
+          "values": {
+            "logicalCells": 130560,
+            "nonEmptyCells": 92067,
+            "totalIndices": 746810,
+            "maximumLightsPerCell": 23,
+            "averageLightsPerCell": 5.720052083333333,
+            "metadataBytes": 1044480,
+            "indexBytes": 2987240,
+            "lightBytes": 16384,
+            "residentBytes": 4048104,
+            "csrSignature": "0x6104157a4be17ded"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        }
+      }
+    },
+    {
+      "lightCount": 256,
+      "radius": 3.0,
+      "submissionSignature": "0x7c5e56159f4f983c",
+      "slices": {
+        "1": {
+          "values": {
+            "logicalCells": 8160,
+            "nonEmptyCells": 8160,
+            "totalIndices": 717367,
+            "maximumLightsPerCell": 155,
+            "averageLightsPerCell": 87.9126225490196,
+            "metadataBytes": 65280,
+            "indexBytes": 2869468,
+            "lightBytes": 16384,
+            "residentBytes": 2951132,
+            "csrSignature": "0xa9c9acdd203f5164"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "2": {
+          "values": {
+            "logicalCells": 16320,
+            "nonEmptyCells": 16320,
+            "totalIndices": 1053021,
+            "maximumLightsPerCell": 139,
+            "averageLightsPerCell": 64.52334558823529,
+            "metadataBytes": 130560,
+            "indexBytes": 4212084,
+            "lightBytes": 16384,
+            "residentBytes": 4359028,
+            "csrSignature": "0x66c81329ae66635d"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "4": {
+          "values": {
+            "logicalCells": 32640,
+            "nonEmptyCells": 27458,
+            "totalIndices": 1433201,
+            "maximumLightsPerCell": 139,
+            "averageLightsPerCell": 43.909344362745095,
+            "metadataBytes": 261120,
+            "indexBytes": 5732804,
+            "lightBytes": 16384,
+            "residentBytes": 6010308,
+            "csrSignature": "0x9aedb6739e2780f1"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "8": {
+          "values": {
+            "logicalCells": 65280,
+            "nonEmptyCells": 51938,
+            "totalIndices": 2355216,
+            "maximumLightsPerCell": 112,
+            "averageLightsPerCell": 36.078676470588235,
+            "metadataBytes": 522240,
+            "indexBytes": 9420864,
+            "lightBytes": 16384,
+            "residentBytes": 9959488,
+            "csrSignature": "0x04d29478be2875e0"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "16": {
+          "values": {
+            "logicalCells": 130560,
+            "nonEmptyCells": 100077,
+            "totalIndices": 4161026,
+            "maximumLightsPerCell": 94,
+            "averageLightsPerCell": 31.87060355392157,
+            "metadataBytes": 1044480,
+            "indexBytes": 16644104,
+            "lightBytes": 16384,
+            "residentBytes": 17704968,
+            "csrSignature": "0x291ead895d65ce99"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        }
+      }
+    },
+    {
+      "lightCount": 256,
+      "radius": 6.0,
+      "submissionSignature": "0x20ad6bb8441a87c0",
+      "slices": {
+        "1": {
+          "values": {
+            "logicalCells": 8160,
+            "nonEmptyCells": 8160,
+            "totalIndices": 1689528,
+            "maximumLightsPerCell": 256,
+            "averageLightsPerCell": 207.05,
+            "metadataBytes": 65280,
+            "indexBytes": 6758112,
+            "lightBytes": 16384,
+            "residentBytes": 6839776,
+            "csrSignature": "0x8c2ee7eb336520cb"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "2": {
+          "values": {
+            "logicalCells": 16320,
+            "nonEmptyCells": 16320,
+            "totalIndices": 2869062,
+            "maximumLightsPerCell": 238,
+            "averageLightsPerCell": 175.80036764705883,
+            "metadataBytes": 130560,
+            "indexBytes": 11476248,
+            "lightBytes": 16384,
+            "residentBytes": 11623192,
+            "csrSignature": "0x151b7cb2dc3c54f4"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "4": {
+          "values": {
+            "logicalCells": 32640,
+            "nonEmptyCells": 32585,
+            "totalIndices": 4096954,
+            "maximumLightsPerCell": 238,
+            "averageLightsPerCell": 125.51942401960784,
+            "metadataBytes": 261120,
+            "indexBytes": 16387816,
+            "lightBytes": 16384,
+            "residentBytes": 16665320,
+            "csrSignature": "0x01bea6862dd34be1"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "8": {
+          "values": {
+            "logicalCells": 65280,
+            "nonEmptyCells": 57065,
+            "totalIndices": 7290881,
+            "maximumLightsPerCell": 207,
+            "averageLightsPerCell": 111.68628982843137,
+            "metadataBytes": 522240,
+            "indexBytes": 29163524,
+            "lightBytes": 16384,
+            "residentBytes": 29702148,
+            "csrSignature": "0xe8f5ac78d753d29e"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "16": {
+          "values": {
+            "logicalCells": 130560,
+            "nonEmptyCells": 106025,
+            "totalIndices": 13485714,
+            "maximumLightsPerCell": 187,
+            "averageLightsPerCell": 103.2913143382353,
+            "metadataBytes": 1044480,
+            "indexBytes": 53942856,
+            "lightBytes": 16384,
+            "residentBytes": 55003720,
+            "csrSignature": "0x6e5d58856b65bfbe"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        }
+      }
+    },
+    {
+      "lightCount": 256,
+      "radius": 8.0,
+      "submissionSignature": "0x9c5c76cae71b7018",
+      "slices": {
+        "1": {
+          "values": {
+            "logicalCells": 8160,
+            "nonEmptyCells": 8160,
+            "totalIndices": 1931438,
+            "maximumLightsPerCell": 256,
+            "averageLightsPerCell": 236.69583333333333,
+            "metadataBytes": 65280,
+            "indexBytes": 7725752,
+            "lightBytes": 16384,
+            "residentBytes": 7807416,
+            "csrSignature": "0xb6ccd1376aaebe85"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "2": {
+          "values": {
+            "logicalCells": 16320,
+            "nonEmptyCells": 16320,
+            "totalIndices": 3534911,
+            "maximumLightsPerCell": 256,
+            "averageLightsPerCell": 216.5999387254902,
+            "metadataBytes": 130560,
+            "indexBytes": 14139644,
+            "lightBytes": 16384,
+            "residentBytes": 14286588,
+            "csrSignature": "0x87cb4c5ec10b9808"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "4": {
+          "values": {
+            "logicalCells": 32640,
+            "nonEmptyCells": 32640,
+            "totalIndices": 5334021,
+            "maximumLightsPerCell": 256,
+            "averageLightsPerCell": 163.41976102941177,
+            "metadataBytes": 261120,
+            "indexBytes": 21336084,
+            "lightBytes": 16384,
+            "residentBytes": 21613588,
+            "csrSignature": "0x44c3158c4aa3541f"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "8": {
+          "values": {
+            "logicalCells": 65280,
+            "nonEmptyCells": 57120,
+            "totalIndices": 9558786,
+            "maximumLightsPerCell": 246,
+            "averageLightsPerCell": 146.42748161764706,
+            "metadataBytes": 522240,
+            "indexBytes": 38235144,
+            "lightBytes": 16384,
+            "residentBytes": 38773768,
+            "csrSignature": "0xe74ad4a9c9fa17d5"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "16": {
+          "values": {
+            "logicalCells": 130560,
+            "nonEmptyCells": 106080,
+            "totalIndices": 17746687,
+            "maximumLightsPerCell": 234,
+            "averageLightsPerCell": 135.92744332107844,
+            "metadataBytes": 1044480,
+            "indexBytes": 70986748,
+            "lightBytes": 16384,
+            "residentBytes": 72047612,
+            "csrSignature": "0x7b954c278f13d10a"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        }
+      }
+    },
+    {
+      "lightCount": 256,
+      "radius": 12.0,
+      "submissionSignature": "0xcd1e01e43e995a60",
+      "slices": {
+        "1": {
+          "values": {
+            "logicalCells": 8160,
+            "nonEmptyCells": 8160,
+            "totalIndices": 2081208,
+            "maximumLightsPerCell": 256,
+            "averageLightsPerCell": 255.05,
+            "metadataBytes": 65280,
+            "indexBytes": 8324832,
+            "lightBytes": 16384,
+            "residentBytes": 8406496,
+            "csrSignature": "0xba030114ee93e019"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "2": {
+          "values": {
+            "logicalCells": 16320,
+            "nonEmptyCells": 16320,
+            "totalIndices": 4013156,
+            "maximumLightsPerCell": 256,
+            "averageLightsPerCell": 245.90416666666667,
+            "metadataBytes": 130560,
+            "indexBytes": 16052624,
+            "lightBytes": 16384,
+            "residentBytes": 16199568,
+            "csrSignature": "0xec95232ac4e927e5"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "4": {
+          "values": {
+            "logicalCells": 32640,
+            "nonEmptyCells": 32640,
+            "totalIndices": 6853244,
+            "maximumLightsPerCell": 256,
+            "averageLightsPerCell": 209.96458333333334,
+            "metadataBytes": 261120,
+            "indexBytes": 27412976,
+            "lightBytes": 16384,
+            "residentBytes": 27690480,
+            "csrSignature": "0x201b6522729831f2"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "8": {
+          "values": {
+            "logicalCells": 65280,
+            "nonEmptyCells": 57120,
+            "totalIndices": 12492212,
+            "maximumLightsPerCell": 256,
+            "averageLightsPerCell": 191.36354166666666,
+            "metadataBytes": 522240,
+            "indexBytes": 49968848,
+            "lightBytes": 16384,
+            "residentBytes": 50507472,
+            "csrSignature": "0x8bc85191a00256ee"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "16": {
+          "values": {
+            "logicalCells": 130560,
+            "nonEmptyCells": 114240,
+            "totalIndices": 23488832,
+            "maximumLightsPerCell": 256,
+            "averageLightsPerCell": 179.90833333333333,
+            "metadataBytes": 1044480,
+            "indexBytes": 93955328,
+            "lightBytes": 16384,
+            "residentBytes": 95016192,
+            "csrSignature": "0xfe75cd57b9c6cf15"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        }
+      }
+    },
+    {
+      "lightCount": 512,
+      "radius": 1.5,
+      "submissionSignature": "0x6b28d7ae54219cce",
+      "slices": {
+        "1": {
+          "values": {
+            "logicalCells": 8160,
+            "nonEmptyCells": 8160,
+            "totalIndices": 388277,
+            "maximumLightsPerCell": 101,
+            "averageLightsPerCell": 47.58296568627451,
+            "metadataBytes": 65280,
+            "indexBytes": 1553108,
+            "lightBytes": 32768,
+            "residentBytes": 1651156,
+            "csrSignature": "0x24577915e1b8753e"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "2": {
+          "values": {
+            "logicalCells": 16320,
+            "nonEmptyCells": 16320,
+            "totalIndices": 496412,
+            "maximumLightsPerCell": 87,
+            "averageLightsPerCell": 30.417401960784314,
+            "metadataBytes": 130560,
+            "indexBytes": 1985648,
+            "lightBytes": 32768,
+            "residentBytes": 2148976,
+            "csrSignature": "0x0e1c297acfe8cf50"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "4": {
+          "values": {
+            "logicalCells": 32640,
+            "nonEmptyCells": 25323,
+            "totalIndices": 613296,
+            "maximumLightsPerCell": 87,
+            "averageLightsPerCell": 18.78970588235294,
+            "metadataBytes": 261120,
+            "indexBytes": 2453184,
+            "lightBytes": 32768,
+            "residentBytes": 2747072,
+            "csrSignature": "0x1d4021fcf42aeb52"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "8": {
+          "values": {
+            "logicalCells": 65280,
+            "nonEmptyCells": 49174,
+            "totalIndices": 914099,
+            "maximumLightsPerCell": 63,
+            "averageLightsPerCell": 14.002742034313725,
+            "metadataBytes": 522240,
+            "indexBytes": 3656396,
+            "lightBytes": 32768,
+            "residentBytes": 4211404,
+            "csrSignature": "0x6e25b5a914ff27ed"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "16": {
+          "values": {
+            "logicalCells": 130560,
+            "nonEmptyCells": 93437,
+            "totalIndices": 1500070,
+            "maximumLightsPerCell": 50,
+            "averageLightsPerCell": 11.489506740196079,
+            "metadataBytes": 1044480,
+            "indexBytes": 6000280,
+            "lightBytes": 32768,
+            "residentBytes": 7077528,
+            "csrSignature": "0x59ecd585f02db65a"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        }
+      }
+    },
+    {
+      "lightCount": 512,
+      "radius": 3.0,
+      "submissionSignature": "0x0a98120b25c0f9a2",
+      "slices": {
+        "1": {
+          "values": {
+            "logicalCells": 8160,
+            "nonEmptyCells": 8160,
+            "totalIndices": 1367128,
+            "maximumLightsPerCell": 303,
+            "averageLightsPerCell": 167.54019607843136,
+            "metadataBytes": 65280,
+            "indexBytes": 5468512,
+            "lightBytes": 32768,
+            "residentBytes": 5566560,
+            "csrSignature": "0x548cbba632331707"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "2": {
+          "values": {
+            "logicalCells": 16320,
+            "nonEmptyCells": 16320,
+            "totalIndices": 2021640,
+            "maximumLightsPerCell": 272,
+            "averageLightsPerCell": 123.875,
+            "metadataBytes": 130560,
+            "indexBytes": 8086560,
+            "lightBytes": 32768,
+            "residentBytes": 8249888,
+            "csrSignature": "0x2872b95ab94609ee"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "4": {
+          "values": {
+            "logicalCells": 32640,
+            "nonEmptyCells": 27685,
+            "totalIndices": 2718892,
+            "maximumLightsPerCell": 272,
+            "averageLightsPerCell": 83.29938725490196,
+            "metadataBytes": 261120,
+            "indexBytes": 10875568,
+            "lightBytes": 32768,
+            "residentBytes": 11169456,
+            "csrSignature": "0x475aac7209683af2"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "8": {
+          "values": {
+            "logicalCells": 65280,
+            "nonEmptyCells": 52165,
+            "totalIndices": 4454432,
+            "maximumLightsPerCell": 211,
+            "averageLightsPerCell": 68.23578431372549,
+            "metadataBytes": 522240,
+            "indexBytes": 17817728,
+            "lightBytes": 32768,
+            "residentBytes": 18372736,
+            "csrSignature": "0x9ae1b9580f74a022"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "16": {
+          "values": {
+            "logicalCells": 130560,
+            "nonEmptyCells": 100393,
+            "totalIndices": 7915772,
+            "maximumLightsPerCell": 178,
+            "averageLightsPerCell": 60.62938112745098,
+            "metadataBytes": 1044480,
+            "indexBytes": 31663088,
+            "lightBytes": 32768,
+            "residentBytes": 32740336,
+            "csrSignature": "0xb9e10c8b2f562f43"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        }
+      }
+    },
+    {
+      "lightCount": 512,
+      "radius": 6.0,
+      "submissionSignature": "0x32f5c635a1f0f10e",
+      "slices": {
+        "1": {
+          "values": {
+            "logicalCells": 8160,
+            "nonEmptyCells": 8160,
+            "totalIndices": 3333972,
+            "maximumLightsPerCell": 512,
+            "averageLightsPerCell": 408.575,
+            "metadataBytes": 65280,
+            "indexBytes": 13335888,
+            "lightBytes": 32768,
+            "residentBytes": 13433936,
+            "csrSignature": "0xd72cfce8201ec97e"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "2": {
+          "values": {
+            "logicalCells": 16320,
+            "nonEmptyCells": 16320,
+            "totalIndices": 5550195,
+            "maximumLightsPerCell": 472,
+            "averageLightsPerCell": 340.08547794117646,
+            "metadataBytes": 130560,
+            "indexBytes": 22200780,
+            "lightBytes": 32768,
+            "residentBytes": 22364108,
+            "csrSignature": "0x59085ad9b306f6e6"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "4": {
+          "values": {
+            "logicalCells": 32640,
+            "nonEmptyCells": 32633,
+            "totalIndices": 8019034,
+            "maximumLightsPerCell": 472,
+            "averageLightsPerCell": 245.6811887254902,
+            "metadataBytes": 261120,
+            "indexBytes": 32076136,
+            "lightBytes": 32768,
+            "residentBytes": 32370024,
+            "csrSignature": "0x562fb345deb47a33"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "8": {
+          "values": {
+            "logicalCells": 65280,
+            "nonEmptyCells": 57113,
+            "totalIndices": 14210330,
+            "maximumLightsPerCell": 400,
+            "averageLightsPerCell": 217.6827512254902,
+            "metadataBytes": 522240,
+            "indexBytes": 56841320,
+            "lightBytes": 32768,
+            "residentBytes": 57396328,
+            "csrSignature": "0x6e4140dd8e9a47e1"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "16": {
+          "values": {
+            "logicalCells": 130560,
+            "nonEmptyCells": 106073,
+            "totalIndices": 26185323,
+            "maximumLightsPerCell": 372,
+            "averageLightsPerCell": 200.56160386029413,
+            "metadataBytes": 1044480,
+            "indexBytes": 104741292,
+            "lightBytes": 32768,
+            "residentBytes": 105818540,
+            "csrSignature": "0xf7c428ff55df3d7c"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        }
+      }
+    },
+    {
+      "lightCount": 512,
+      "radius": 8.0,
+      "submissionSignature": "0x37e05de99f9149b6",
+      "slices": {
+        "1": {
+          "values": {
+            "logicalCells": 8160,
+            "nonEmptyCells": 8160,
+            "totalIndices": 3822570,
+            "maximumLightsPerCell": 512,
+            "averageLightsPerCell": 468.4522058823529,
+            "metadataBytes": 65280,
+            "indexBytes": 15290280,
+            "lightBytes": 32768,
+            "residentBytes": 15388328,
+            "csrSignature": "0x1e9076ab93585fbc"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "2": {
+          "values": {
+            "logicalCells": 16320,
+            "nonEmptyCells": 16320,
+            "totalIndices": 6888247,
+            "maximumLightsPerCell": 512,
+            "averageLightsPerCell": 422.07395833333334,
+            "metadataBytes": 130560,
+            "indexBytes": 27552988,
+            "lightBytes": 32768,
+            "residentBytes": 27716316,
+            "csrSignature": "0x71d19ff2703a9ffd"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "4": {
+          "values": {
+            "logicalCells": 32640,
+            "nonEmptyCells": 32640,
+            "totalIndices": 10502125,
+            "maximumLightsPerCell": 512,
+            "averageLightsPerCell": 321.7562806372549,
+            "metadataBytes": 261120,
+            "indexBytes": 42008500,
+            "lightBytes": 32768,
+            "residentBytes": 42302388,
+            "csrSignature": "0x07a2febf797e9103"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "8": {
+          "values": {
+            "logicalCells": 65280,
+            "nonEmptyCells": 57120,
+            "totalIndices": 18593970,
+            "maximumLightsPerCell": 488,
+            "averageLightsPerCell": 284.83409926470586,
+            "metadataBytes": 522240,
+            "indexBytes": 74375880,
+            "lightBytes": 32768,
+            "residentBytes": 74930888,
+            "csrSignature": "0x6af4cd6a5d51abde"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "16": {
+          "values": {
+            "logicalCells": 130560,
+            "nonEmptyCells": 106080,
+            "totalIndices": 34344226,
+            "maximumLightsPerCell": 460,
+            "averageLightsPerCell": 263.05320159313726,
+            "metadataBytes": 1044480,
+            "indexBytes": 137376904,
+            "lightBytes": 32768,
+            "residentBytes": 138454152,
+            "csrSignature": "0xdfd00c25836df897"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        }
+      }
+    },
+    {
+      "lightCount": 512,
+      "radius": 12.0,
+      "submissionSignature": "0x74755af348139812",
+      "slices": {
+        "1": {
+          "values": {
+            "logicalCells": 8160,
+            "nonEmptyCells": 8160,
+            "totalIndices": 4155684,
+            "maximumLightsPerCell": 512,
+            "averageLightsPerCell": 509.275,
+            "metadataBytes": 65280,
+            "indexBytes": 16622736,
+            "lightBytes": 32768,
+            "residentBytes": 16720784,
+            "csrSignature": "0x9ddd3bdbe94847d3"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "2": {
+          "values": {
+            "logicalCells": 16320,
+            "nonEmptyCells": 16320,
+            "totalIndices": 8036036,
+            "maximumLightsPerCell": 512,
+            "averageLightsPerCell": 492.40416666666664,
+            "metadataBytes": 130560,
+            "indexBytes": 32144144,
+            "lightBytes": 32768,
+            "residentBytes": 32307472,
+            "csrSignature": "0x2dba7a3ffac1caad"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "4": {
+          "values": {
+            "logicalCells": 32640,
+            "nonEmptyCells": 32640,
+            "totalIndices": 13652360,
+            "maximumLightsPerCell": 512,
+            "averageLightsPerCell": 418.2708333333333,
+            "metadataBytes": 261120,
+            "indexBytes": 54609440,
+            "lightBytes": 32768,
+            "residentBytes": 54903328,
+            "csrSignature": "0x1713818fc6f4354f"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "8": {
+          "values": {
+            "logicalCells": 65280,
+            "nonEmptyCells": 57120,
+            "totalIndices": 24744044,
+            "maximumLightsPerCell": 512,
+            "averageLightsPerCell": 379.04479166666664,
+            "metadataBytes": 522240,
+            "indexBytes": 98976176,
+            "lightBytes": 32768,
+            "residentBytes": 99531184,
+            "csrSignature": "0x306db7c7bb600e2a"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        },
+        "16": {
+          "values": {
+            "logicalCells": 130560,
+            "nonEmptyCells": 114240,
+            "totalIndices": 46397828,
+            "maximumLightsPerCell": 512,
+            "averageLightsPerCell": 355.3755208333333,
+            "metadataBytes": 1044480,
+            "indexBytes": 185591312,
+            "lightBytes": 32768,
+            "residentBytes": 186668560,
+            "csrSignature": "0x0108c1a6479b01a3"
+          },
+          "checks": {
+            "logicalCells": true,
+            "nonEmptyCells": true,
+            "totalIndices": true,
+            "maximumLightsPerCell": true,
+            "metadataBytes": true,
+            "indexBytes": true,
+            "lightBytes": true,
+            "residentBytes": true,
+            "averageLightsPerCell": true,
+            "csrSignature": true
+          }
+        }
+      }
+    }
+  ],
+  "quality": {
+    "gate": {
+      "maxChannelLsb": 2,
+      "meanChannelLsb": 0.1,
+      "p99ChannelLsb": 1
+    },
+    "cases": [
+      {
+        "case": "low-n0512-r015",
+        "allGridExact": true,
+        "maxChannelLsb": 1,
+        "meanChannelLsb": 0.0027054398148148146,
+        "p99ChannelLsb": 0.0,
+        "differentPixelCount": 16781,
+        "psnrDb": 73.80842483802249,
+        "passedFrozenGate": true
+      },
+      {
+        "case": "boundary-n0256-r060",
+        "allGridExact": true,
+        "maxChannelLsb": 1,
+        "meanChannelLsb": 0.03470486111111111,
+        "p99ChannelLsb": 1.0,
+        "differentPixelCount": 206986,
+        "psnrDb": 62.72690050173005,
+        "passedFrozenGate": true
+      },
+      {
+        "case": "high-n0512-r120",
+        "allGridExact": true,
+        "maxChannelLsb": 2,
+        "meanChannelLsb": 0.06638599537037038,
+        "p99ChannelLsb": 1.0,
+        "differentPixelCount": 375653,
+        "psnrDb": 59.91001786306724,
+        "passedFrozenGate": true
+      }
+    ]
+  },
+  "edgeCases": [
+    {
+      "case": "n0",
+      "allSlicesExact": true,
+      "fixtures": {
+        "nearPlaneIntersectionCount": 0,
+        "nearPlaneIntersectionVerified": false,
+        "cameraInsideCount": 0,
+        "cameraInsideVerified": false,
+        "fullyOffscreenCount": 0,
+        "fullyOffscreenVerified": false,
+        "depthSliceBoundaryCount": 0,
+        "depthSliceBoundaryPlaced": false,
+        "depthSliceBoundaryDistance": 0.0
+      }
+    },
+    {
+      "case": "n1",
+      "allSlicesExact": true,
+      "fixtures": {
+        "nearPlaneIntersectionCount": 0,
+        "nearPlaneIntersectionVerified": false,
+        "cameraInsideCount": 0,
+        "cameraInsideVerified": false,
+        "fullyOffscreenCount": 0,
+        "fullyOffscreenVerified": false,
+        "depthSliceBoundaryCount": 0,
+        "depthSliceBoundaryPlaced": false,
+        "depthSliceBoundaryDistance": 0.0
+      }
+    },
+    {
+      "case": "fixtures",
+      "allSlicesExact": true,
+      "fixtures": {
+        "nearPlaneIntersectionCount": 1,
+        "nearPlaneIntersectionVerified": true,
+        "cameraInsideCount": 1,
+        "cameraInsideVerified": true,
+        "fullyOffscreenCount": 1,
+        "fullyOffscreenVerified": true,
+        "depthSliceBoundaryCount": 1,
+        "depthSliceBoundaryPlaced": true,
+        "depthSliceBoundaryDistance": 3.162277699
+      }
+    }
+  ],
+  "endpointCompatibility": {
+    "tileImageExact": true,
+    "tileCsrExact": true,
+    "clusterImageExact": true,
+    "clusterCsrExact": true
+  },
+  "sliceSwitchCacheInvalidation": {
+    "requested": true,
+    "buildCount": 31,
+    "cacheHitCount": 0,
+    "passed": true
+  },
+  "fullImageMembership": {
+    "cases": [
+      {
+        "lightCount": 256,
+        "radius": 6.0,
+        "validPixelCount": 2073600,
+        "invalidPixelCount": 0,
+        "groundTruthInteractions": 232166544,
+        "missesBySlice": {
+          "1": 0,
+          "2": 0,
+          "4": 0,
+          "8": 0,
+          "16": 0
+        }
+      },
+      {
+        "lightCount": 512,
+        "radius": 1.5,
+        "validPixelCount": 2073600,
+        "invalidPixelCount": 0,
+        "groundTruthInteractions": 13077085,
+        "missesBySlice": {
+          "1": 0,
+          "2": 0,
+          "4": 0,
+          "8": 0,
+          "16": 0
+        }
+      },
+      {
+        "lightCount": 512,
+        "radius": 12.0,
+        "validPixelCount": 2073600,
+        "invalidPixelCount": 0,
+        "groundTruthInteractions": 915561923,
+        "missesBySlice": {
+          "1": 0,
+          "2": 0,
+          "4": 0,
+          "8": 0,
+          "16": 0
+        }
+      }
+    ],
+    "totalGroundTruthInteractions": 1160805552,
+    "allMissesZero": true
+  },
+  "shaderContract": {
+    "discardBeforeMetadata": true,
+    "sliceUniformControlsDepth": true,
+    "exactSpherePredicate": true,
+    "threeTboFetches": true
+  },
+  "sourceContract": {
+    "sliceInCacheSignature": true,
+    "sliceControlsLogicalCells": true,
+    "failClosedCapacity": true,
+    "defaultAnalytic": true
+  },
+  "defaultRenderModeRemainsAnalyticScreen": true
+}

@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="570" viewBox="0 0 1180 570">
+<rect width="100%" height="100%" fill="#0b1020"/>
+<style>text{font-family:Segoe UI,Arial,sans-serif;fill:#e8edf7}.label{font-size:13px}.value{font-size:12px;fill:#b8c2d8}</style>
+<text x="24" y="30" font-size="20">Point-light fixed-path A/B — pooled GPU median</text>
+<text class="label" x="24" y="71">A-bounds-overhead representative/16</text>
+<rect x="300" y="58" width="18.46" height="15" fill="#d97757"/>
+<rect x="300" y="77" width="18.48" height="15" fill="#43b5a0"/>
+<text class="value" x="328.48" y="71">0.748 → 0.749 ms (-0.12%)</text>
+<text class="label" x="24" y="119">A-offscreen-culling edge-cases/16</text>
+<rect x="300" y="106" width="21.02" height="15" fill="#d97757"/>
+<rect x="300" y="125" width="20.85" height="15" fill="#43b5a0"/>
+<text class="value" x="331.02" y="119">0.852 → 0.845 ms (0.80%)</text>
+<text class="label" x="24" y="167">B-scissor representative/16</text>
+<rect x="300" y="154" width="18.46" height="15" fill="#d97757"/>
+<rect x="300" y="173" width="17.92" height="15" fill="#43b5a0"/>
+<text class="value" x="328.46" y="167">0.748 → 0.726 ms (2.93%)</text>
+<text class="label" x="24" y="215">B-scissor representative/256</text>
+<rect x="300" y="202" width="224.53" height="15" fill="#d97757"/>
+<rect x="300" y="221" width="206.28" height="15" fill="#43b5a0"/>
+<text class="value" x="534.53" y="215">9.094 → 8.355 ms (8.13%)</text>
+<text class="label" x="24" y="263">B-scissor representative/512</text>
+<rect x="300" y="250" width="436.94" height="15" fill="#d97757"/>
+<rect x="300" y="269" width="401.58" height="15" fill="#43b5a0"/>
+<text class="value" x="746.94" y="263">17.697 → 16.265 ms (8.09%)</text>
+<text class="label" x="24" y="311">C0-semantic-unification representative/256</text>
+<rect x="300" y="298" width="207.07" height="15" fill="#d97757"/>
+<rect x="300" y="317" width="211.51" height="15" fill="#43b5a0"/>
+<text class="value" x="521.51" y="311">8.387 → 8.567 ms (-2.14%)</text>
+<text class="label" x="24" y="359">C-fixed-path small-local/256</text>
+<rect x="300" y="346" width="63.09" height="15" fill="#d97757"/>
+<rect x="300" y="365" width="15.01" height="15" fill="#43b5a0"/>
+<text class="value" x="373.09" y="359">2.555 → 0.608 ms (76.21%)</text>
+<text class="label" x="24" y="407">C-fixed-path medium-local/256</text>
+<rect x="300" y="394" width="141.09" height="15" fill="#d97757"/>
+<rect x="300" y="413" width="64.95" height="15" fill="#43b5a0"/>
+<text class="value" x="451.09" y="407">5.715 → 2.631 ms (53.96%)</text>
+<text class="label" x="24" y="455">C-fixed-path representative/256</text>
+<rect x="300" y="442" width="210.83" height="15" fill="#d97757"/>
+<rect x="300" y="461" width="102.36" height="15" fill="#43b5a0"/>
+<text class="value" x="520.83" y="455">8.539 → 4.146 ms (51.45%)</text>
+<text class="label" x="24" y="503">C-fixed-path high-overlap/256</text>
+<rect x="300" y="490" width="650.00" height="15" fill="#d97757"/>
+<rect x="300" y="509" width="278.41" height="15" fill="#43b5a0"/>
+<text class="value" x="960.00" y="503">26.327 → 11.276 ms (57.17%)</text>
+</svg>

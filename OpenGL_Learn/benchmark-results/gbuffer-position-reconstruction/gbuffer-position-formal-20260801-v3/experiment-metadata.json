@@ -1,0 +1,204 @@
+{
+    "schemaVersion":  1,
+    "experiment":  "explicit-gPosition-vs-depth-position-reconstruction",
+    "preregisteredBeforeData":  true,
+    "createdUtc":  "2026-07-31T21:12:14.8497438Z",
+    "preset":  "Formal",
+    "batchId":  "gbuffer-position-formal-20260801-v3",
+    "invariant":  {
+                      "executablePath":  "C:\\Users\\Link\\Dev\\OpenGL_Learn\\x64\\Release\\OpenGL_Learn.exe",
+                      "executableSha256":  "DAC2B05BCB69D638BACEB224D3B34E945D5BFDF56A2F78B399C4BB0A84B8D13A",
+                      "executableBytes":  1897472,
+                      "sourceCheckpointSha256":  "ED481517D4DED319E04B6A73529F3E12388FF6ADAAF96EA4A6FE629C62578B86",
+                      "gitHead":  "83f1a0eb0abf7f07a1ab4dbd001773d47f4b7252",
+                      "build":  "Release x64",
+                      "resolution":  [
+                                         1920,
+                                         1080
+                                     ],
+                      "swapInterval":  0,
+                      "renderPath":  "pbr-deferred",
+                      "shadows":  "off",
+                      "bloom":  false,
+                      "autoReloadShaders":  false,
+                      "autoReloadMaterials":  false,
+                      "ssaoKernelSizeWhenOn":  64,
+                      "ssaoModeWhenOn":  "legacy-full",
+                      "ssaoRadius":  0.35,
+                      "ssaoBias":  0.025
+                  },
+    "protocol":  {
+                     "warmupFramesPerProcess":  300,
+                     "measuredFramesPerProcess":  2000,
+                     "independentProcessesPerVariantSceneCondition":  3,
+                     "balancedOrder":  [
+                                           "A",
+                                           "B",
+                                           "B",
+                                           "A",
+                                           "A",
+                                           "B"
+                                       ],
+                     "conditions":  [
+                                        "ssao-off",
+                                        "ssao-on"
+                                    ],
+                     "conditionPooling":  "forbidden; every scene x SSAO condition is evaluated independently",
+                     "performanceReadback":  "disabled",
+                     "qualityCapture":  "separate-processes-after-performance-interval",
+                     "requiredGpuZones":  [
+                                              "GPU Frame",
+                                              "G-Buffer Geometry",
+                                              "Depth/Stencil Copy",
+                                              "SSAO Generate",
+                                              "SSAO Upsample when half-bilateral validation is active",
+                                              "Deferred Lighting",
+                                              "Deferred Pass"
+                                          ],
+                     "requiredCpuZones":  [
+                                              "CPU Frame",
+                                              "G-Buffer Geometry",
+                                              "Depth/Stencil Copy",
+                                              "SSAO Generate",
+                                              "SSAO Upsample when half-bilateral validation is active",
+                                              "Deferred Lighting",
+                                              "Deferred Pass"
+                                          ]
+                 },
+    "variants":  {
+                     "A":  {
+                               "cli":  "--gbuffer-position explicit",
+                               "colorMrtCount":  5,
+                               "attachments":  [
+                                                   "position RGBA16F",
+                                                   "normal RGB16F",
+                                                   "albedo RGB8",
+                                                   "material RGBA16F",
+                                                   "emissive RGB16F"
+                                               ],
+                               "depthStencil":  "D24S8 renderbuffer",
+                               "logicalBytesPerPixel":  35
+                           },
+                     "B":  {
+                               "cli":  "--gbuffer-position reconstruct",
+                               "colorMrtCount":  4,
+                               "attachments":  [
+                                                   "normal RGB16F",
+                                                   "albedo RGB8",
+                                                   "material RGBA16F",
+                                                   "emissive RGB16F"
+                                               ],
+                               "depthStencil":  "sampleable D24S8 texture (shared depth and stencil storage)",
+                               "logicalBytesPerPixel":  27,
+                               "reconstruction":  {
+                                                      "ndcZ":  "OpenGL [-1,1] from window depth [0,1]",
+                                                      "background":  "clear depth 1.0 is invalid",
+                                                      "ssaoSpace":  "view; four depth texelFetch plus up to four inverseProjection mat4xvec4/divides and bilinear mix to preserve control GL_LINEAR guide semantics",
+                                                      "halfBilateralGuide":  "view depth; four depth texelFetch/reconstructions per guide sample before bilinear interpolation",
+                                                      "lightingSpace":  "world; inverseProjection plus inverseView mat4xvec4 and divide",
+                                                      "inverses":  "computed on CPU once per pass, never inverse() in fragment shader"
+                                                  }
+                           }
+                 },
+    "deterministicMemoryExpectation":  {
+                                           "bytesSavedPerPixel":  8,
+                                           "bytesSavedAtResolution":  16588800,
+                                           "mibSavedAtResolution":  15.8203125
+                                       },
+    "cameras":  [
+                    {
+                        "scene":  "sponza",
+                        "model":  "classic-scenes/sponza/sponza.obj",
+                        "position":  [
+                                         -6,
+                                         -1.5,
+                                         0
+                                     ],
+                        "target":  [
+                                       6,
+                                       -0.8,
+                                       0
+                                   ],
+                        "up":  [
+                                   0,
+                                   1,
+                                   0
+                               ],
+                        "radius":  15,
+                        "fov":  55,
+                        "signature":  "840E4F685518AAFC3905685592EC40E4E5B6A581F96236414C4914299EF8FA83"
+                    },
+                    {
+                        "scene":  "san-miguel",
+                        "model":  "classic-scenes/san-miguel/san-miguel-low-poly.obj",
+                        "position":  [
+                                         1.5,
+                                         -1.2,
+                                         3.5
+                                     ],
+                        "target":  [
+                                       1.5,
+                                       -0.7,
+                                       -1
+                                   ],
+                        "up":  [
+                                   0,
+                                   1,
+                                   0
+                               ],
+                        "radius":  15,
+                        "fov":  60,
+                        "signature":  "A20C561F49364CFAE0E931ED255DED66C6CC99EA2F13A905710D534060EAF429"
+                    }
+                ],
+    "qualityThresholds":  {
+                              "ldrNormalizedChannelMaeMax":  0.0005,
+                              "ldrNormalizedChannelP95Max":  0.00392156862745098,
+                              "ldrNormalizedChannelP99Max":  0.00784313725490196,
+                              "ldrNormalizedChannelAbsoluteMax":  0.031372549019607843,
+                              "ldrGlobalSsimMin":  0.999,
+                              "aoMaeMax":  0.002,
+                              "aoP95Max":  0.005,
+                              "aoP99Max":  0.01,
+                              "aoAbsoluteMax":  0.05,
+                              "worldPositionMaeMax":  0.01,
+                              "worldPositionP95Max":  0.03,
+                              "worldPositionAbsoluteMax":  0.25,
+                              "viewPositionMaeMax":  0.01,
+                              "viewPositionP95Max":  0.03,
+                              "viewPositionAbsoluteMax":  0.25,
+                              "depthBucketStrategy":  "foreground view-depth tertiles from the control capture; thresholds are fixed before data",
+                              "depthBuckets":  [
+                                                   {
+                                                       "p95Max":  0.01,
+                                                       "quantileMinimum":  0,
+                                                       "name":  "near",
+                                                       "quantileMaximum":  0.33333333333333331
+                                                   },
+                                                   {
+                                                       "p95Max":  0.03,
+                                                       "quantileMinimum":  0.33333333333333331,
+                                                       "name":  "mid",
+                                                       "quantileMaximum":  0.66666666666666663
+                                                   },
+                                                   {
+                                                       "p95Max":  0.1,
+                                                       "quantileMinimum":  0.66666666666666663,
+                                                       "name":  "far",
+                                                       "quantileMaximum":  1
+                                                   }
+                                               ],
+                              "backgroundMaskMismatchPixelsMax":  0,
+                              "unchangedAttachmentHashesRequired":  true
+                          },
+    "performanceDecision":  {
+                                "primaryMetric":  "paired independent-process GPU Frame median and P95, evaluated per scene x SSAO condition without pooling",
+                                "perSceneConditionMedianDeltaMillisecondsMaxForGo":  -0.05,
+                                "perSceneConditionMedianDeltaPercentMaxForGo":  -1,
+                                "perSceneConditionP95RegressionMillisecondsMax":  0.1,
+                                "perSceneConditionP95RegressionPercentMax":  2,
+                                "geometryMedianDeltaMustBeNegativeInEverySceneCondition":  true,
+                                "conflictOrQualityOrLifecycleFailure":  "No-Go",
+                                "memoryOnlyWhenTimeFlat":  "memory trade-off / time No-Go"
+                            }
+}
