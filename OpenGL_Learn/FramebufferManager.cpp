@@ -62,13 +62,12 @@ namespace {
             bytes += width * height * faces * samples * BytesPerPixel(textureAttr);
         }
 
-        if (attr.hasDepthTexture && !attr.isShadowMap) {
-            bytes += width * height * 4u; // GL_DEPTH_COMPONENT32F
-        }
         if (!attr.isShadowMap) {
             const std::uint64_t samples =
                 attr.aaType == AntiAliasManager::AntiAliasType::MSAA ? 4u : 1u;
-            bytes += width * height * samples * 4u; // GL_DEPTH24_STENCIL8
+            // The candidate uses a sampleable D24S8 texture in place of,
+            // not in addition to, the control's D24S8 renderbuffer.
+            bytes += width * height * samples * 4u;
         }
         return bytes;
     }
@@ -238,27 +237,35 @@ void FBO::Init(FBOAttributes attr) {
         }
     }
 
-    // If needed (forward/AO): create a depth texture that can be sampled in later passes.
-    // IMPORTANT: we DO NOT attach this texture to GL_DEPTH_ATTACHMENT on the main FBO,
-    // otherwise some drivers may reject the framebuffer configuration.
-    // Instead, ForwardRenderPass will blit depth into this texture after opaque rendering.
+    // Candidate path: replace the control's D24S8 renderbuffer with an
+    // identically formatted D24S8 texture. The depth aspect is sampleable and
+    // the stencil aspect remains available to existing stencil operations.
     if (attr.hasDepthTexture && !attr.isShadowMap) {
         glGenTextures(1, &depthTextureID);
         GLState::BindTexture(GL_TEXTURE_2D, depthTextureID);
         glTexImage2D(
             GL_TEXTURE_2D, 0,
-            GL_DEPTH_COMPONENT32F,
+            GL_DEPTH24_STENCIL8,
             width, height,
             0,
-            GL_DEPTH_COMPONENT, GL_FLOAT,
+            GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8,
             NULL
         );
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		// Match the control gPosition attachment's sampling state. SSAO samples
+		// projected coordinates between pixel centers, so NEAREST would change
+		// the guide algorithm in addition to changing position storage.
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         // For sampling: don't use hardware depth compare mode
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_NONE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glFramebufferTexture2D(
+			GL_FRAMEBUFFER,
+			GL_DEPTH_STENCIL_ATTACHMENT,
+			GL_TEXTURE_2D,
+			depthTextureID,
+			0);
     }
 
     // 4. ???? DrawBuffers
@@ -271,27 +278,33 @@ void FBO::Init(FBOAttributes attr) {
             glDrawBuffers(static_cast<GLsizei>(colorAttachments.size()), colorAttachments.data());
         }
 
-        // 5. Depth/Stencil storage (keep the original robust setup)
-        glGenRenderbuffers(1, &rboID);
-        glBindRenderbuffer(GL_RENDERBUFFER, rboID);
-        if (attr.aaType == AntiAliasManager::AntiAliasType::MSAA) {
-            glRenderbufferStorageMultisample(
-                GL_RENDERBUFFER, 4,
-                GL_DEPTH24_STENCIL8,
-                width, height
-            );
-        }
-        else {
-            glRenderbufferStorage(
-                GL_RENDERBUFFER,
-                GL_DEPTH24_STENCIL8,
-                width, height
-            );
-        }
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rboID);
+		// Control path keeps the original D24S8 renderbuffer. Candidate already
+		// attached its sampleable D24S8 texture above.
+		if (!attr.hasDepthTexture) {
+			glGenRenderbuffers(1, &rboID);
+			glBindRenderbuffer(GL_RENDERBUFFER, rboID);
+			if (attr.aaType == AntiAliasManager::AntiAliasType::MSAA) {
+				glRenderbufferStorageMultisample(
+					GL_RENDERBUFFER, 4,
+					GL_DEPTH24_STENCIL8,
+					width, height
+				);
+			}
+			else {
+				glRenderbufferStorage(
+					GL_RENDERBUFFER,
+					GL_DEPTH24_STENCIL8,
+					width, height
+				);
+			}
+			glFramebufferRenderbuffer(
+				GL_FRAMEBUFFER,
+				GL_DEPTH_STENCIL_ATTACHMENT,
+				GL_RENDERBUFFER,
+				rboID);
+		}
     }
 
-    // ?????
     const bool framebufferComplete =
         glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
     if (!framebufferComplete) {

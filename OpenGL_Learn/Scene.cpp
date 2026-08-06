@@ -830,6 +830,21 @@ void Scene::Draw()
 void Scene::DrawDefferedModels()
 {
     if (!properties.DEFER_RENDERING) return;
+    if (properties.GBUFFER_POSITION_MODE ==
+        GBufferPositionProperty::ReconstructFromDepth) {
+        static bool warned = false;
+        if (!warned) {
+            std::cerr
+                << "[GBufferExperiment] legacy Scene::DrawDefferedModels is outside "
+                << "the reconstruction experiment; it explicitly falls back to "
+                << "the existing gPosition path."
+                << std::endl;
+            warned = true;
+        }
+        // This legacy renderer is not attachment-layout aware. Disable the
+        // candidate before it can expose shifted MRT semantics to later work.
+        properties.GBUFFER_POSITION_MODE = GBufferPositionProperty::Explicit;
+    }
     FBOAttributes attr = FramebuffersManager::GenCurrentAttr();
     //反走样不支持MSAA
     attr.aaType = AntiAliasManager::AntiAliasType::Default;
@@ -1688,6 +1703,7 @@ void Scene::RenderPointShadowCasters(
 
 void Scene::DrawPointLights()
 {
+	if (!m_drawPointLightMarkers) return;
     GLState::StencilMask(0x00); // 禁用stencil写入，不影响后续的stencil记录
     glm::vec3 lightColor(1.0f);
 

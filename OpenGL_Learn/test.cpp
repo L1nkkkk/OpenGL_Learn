@@ -44,6 +44,7 @@
 #include "EditorSceneManager.h"
 #include "BenchmarkMotionTimeline.h"
 #include "SubmissionStressScene.h"
+#include "PointLightStressBenchmark.h"
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -104,6 +105,16 @@ enum class FloatCaptureSource {
 	Red,
 	Alpha,
 	RGB,
+};
+
+struct GBufferCaptureStats {
+	FloatCaptureStats position;
+	FloatCaptureStats depth;
+	FloatCaptureStats normal;
+	FloatCaptureStats albedo;
+	FloatCaptureStats material;
+	FloatCaptureStats materialAlpha;
+	FloatCaptureStats emissive;
 };
 
 struct FrameTimingStats {
@@ -185,6 +196,13 @@ struct ClassicSceneTestOptions {
 	std::string ssaoRawFloatCapturePath;
 	std::string ssaoDepthCapturePath;
 	std::string ssaoNormalCapturePath;
+	std::string gbufferPositionCapturePath;
+	std::string gbufferDepthCapturePath;
+	std::string gbufferNormalCapturePath;
+	std::string gbufferAlbedoCapturePath;
+	std::string gbufferMaterialCapturePath;
+	std::string gbufferMaterialAlphaCapturePath;
+	std::string gbufferEmissiveCapturePath;
 	std::string ssaoTemporalCaptureDirectory;
 	std::string resultPath;
 	std::string renderDocCaptureTemplate;
@@ -251,6 +269,173 @@ bool ParseIntArgument(const std::string& text, int& value)
 	catch (...) {
 		return false;
 	}
+}
+
+bool ParseGBufferPositionMode(
+	int argc,
+	char** argv,
+	std::string& errorMessage)
+{
+	bool found = false;
+	for (int i = 1; i < argc; ++i) {
+		if (std::string(argv[i]) != "--gbuffer-position") {
+			continue;
+		}
+		if (found) {
+			errorMessage = "--gbuffer-position may only be specified once";
+			return false;
+		}
+		found = true;
+		if (i + 1 >= argc) {
+			errorMessage = "--gbuffer-position requires explicit or reconstruct";
+			return false;
+		}
+		const std::string mode = argv[++i];
+		if (mode == "explicit") {
+			properties.GBUFFER_POSITION_MODE =
+				GBufferPositionProperty::Explicit;
+		}
+		else if (mode == "reconstruct") {
+			properties.GBUFFER_POSITION_MODE =
+				GBufferPositionProperty::ReconstructFromDepth;
+		}
+		else {
+			errorMessage =
+				"--gbuffer-position requires explicit or reconstruct";
+			return false;
+		}
+	}
+	return true;
+}
+
+bool ParsePointLightStencilClearMode(
+	int argc,
+	char** argv,
+	std::string& errorMessage)
+{
+	bool found = false;
+	for (int i = 1; i < argc; ++i) {
+		if (std::string(argv[i]) != "--point-light-stencil-clear-mode") {
+			continue;
+		}
+		if (found) {
+			errorMessage =
+				"--point-light-stencil-clear-mode may only be specified once";
+			return false;
+		}
+		found = true;
+		if (i + 1 >= argc) {
+			errorMessage =
+				"--point-light-stencil-clear-mode requires legacy-2n or coalesced-n-plus-one";
+			return false;
+		}
+		const std::string mode = argv[++i];
+		if (mode == "legacy-2n") {
+			properties.POINT_LIGHT_STENCIL_CLEAR_MODE =
+				PointLightStencilClearProperty::Legacy2N;
+		}
+		else if (mode == "coalesced-n-plus-one") {
+			properties.POINT_LIGHT_STENCIL_CLEAR_MODE =
+				PointLightStencilClearProperty::CoalescedNPlusOne;
+		}
+		else {
+			errorMessage =
+				"--point-light-stencil-clear-mode requires legacy-2n or coalesced-n-plus-one";
+			return false;
+		}
+		properties.POINT_LIGHT_STENCIL_CLEAR_MODE_EXPLICIT = true;
+	}
+	return true;
+}
+
+bool ParsePointLightRenderMode(
+	int argc,
+	char** argv,
+	std::string& errorMessage)
+{
+	bool foundMode = false;
+	bool foundCulling = false;
+	for (int i = 1; i < argc; ++i) {
+		const std::string argument = argv[i];
+		if (argument == "--point-light-bounds-telemetry") {
+			properties.POINT_LIGHT_BOUNDS_TELEMETRY_REQUESTED = true;
+			continue;
+		}
+		if (argument == "--point-light-render-mode") {
+			if (foundMode || i + 1 >= argc) {
+				errorMessage =
+					"--point-light-render-mode must be specified once with a value";
+				return false;
+			}
+			foundMode = true;
+			const std::string mode = argv[++i];
+			if (mode == "coalesced-volume") {
+				properties.POINT_LIGHT_RENDER_MODE =
+					PointLightRenderProperty::CoalescedVolume;
+			}
+			else if (mode == "bounds-volume") {
+				properties.POINT_LIGHT_RENDER_MODE =
+					PointLightRenderProperty::BoundsVolume;
+			}
+			else if (mode == "scissored-volume") {
+				properties.POINT_LIGHT_RENDER_MODE =
+					PointLightRenderProperty::ScissoredVolume;
+			}
+			else if (mode == "analytic-volume-full") {
+				properties.POINT_LIGHT_RENDER_MODE =
+					PointLightRenderProperty::AnalyticVolumeFull;
+			}
+			else if (mode == "analytic-volume") {
+				properties.POINT_LIGHT_RENDER_MODE =
+					PointLightRenderProperty::AnalyticVolume;
+			}
+			else if (mode == "analytic-screen") {
+				properties.POINT_LIGHT_RENDER_MODE =
+					PointLightRenderProperty::AnalyticScreen;
+			}
+			else if (mode == "analytic-fullscreen") {
+				properties.POINT_LIGHT_RENDER_MODE =
+					PointLightRenderProperty::AnalyticFullscreen;
+			}
+			else if (mode == "tile16") {
+				properties.POINT_LIGHT_RENDER_MODE =
+					PointLightRenderProperty::Tile16;
+			}
+			else if (mode == "cluster16") {
+				properties.POINT_LIGHT_RENDER_MODE =
+					PointLightRenderProperty::Cluster16;
+			}
+			else {
+				errorMessage =
+					"--point-light-render-mode requires coalesced-volume, bounds-volume, scissored-volume, analytic-volume-full, analytic-volume, analytic-screen, analytic-fullscreen, tile16, or cluster16";
+				return false;
+			}
+			properties.POINT_LIGHT_RENDER_MODE_EXPLICIT = true;
+			continue;
+		}
+		if (argument == "--point-light-offscreen-culling") {
+			if (foundCulling || i + 1 >= argc) {
+				errorMessage =
+					"--point-light-offscreen-culling must be specified once with on or off";
+				return false;
+			}
+			foundCulling = true;
+			const std::string value = argv[++i];
+			if (value == "on") {
+				properties.POINT_LIGHT_OFFSCREEN_CULLING = true;
+			}
+			else if (value == "off") {
+				properties.POINT_LIGHT_OFFSCREEN_CULLING = false;
+			}
+			else {
+				errorMessage =
+					"--point-light-offscreen-culling requires on or off";
+				return false;
+			}
+			properties.POINT_LIGHT_OFFSCREEN_CULLING_EXPLICIT = true;
+		}
+	}
+	return true;
 }
 
 bool ParseClassicSceneTestOptions(
@@ -365,6 +550,34 @@ bool ParseClassicSceneTestOptions(
 		else if (readString(
 			"--classic-scene-ssao-normal-capture",
 			options.ssaoNormalCapturePath)) {
+		}
+		else if (readString(
+			"--classic-scene-gbuffer-position-capture",
+			options.gbufferPositionCapturePath)) {
+		}
+		else if (readString(
+			"--classic-scene-gbuffer-depth-capture",
+			options.gbufferDepthCapturePath)) {
+		}
+		else if (readString(
+			"--classic-scene-gbuffer-normal-capture",
+			options.gbufferNormalCapturePath)) {
+		}
+		else if (readString(
+			"--classic-scene-gbuffer-albedo-capture",
+			options.gbufferAlbedoCapturePath)) {
+		}
+		else if (readString(
+			"--classic-scene-gbuffer-material-capture",
+			options.gbufferMaterialCapturePath)) {
+		}
+		else if (readString(
+			"--classic-scene-gbuffer-material-alpha-capture",
+			options.gbufferMaterialAlphaCapturePath)) {
+		}
+		else if (readString(
+			"--classic-scene-gbuffer-emissive-capture",
+			options.gbufferEmissiveCapturePath)) {
 		}
 		else if (readString(
 			"--classic-scene-ssao-temporal-capture-directory",
@@ -683,6 +896,29 @@ bool ParseClassicSceneTestOptions(
 		options.renderPath.find("deferred") == std::string::npos) {
 		errorMessage =
 			"--classic-scene-ssao-samples requires a deferred render path";
+		return false;
+	}
+	const bool hasGBufferCapture =
+		!options.gbufferPositionCapturePath.empty() ||
+		!options.gbufferDepthCapturePath.empty() ||
+		!options.gbufferNormalCapturePath.empty() ||
+		!options.gbufferAlbedoCapturePath.empty() ||
+		!options.gbufferMaterialCapturePath.empty() ||
+		!options.gbufferMaterialAlphaCapturePath.empty() ||
+		!options.gbufferEmissiveCapturePath.empty();
+	if ((hasGBufferCapture ||
+		properties.GBUFFER_POSITION_MODE ==
+			GBufferPositionProperty::ReconstructFromDepth) &&
+		options.renderPath.find("deferred") == std::string::npos) {
+		errorMessage =
+			"position reconstruction and G-Buffer captures require a deferred render path";
+		return false;
+	}
+	if (!options.gbufferPositionCapturePath.empty() &&
+		properties.GBUFFER_POSITION_MODE ==
+			GBufferPositionProperty::ReconstructFromDepth) {
+		errorMessage =
+			"candidate mode has no gPosition attachment; capture its sampleable depth and reconstruct offline";
 		return false;
 	}
 	if (options.ssaoExperiment && options.shadowExperiment) {
@@ -1093,6 +1329,44 @@ void WriteJsonVec3(std::ostream& output, const glm::vec3& value)
 		<< value.z << "]";
 }
 
+void WriteJsonMat4(std::ostream& output, const glm::mat4& value)
+{
+	const std::streamsize previousPrecision = output.precision();
+	output << std::setprecision(std::numeric_limits<float>::max_digits10);
+	output << "[";
+	for (int row = 0; row < 4; ++row) {
+		if (row != 0) {
+			output << ", ";
+		}
+		output << "[";
+		for (int column = 0; column < 4; ++column) {
+			if (column != 0) {
+				output << ", ";
+			}
+			output << value[column][row];
+		}
+		output << "]";
+	}
+	output << "]";
+	output.precision(previousPrecision);
+}
+
+const char* GlInternalFormatName(GLint format)
+{
+	switch (format) {
+	case GL_RGB: return "GL_RGB";
+	case GL_RGB8: return "GL_RGB8";
+	case GL_RGB16F: return "GL_RGB16F";
+	case GL_RGBA: return "GL_RGBA";
+	case GL_RGBA8: return "GL_RGBA8";
+	case GL_RGBA16F: return "GL_RGBA16F";
+	case GL_R16F: return "GL_R16F";
+	case GL_DEPTH_COMPONENT32F: return "GL_DEPTH_COMPONENT32F";
+	case GL_DEPTH24_STENCIL8: return "GL_DEPTH24_STENCIL8";
+	default: return "unknown";
+	}
+}
+
 void WriteJsonBenchmarkMotionTimeline(
 	std::ostream& output,
 	const BenchmarkMotionTimeline& timeline,
@@ -1490,6 +1764,8 @@ void WriteJsonFloatCapture(
 
 bool WriteClassicSceneResult(
 	const ClassicSceneTestOptions& options,
+	const PointLightStressOptions& pointLightStressOptions,
+	const PointLightStressState& pointLightStressState,
 	Scene& scene,
 	bool success,
 	double loadMilliseconds,
@@ -1506,6 +1782,8 @@ bool WriteClassicSceneResult(
 	const FloatCaptureStats& ssaoRawFloatCapture,
 	const FloatCaptureStats& ssaoDepthCapture,
 	const FloatCaptureStats& ssaoNormalCapture,
+	const GBufferCaptureStats& gbufferCapture,
+	const FBO* gbufferFBO,
 	const FBO* ssaoFBO,
 	const FBO* ssaoGenerationFBO,
 	const PointShadowCubeEvidence& pointShadowCubeEvidence,
@@ -1518,6 +1796,16 @@ bool WriteClassicSceneResult(
 	float actualSpotShadowNearPlane,
 	float actualSpotShadowFarPlane)
 {
+	GLint maxTextureBufferSize = 0;
+	GLint maxTextureSize = 0;
+	GLint maxArrayTextureLayers = 0;
+	GLint maxUniformBlockSize = 0;
+	if (pointLightStressOptions.enabled) {
+		glGetIntegerv(GL_MAX_TEXTURE_BUFFER_SIZE, &maxTextureBufferSize);
+		glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
+		glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &maxArrayTextureLayers);
+		glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &maxUniformBlockSize);
+	}
 	const std::filesystem::path path(options.resultPath);
 	std::error_code directoryError;
 	if (path.has_parent_path()) {
@@ -1535,10 +1823,78 @@ bool WriteClassicSceneResult(
 		return memory.categories[static_cast<std::size_t>(type)].currentBytes;
 	};
 	std::vector<double> drawCallSamples;
+	std::vector<double> pointLightsTotalSamples;
+	std::vector<double> pointLightsActiveSamples;
+	std::vector<double> pointLightsSubmittedSamples;
+	std::vector<double> pointLightsCulledSamples;
+	std::vector<double> stencilClearSamples;
+	std::vector<double> pointLightStencilClearSamples;
+	std::vector<double> fixedStencilClearSamples;
+	std::vector<double> pointLightBoundsRectSamples;
+	std::vector<double> pointLightBoundsOutsideSamples;
+	std::vector<double> pointLightBoundsFallbackSamples;
+	std::vector<double> pointLightVolumeCountSamples;
+	std::vector<double> pointLightScreenCountSamples;
+	std::vector<double> pointLightStencilDrawSamples;
+	std::vector<double> pointLightLightingVolumeDrawSamples;
+	std::vector<double> pointLightScreenDrawSamples;
+	std::vector<double> pointLightRectPixelAreaSamples;
+	std::vector<double> pointLightStencilClearPixelAreaSamples;
 	drawCallSamples.reserve(profilerSamples.renderStats.size());
+	pointLightsTotalSamples.reserve(profilerSamples.renderStats.size());
+	pointLightsActiveSamples.reserve(profilerSamples.renderStats.size());
+	pointLightsSubmittedSamples.reserve(profilerSamples.renderStats.size());
+	pointLightsCulledSamples.reserve(profilerSamples.renderStats.size());
+	stencilClearSamples.reserve(profilerSamples.renderStats.size());
+	pointLightStencilClearSamples.reserve(profilerSamples.renderStats.size());
+	fixedStencilClearSamples.reserve(profilerSamples.renderStats.size());
+	pointLightBoundsRectSamples.reserve(profilerSamples.renderStats.size());
+	pointLightBoundsOutsideSamples.reserve(profilerSamples.renderStats.size());
+	pointLightBoundsFallbackSamples.reserve(profilerSamples.renderStats.size());
+	pointLightVolumeCountSamples.reserve(profilerSamples.renderStats.size());
+	pointLightScreenCountSamples.reserve(profilerSamples.renderStats.size());
+	pointLightStencilDrawSamples.reserve(profilerSamples.renderStats.size());
+	pointLightLightingVolumeDrawSamples.reserve(profilerSamples.renderStats.size());
+	pointLightScreenDrawSamples.reserve(profilerSamples.renderStats.size());
+	pointLightRectPixelAreaSamples.reserve(profilerSamples.renderStats.size());
+	pointLightStencilClearPixelAreaSamples.reserve(profilerSamples.renderStats.size());
 	for (const RenderStats& sample : profilerSamples.renderStats) {
 		drawCallSamples.push_back(
 			static_cast<double>(sample.drawCalls));
+		pointLightsTotalSamples.push_back(
+			static_cast<double>(sample.pointLightsTotal));
+		pointLightsActiveSamples.push_back(
+			static_cast<double>(sample.pointLightsActive));
+		pointLightsSubmittedSamples.push_back(
+			static_cast<double>(sample.pointLightsSubmitted));
+		pointLightsCulledSamples.push_back(
+			static_cast<double>(sample.pointLightsCulled));
+		stencilClearSamples.push_back(
+			static_cast<double>(sample.stencilClears));
+		pointLightStencilClearSamples.push_back(
+			static_cast<double>(sample.pointLightStencilClears));
+		fixedStencilClearSamples.push_back(
+			static_cast<double>(sample.fixedStencilClears));
+		pointLightBoundsRectSamples.push_back(
+			static_cast<double>(sample.pointLightBoundsRect));
+		pointLightBoundsOutsideSamples.push_back(
+			static_cast<double>(sample.pointLightBoundsOutside));
+		pointLightBoundsFallbackSamples.push_back(
+			static_cast<double>(sample.pointLightBoundsFullscreenFallback));
+		pointLightVolumeCountSamples.push_back(
+			static_cast<double>(sample.pointLightVolumeCount));
+		pointLightScreenCountSamples.push_back(
+			static_cast<double>(sample.pointLightScreenCount));
+		pointLightStencilDrawSamples.push_back(
+			static_cast<double>(sample.pointLightStencilDraws));
+		pointLightLightingVolumeDrawSamples.push_back(
+			static_cast<double>(sample.pointLightLightingVolumeDraws));
+		pointLightScreenDrawSamples.push_back(
+			static_cast<double>(sample.pointLightScreenDraws));
+		pointLightRectPixelAreaSamples.push_back(
+			static_cast<double>(sample.pointLightRectPixelArea));
+		pointLightStencilClearPixelAreaSamples.push_back(
+			static_cast<double>(sample.pointLightStencilClearPixelArea));
 	}
 	int activePointLights = 0;
 	int activeDirectionLights = 0;
@@ -1571,6 +1927,20 @@ bool WriteClassicSceneResult(
 			++shadowCastingLights;
 		}
 	}
+	const std::uint64_t measuredSubmittedPointLights =
+		profilerSamples.renderStats.empty()
+			? static_cast<std::uint64_t>(activePointLights)
+			: profilerSamples.renderStats.front().pointLightsSubmitted;
+	const std::uint64_t expectedPointLightStencilClears =
+		PointLightRenderProperty::UsesScreenDraw(
+			properties.POINT_LIGHT_RENDER_MODE)
+			? 0u
+			: properties.POINT_LIGHT_STENCIL_CLEAR_MODE ==
+			PointLightStencilClearProperty::Legacy2N
+			? measuredSubmittedPointLights * 2u
+			: (measuredSubmittedPointLights > 0
+				? measuredSubmittedPointLights + 1u
+				: 0u);
 	const bool ssaoOutputAvailable =
 		ssaoFBO &&
 		ssaoFBO->IsComplete() &&
@@ -1627,6 +1997,23 @@ bool WriteClassicSceneResult(
 	const char* glVendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
 	const char* glRenderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
 	const char* glVersion = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+	GLint windowSampleBuffers = 0;
+	GLint windowSamples = 0;
+	glGetIntegerv(GL_SAMPLE_BUFFERS, &windowSampleBuffers);
+	glGetIntegerv(GL_SAMPLES, &windowSamples);
+	const bool reconstructPosition =
+		properties.GBUFFER_POSITION_MODE ==
+		GBufferPositionProperty::ReconstructFromDepth;
+	const glm::mat4 cameraView = scene.camera_ptr
+		? scene.camera_ptr->GetViewMatrix()
+		: glm::mat4(1.0f);
+	const float cameraAspect = static_cast<float>(properties.SCREEN_WIDTH) /
+		static_cast<float>((std::max)(1, properties.SCREEN_HEIGHT));
+	const glm::mat4 cameraProjection = scene.camera_ptr
+		? scene.camera_ptr->GetProjectionMatrix(cameraAspect)
+		: glm::mat4(1.0f);
+	const glm::mat4 inverseCameraView = glm::inverse(cameraView);
+	const glm::mat4 inverseCameraProjection = glm::inverse(cameraProjection);
 #ifdef NDEBUG
 	const char* buildConfiguration = "Release";
 #else
@@ -1772,7 +2159,7 @@ bool WriteClassicSceneResult(
 		measurementStartShadowStats.totalDirectionalFitCpuMilliseconds,
 		shadowStats.totalDirectionalFitCpuMilliseconds);
 	output << "{\n"
-		<< "  \"schemaVersion\": 21,\n"
+		<< "  \"schemaVersion\": 25,\n"
 		<< "  \"success\": " << (success ? "true" : "false") << ",\n"
 		<< "  \"scene\": \"" << EscapeJsonString(options.sceneName) << "\",\n"
 		<< "  \"modelPath\": \"" << EscapeJsonString(options.modelPath) << "\",\n"
@@ -1814,6 +2201,9 @@ bool WriteClassicSceneResult(
 		<< "\",\n"
 		<< "  \"settings\": {\n"
 		<< "    \"requestedSwapInterval\": 0,\n"
+		<< "    \"windowSampleBuffers\": "
+		<< windowSampleBuffers << ",\n"
+		<< "    \"windowSamples\": " << windowSamples << ",\n"
 		<< "    \"inputFrozen\": true,\n"
 		<< "    \"deferredRendering\": "
 		<< (properties.DEFER_RENDERING ? "true" : "false") << ",\n"
@@ -1831,6 +2221,396 @@ bool WriteClassicSceneResult(
 		<< "    \"activeSpotLights\": " << activeSpotLights << ",\n"
 		<< "    \"shadowCastingLights\": "
 		<< shadowCastingLights << "\n"
+		<< "  },\n";
+	const std::streamsize resultPrecisionBeforePointLight = output.precision();
+	output << "  \"pointLightStress\": {\n"
+		<< std::setprecision(std::numeric_limits<float>::max_digits10)
+		<< "    \"enabled\": "
+		<< (pointLightStressOptions.enabled ? "true" : "false") << ",\n"
+		<< "    \"renderMode\": \""
+		<< PointLightRenderProperty::ModeName(
+			properties.POINT_LIGHT_RENDER_MODE) << "\",\n"
+		<< "    \"renderModeExplicit\": "
+		<< (properties.POINT_LIGHT_RENDER_MODE_EXPLICIT
+			? "true"
+			: "false") << ",\n"
+		<< "    \"gridUpdateMode\": \""
+		<< PointLightGridUpdateProperty::ModeName(
+			properties.POINT_LIGHT_GRID_UPDATE_MODE) << "\",\n"
+		<< "    \"gridUpdateModeExplicit\": "
+		<< (properties.POINT_LIGHT_GRID_UPDATE_MODE_EXPLICIT
+			? "true" : "false") << ",\n"
+		<< "    \"gridSliceCountConfigured\": "
+		<< properties.POINT_LIGHT_GRID_SLICE_COUNT << ",\n"
+		<< "    \"gridSliceCountExplicit\": "
+		<< (properties.POINT_LIGHT_GRID_SLICE_COUNT_EXPLICIT
+			? "true" : "false") << ",\n"
+		<< "    \"gridSliceCycleRequested\": "
+		<< (pointLightStressOptions.gridSliceCycle ? "true" : "false")
+		<< ",\n"
+		<< "    \"offscreenCulling\": "
+		<< (properties.POINT_LIGHT_OFFSCREEN_CULLING
+			? "true"
+			: "false") << ",\n"
+		<< "    \"offscreenCullingExplicit\": "
+		<< (properties.POINT_LIGHT_OFFSCREEN_CULLING_EXPLICIT
+			? "true"
+			: "false") << ",\n"
+		<< "    \"stencilClearMode\": \""
+		<< PointLightStencilClearProperty::ModeName(
+			properties.POINT_LIGHT_STENCIL_CLEAR_MODE) << "\",\n"
+		<< "    \"stencilClearModeExplicit\": "
+		<< (properties.POINT_LIGHT_STENCIL_CLEAR_MODE_EXPLICIT
+			? "true"
+			: "false") << ",\n"
+		<< "    \"expectedPointLightStencilClears\": "
+		<< expectedPointLightStencilClears << ",\n"
+		<< "    \"stencilLifecycleValidation\": {\n"
+		<< "      \"requested\": "
+		<< (pointLightStressOptions.stencilLifecycleCheck
+			? "true"
+			: "false") << ",\n"
+		<< "      \"executed\": "
+		<< (properties.POINT_LIGHT_STENCIL_LIFECYCLE_CHECK_EXECUTED
+			? "true"
+			: "false") << ",\n"
+		<< "      \"nonZeroPixels\": "
+		<< properties.POINT_LIGHT_STENCIL_NONZERO_PIXELS << ",\n"
+		<< "      \"clean\": "
+		<< (properties.POINT_LIGHT_STENCIL_LIFECYCLE_CHECK_EXECUTED &&
+			properties.POINT_LIGHT_STENCIL_NONZERO_PIXELS == 0
+			? "true"
+			: "false") << "\n"
+		<< "    },\n"
+		<< "    \"renderDocMarkersEnabled\": "
+		<< (pointLightStressOptions.renderDocMarkers ? "true" : "false") << ",\n"
+		<< "    \"generatorVersion\": \""
+		<< EscapeJsonString(pointLightStressState.generatorVersion) << "\",\n"
+		<< "    \"coverage\": \""
+		<< EscapeJsonString(pointLightStressOptions.coverage) << "\",\n"
+		<< "    \"seed\": " << pointLightStressOptions.seed << ",\n"
+		<< "    \"requestedLightCount\": "
+		<< pointLightStressOptions.lightCount << ",\n"
+		<< "    \"warmupFrames\": "
+		<< pointLightStressOptions.warmupFrames << ",\n"
+		<< "    \"sampleFrames\": "
+		<< pointLightStressOptions.sampleFrames << ",\n"
+		<< "    \"generatedLightCount\": "
+		<< pointLightStressState.records.size() << ",\n"
+		<< "    \"sceneSignature\": \""
+		<< FormatPointLightStressSignature(
+			pointLightStressState.sceneSignature) << "\",\n"
+		<< "    \"submissionSignature\": \""
+		<< FormatPointLightStressSignature(
+			pointLightStressState.submissionSignature) << "\",\n"
+		<< "    \"positionPrefixSignature\": \""
+		<< FormatPointLightStressSignature(
+			pointLightStressState.positionPrefixSignature) << "\",\n"
+		<< "    \"colorPrefixSignature\": \""
+		<< FormatPointLightStressSignature(
+			pointLightStressState.colorPrefixSignature) << "\",\n"
+		<< "    \"constant\": " << pointLightStressState.constant << ",\n"
+		<< "    \"linear\": " << pointLightStressState.linear << ",\n"
+		<< "    \"quadratic\": " << pointLightStressState.quadratic << ",\n"
+		<< "    \"diffuseIntensity\": "
+		<< pointLightStressState.diffuseIntensity << ",\n"
+		<< "    \"targetRadiusExplicit\": "
+		<< (pointLightStressState.targetRadiusExplicit ? "true" : "false")
+		<< ",\n"
+		<< "    \"requestedRadius\": "
+		<< pointLightStressState.requestedRadius << ",\n"
+		<< "    \"volumeRadius\": "
+		<< pointLightStressState.volumeRadius << ",\n"
+		<< "    \"attenuationThreshold\": "
+		<< pointLightStressState.attenuationThreshold << ",\n"
+		<< "    \"radiusAbsoluteError\": "
+		<< pointLightStressState.radiusAbsoluteError << ",\n"
+		<< "    \"radiusRelativeError\": "
+		<< pointLightStressState.radiusRelativeError << ",\n"
+		<< "    \"hardwareLimits\": {\n"
+		<< "      \"maxTextureBufferTexels\": "
+		<< maxTextureBufferSize << ",\n"
+		<< "      \"maxTextureSize\": " << maxTextureSize << ",\n"
+		<< "      \"maxArrayTextureLayers\": "
+		<< maxArrayTextureLayers << ",\n"
+		<< "      \"maxUniformBlockBytes\": "
+		<< maxUniformBlockSize << "\n"
+		<< "    },\n"
+		<< "    \"gridRuntime\": {\n"
+		<< "      \"valid\": "
+		<< (properties.POINT_LIGHT_GRID_TELEMETRY.valid ? "true" : "false")
+		<< ",\n"
+		<< "      \"clustered\": "
+		<< (properties.POINT_LIGHT_GRID_TELEMETRY.clustered ? "true" : "false")
+		<< ",\n"
+		<< "      \"rebuiltThisFrame\": "
+		<< (properties.POINT_LIGHT_GRID_TELEMETRY.rebuiltThisFrame ? "true" : "false")
+		<< ",\n"
+		<< "      \"cacheHit\": "
+		<< (properties.POINT_LIGHT_GRID_TELEMETRY.cacheHit ? "true" : "false")
+		<< ",\n"
+		<< "      \"overflow\": "
+		<< (properties.POINT_LIGHT_GRID_TELEMETRY.overflow ? "true" : "false")
+		<< ",\n"
+		<< "      \"tileSize\": "
+		<< properties.POINT_LIGHT_GRID_TELEMETRY.tileSize << ",\n"
+		<< "      \"sliceCount\": "
+		<< properties.POINT_LIGHT_GRID_TELEMETRY.sliceCount << ",\n"
+		<< "      \"tilesX\": "
+		<< properties.POINT_LIGHT_GRID_TELEMETRY.tilesX << ",\n"
+		<< "      \"tilesY\": "
+		<< properties.POINT_LIGHT_GRID_TELEMETRY.tilesY << ",\n"
+		<< "      \"logicalCells\": "
+		<< properties.POINT_LIGHT_GRID_TELEMETRY.logicalCells << ",\n"
+		<< "      \"nonEmptyCells\": "
+		<< properties.POINT_LIGHT_GRID_TELEMETRY.nonEmptyCells << ",\n"
+		<< "      \"lightCount\": "
+		<< properties.POINT_LIGHT_GRID_TELEMETRY.lightCount << ",\n"
+		<< "      \"totalIndices\": "
+		<< properties.POINT_LIGHT_GRID_TELEMETRY.totalIndices << ",\n"
+		<< "      \"maximumLightsPerCell\": "
+		<< properties.POINT_LIGHT_GRID_TELEMETRY.maximumLightsPerCell << ",\n"
+		<< "      \"averageLightsPerCell\": "
+		<< properties.POINT_LIGHT_GRID_TELEMETRY.averageLightsPerCell << ",\n"
+		<< "      \"metadataBytes\": "
+		<< properties.POINT_LIGHT_GRID_TELEMETRY.metadataBytes << ",\n"
+		<< "      \"indexBytes\": "
+		<< properties.POINT_LIGHT_GRID_TELEMETRY.indexBytes << ",\n"
+		<< "      \"lightBytes\": "
+		<< properties.POINT_LIGHT_GRID_TELEMETRY.lightBytes << ",\n"
+		<< "      \"residentBytes\": "
+		<< properties.POINT_LIGHT_GRID_TELEMETRY.residentBytes << ",\n"
+		<< "      \"uploadedBytesThisFrame\": "
+		<< properties.POINT_LIGHT_GRID_TELEMETRY.uploadedBytesThisFrame << ",\n"
+		<< "      \"buildCount\": "
+		<< properties.POINT_LIGHT_GRID_TELEMETRY.buildCount << ",\n"
+		<< "      \"uploadCount\": "
+		<< properties.POINT_LIGHT_GRID_TELEMETRY.uploadCount << ",\n"
+		<< "      \"cacheHitCount\": "
+		<< properties.POINT_LIGHT_GRID_TELEMETRY.cacheHitCount << ",\n"
+		<< "      \"inputSignature\": \""
+		<< FormatPointLightStressSignature(
+			properties.POINT_LIGHT_GRID_TELEMETRY.inputSignature) << "\",\n"
+		<< "      \"csrSignature\": \""
+		<< FormatPointLightStressSignature(
+			properties.POINT_LIGHT_GRID_TELEMETRY.csrSignature) << "\",\n"
+		<< "      \"maxTextureBufferTexels\": "
+		<< properties.POINT_LIGHT_GRID_TELEMETRY.maxTextureBufferTexels << ",\n"
+		<< "      \"error\": \""
+		<< EscapeJsonString(properties.POINT_LIGHT_GRID_TELEMETRY.error)
+		<< "\"\n"
+		<< "    },\n"
+		<< "    \"pointShadowsEnabled\": false,\n"
+		<< "    \"lightMarkersEnabled\": "
+		<< (scene.GetDrawPointLightMarkers() ? "true" : "false") << ",\n"
+		<< "    \"legacyLightCulling\": \""
+		<< (properties.POINT_LIGHT_OFFSCREEN_CULLING
+			? "conservative-sphere-frustum"
+			: "none") << "\",\n"
+		<< "    \"fixtures\": {\n"
+		<< "      \"nearPlaneIntersectionCount\": "
+		<< pointLightStressState.nearPlaneFixtureCount << ",\n"
+		<< "      \"nearPlaneIntersectionVerified\": "
+		<< (pointLightStressState.nearPlaneFixtureIntersects ? "true" : "false")
+		<< ",\n"
+		<< "      \"cameraInsideCount\": "
+		<< pointLightStressState.cameraInsideFixtureCount << ",\n"
+		<< "      \"cameraInsideVerified\": "
+		<< (pointLightStressState.cameraInsideFixtureContainsCamera
+			? "true" : "false") << ",\n"
+		<< "      \"fullyOffscreenCount\": "
+		<< pointLightStressState.offscreenFixtureCount << ",\n"
+		<< "      \"fullyOffscreenVerified\": "
+		<< (pointLightStressState.offscreenFixtureOutsideFrustum
+			? "true" : "false") << ",\n"
+		<< "      \"depthSliceBoundaryCount\": "
+		<< pointLightStressState.depthSliceBoundaryFixtureCount << ",\n"
+		<< "      \"depthSliceBoundaryPlaced\": "
+		<< (pointLightStressState.depthSliceBoundaryFixturePlaced
+			? "true" : "false") << ",\n"
+		<< "      \"depthSliceBoundaryDistance\": "
+		<< pointLightStressState.depthSliceBoundaryDistance << "\n"
+		<< "    },\n"
+		<< "    \"lights\": [";
+	for (std::size_t index = 0;
+		index < pointLightStressState.records.size();
+		++index) {
+		const PointLightStressRecord& record =
+			pointLightStressState.records[index];
+		output << (index == 0 ? "\n" : ",\n")
+			<< "      {\"index\": " << index
+			<< ", \"position\": [" << record.position.x << ", "
+			<< record.position.y << ", " << record.position.z
+			<< "], \"diffuse\": [" << record.diffuse.x << ", "
+			<< record.diffuse.y << ", " << record.diffuse.z << "]}";
+	}
+	if (!pointLightStressState.records.empty()) output << "\n    ";
+	output << "],\n"
+		<< "    \"boundsTelemetry\": {\n"
+		<< "      \"requested\": "
+		<< (properties.POINT_LIGHT_BOUNDS_TELEMETRY_REQUESTED
+			? "true"
+			: "false") << ",\n"
+		<< "      \"executed\": "
+		<< (properties.POINT_LIGHT_BOUNDS_TELEMETRY_EXECUTED
+			? "true"
+			: "false") << ",\n"
+		<< "      \"guardPixels\": 1,\n"
+		<< "      \"records\": [";
+	for (std::size_t index = 0;
+		index < properties.POINT_LIGHT_BOUNDS_TELEMETRY.size();
+		++index) {
+		const PointLightScreenProxyTelemetry& record =
+			properties.POINT_LIGHT_BOUNDS_TELEMETRY[index];
+		output << (index == 0 ? "\n" : ",\n")
+			<< "        {\"stableLightId\": " << record.stableLightId
+			<< ", \"sourceIndex\": " << record.sourceIndex
+			<< ", \"radius\": " << record.radius
+			<< ", \"classification\": \""
+			<< PointLightScreenProxyProperty::ClassificationName(
+				record.classification)
+			<< "\", \"fallbackReason\": \""
+			<< PointLightScreenProxyProperty::FallbackReasonName(
+				record.fallbackReason)
+			<< "\", \"pixelRect\": ["
+			<< record.rectX << ", " << record.rectY << ", "
+			<< record.rectWidth << ", " << record.rectHeight
+			<< "], \"coverageRatio\": " << record.coverageRatio << "}";
+	}
+	if (!properties.POINT_LIGHT_BOUNDS_TELEMETRY.empty()) {
+		output << "\n      ";
+	}
+	output << "]\n"
+		<< "    }\n"
+		<< "  },\n";
+	output << std::setprecision(resultPrecisionBeforePointLight)
+		<< "  \"gBuffer\": {\n"
+		<< "    \"positionMode\": \""
+		<< GBufferPositionProperty::ModeName(
+			properties.GBUFFER_POSITION_MODE) << "\",\n"
+		<< "    \"positionAttachmentPresent\": "
+		<< (reconstructPosition ? "false" : "true") << ",\n"
+		<< "    \"sampleableDepthPresent\": "
+		<< (reconstructPosition ? "true" : "false") << ",\n"
+		<< "    \"sampleableDepthSource\": \""
+		<< (reconstructPosition
+			? "main-D24S8-depth-stencil-texture"
+			: "none") << "\",\n"
+		<< "    \"depthStencilStorage\": \""
+		<< (reconstructPosition
+			? "GL_DEPTH24_STENCIL8-texture"
+			: "GL_DEPTH24_STENCIL8-renderbuffer")
+		<< "\",\n"
+		<< "    \"sampleableDepthStorage\": \""
+		<< (reconstructPosition ? "GL_DEPTH24_STENCIL8" : "none")
+		<< "\",\n"
+		<< "    \"clearDepth\": 1.000000,\n"
+		<< "    \"ndcConvention\": \"OpenGL-3.3-z-minus-one-to-one\",\n"
+		<< "    \"positionSpaces\": {\n"
+		<< "      \"ssao\": \"view\",\n"
+		<< "      \"lighting\": \"world\"\n"
+		<< "    },\n"
+		<< "    \"candidatePerPixelReconstruction\": {\n"
+		<< "      \"ssao\": \"four texelFetch plus up to four inverseProjection mat4xvec4/divides and bilinear mix to match control GL_LINEAR gPosition\",\n"
+		<< "      \"lighting\": \"inverseProjection and inverseView mat4xvec4 plus perspective divide\",\n"
+		<< "      \"matrixInverseLocation\": \"CPU-once-per-pass\"\n"
+		<< "    },\n"
+		<< "    \"width\": " << (gbufferFBO ? gbufferFBO->width : 0)
+		<< ",\n"
+		<< "    \"height\": " << (gbufferFBO ? gbufferFBO->height : 0)
+		<< ",\n"
+		<< "    \"colorAttachmentCount\": "
+		<< (gbufferFBO ? gbufferFBO->attr.textureAttrs.size() : 0)
+		<< ",\n"
+		<< "    \"rendererTrackedBytes\": "
+		<< (gbufferFBO ? gbufferFBO->GetTrackedBytes() : 0) << ",\n"
+		<< "    \"logicalBytesPerPixel\": "
+		<< (reconstructPosition ? 27 : 35) << ",\n"
+		<< "    \"expectedControlBytesPerPixel\": 35,\n"
+		<< "    \"expectedCandidateBytesPerPixel\": 27,\n"
+		<< "    \"expectedCandidateSavingsBytesPerPixel\": 8,\n"
+		<< "    \"attachments\": [";
+	if (gbufferFBO) {
+		const std::array<const char*, 5> explicitSemantics = {
+			"position", "normal", "albedo", "material", "emissive"
+		};
+		const std::array<const char*, 4> reconstructSemantics = {
+			"normal", "albedo", "material", "emissive"
+		};
+		for (std::size_t index = 0;
+			index < gbufferFBO->attr.textureAttrs.size();
+			++index) {
+			if (index != 0) {
+				output << ",";
+			}
+			const TextureAttributes& attachment =
+				gbufferFBO->attr.textureAttrs[index];
+			const char* semantic = reconstructPosition
+				? reconstructSemantics[index]
+				: explicitSemantics[index];
+			output << "\n      {\"index\": " << index
+				<< ", \"semantic\": \"" << semantic
+				<< "\", \"internalFormat\": "
+				<< attachment.internalFormat
+				<< ", \"internalFormatName\": \""
+				<< GlInternalFormatName(attachment.internalFormat)
+				<< "\"}";
+		}
+		if (!gbufferFBO->attr.textureAttrs.empty()) {
+			output << "\n    ";
+		}
+	}
+	output << "],\n"
+		<< "    \"cameraMatrices\": {\n"
+		<< "      \"layout\": \"row-major-json\",\n"
+		<< "      \"nearPlane\": 0.100000,\n"
+		<< "      \"farPlane\": 100.000000,\n"
+		<< "      \"view\": ";
+	WriteJsonMat4(output, cameraView);
+	output << ",\n      \"projection\": ";
+	WriteJsonMat4(output, cameraProjection);
+	output << ",\n      \"inverseView\": ";
+	WriteJsonMat4(output, inverseCameraView);
+	output << ",\n      \"inverseProjection\": ";
+	WriteJsonMat4(output, inverseCameraProjection);
+	output << "\n    },\n"
+		<< "    \"captures\": {\n"
+		<< "      \"position\": ";
+	WriteJsonFloatCapture(
+		output,
+		options.gbufferPositionCapturePath,
+		gbufferCapture.position);
+	output << ",\n      \"depth\": ";
+	WriteJsonFloatCapture(
+		output,
+		options.gbufferDepthCapturePath,
+		gbufferCapture.depth);
+	output << ",\n      \"normal\": ";
+	WriteJsonFloatCapture(
+		output,
+		options.gbufferNormalCapturePath,
+		gbufferCapture.normal);
+	output << ",\n      \"albedo\": ";
+	WriteJsonFloatCapture(
+		output,
+		options.gbufferAlbedoCapturePath,
+		gbufferCapture.albedo);
+	output << ",\n      \"materialRgb\": ";
+	WriteJsonFloatCapture(
+		output,
+		options.gbufferMaterialCapturePath,
+		gbufferCapture.material);
+	output << ",\n      \"materialAlpha\": ";
+	WriteJsonFloatCapture(
+		output,
+		options.gbufferMaterialAlphaCapturePath,
+		gbufferCapture.materialAlpha);
+	output << ",\n      \"emissive\": ";
+	WriteJsonFloatCapture(
+		output,
+		options.gbufferEmissiveCapturePath,
+		gbufferCapture.emissive);
+	output << "\n    }\n"
 		<< "  },\n"
 		<< "  \"ssao\": {\n"
 		<< "    \"experiment\": "
@@ -1940,8 +2720,9 @@ bool WriteClassicSceneResult(
 		<< "      \"normalPower\": "
 		<< properties.SSAO_BILATERAL_NORMAL_POWER << ",\n"
 		<< "      \"neighborhood\": \"2x2-bilinear-footprint\",\n"
-		<< "      \"inputs\": [\"halfAO\", \"fullPositionDepth\", "
-		<< "\"fullNormal\"]\n"
+		<< "      \"inputs\": [\"halfAO\", \""
+		<< (reconstructPosition ? "sampleableDepth" : "fullPositionDepth")
+		<< "\", \"fullNormal\"]\n"
 		<< "    },\n"
 		<< "    \"guidance\": {\n"
 		<< "      \"depthCapture\": ";
@@ -2481,6 +3262,40 @@ bool WriteClassicSceneResult(
 	WriteJsonDistribution(output, profilerSamples.gpuFrameMs);
 	output << ",\n      \"drawCalls\": ";
 	WriteJsonDistribution(output, drawCallSamples);
+	output << ",\n      \"pointLightsTotal\": ";
+	WriteJsonDistribution(output, pointLightsTotalSamples);
+	output << ",\n      \"pointLightsActive\": ";
+	WriteJsonDistribution(output, pointLightsActiveSamples);
+	output << ",\n      \"pointLightsSubmitted\": ";
+	WriteJsonDistribution(output, pointLightsSubmittedSamples);
+	output << ",\n      \"pointLightsCulled\": ";
+	WriteJsonDistribution(output, pointLightsCulledSamples);
+	output << ",\n      \"stencilClears\": ";
+	WriteJsonDistribution(output, stencilClearSamples);
+	output << ",\n      \"pointLightStencilClears\": ";
+	WriteJsonDistribution(output, pointLightStencilClearSamples);
+	output << ",\n      \"fixedStencilClears\": ";
+	WriteJsonDistribution(output, fixedStencilClearSamples);
+	output << ",\n      \"pointLightBoundsRect\": ";
+	WriteJsonDistribution(output, pointLightBoundsRectSamples);
+	output << ",\n      \"pointLightBoundsOutside\": ";
+	WriteJsonDistribution(output, pointLightBoundsOutsideSamples);
+	output << ",\n      \"pointLightBoundsFullscreenFallback\": ";
+	WriteJsonDistribution(output, pointLightBoundsFallbackSamples);
+	output << ",\n      \"pointLightVolumeCount\": ";
+	WriteJsonDistribution(output, pointLightVolumeCountSamples);
+	output << ",\n      \"pointLightScreenCount\": ";
+	WriteJsonDistribution(output, pointLightScreenCountSamples);
+	output << ",\n      \"pointLightStencilDraws\": ";
+	WriteJsonDistribution(output, pointLightStencilDrawSamples);
+	output << ",\n      \"pointLightLightingVolumeDraws\": ";
+	WriteJsonDistribution(output, pointLightLightingVolumeDrawSamples);
+	output << ",\n      \"pointLightScreenDraws\": ";
+	WriteJsonDistribution(output, pointLightScreenDrawSamples);
+	output << ",\n      \"pointLightRectPixelArea\": ";
+	WriteJsonDistribution(output, pointLightRectPixelAreaSamples);
+	output << ",\n      \"pointLightStencilClearPixelArea\": ";
+	WriteJsonDistribution(output, pointLightStencilClearPixelAreaSamples);
 	output << ",\n      \"cpuZones\": ";
 	WriteJsonZoneDistributions(output, profilerSamples.cpuZoneMs);
 	output << ",\n      \"gpuZones\": ";
@@ -2495,6 +3310,40 @@ bool WriteClassicSceneResult(
 	WriteJsonDoubleArray(output, profilerSamples.gpuFrameMs);
 	output << ",\n      \"drawCalls\": ";
 	WriteJsonDoubleArray(output, drawCallSamples);
+	output << ",\n      \"pointLightsTotal\": ";
+	WriteJsonDoubleArray(output, pointLightsTotalSamples);
+	output << ",\n      \"pointLightsActive\": ";
+	WriteJsonDoubleArray(output, pointLightsActiveSamples);
+	output << ",\n      \"pointLightsSubmitted\": ";
+	WriteJsonDoubleArray(output, pointLightsSubmittedSamples);
+	output << ",\n      \"pointLightsCulled\": ";
+	WriteJsonDoubleArray(output, pointLightsCulledSamples);
+	output << ",\n      \"stencilClears\": ";
+	WriteJsonDoubleArray(output, stencilClearSamples);
+	output << ",\n      \"pointLightStencilClears\": ";
+	WriteJsonDoubleArray(output, pointLightStencilClearSamples);
+	output << ",\n      \"fixedStencilClears\": ";
+	WriteJsonDoubleArray(output, fixedStencilClearSamples);
+	output << ",\n      \"pointLightBoundsRect\": ";
+	WriteJsonDoubleArray(output, pointLightBoundsRectSamples);
+	output << ",\n      \"pointLightBoundsOutside\": ";
+	WriteJsonDoubleArray(output, pointLightBoundsOutsideSamples);
+	output << ",\n      \"pointLightBoundsFullscreenFallback\": ";
+	WriteJsonDoubleArray(output, pointLightBoundsFallbackSamples);
+	output << ",\n      \"pointLightVolumeCount\": ";
+	WriteJsonDoubleArray(output, pointLightVolumeCountSamples);
+	output << ",\n      \"pointLightScreenCount\": ";
+	WriteJsonDoubleArray(output, pointLightScreenCountSamples);
+	output << ",\n      \"pointLightStencilDraws\": ";
+	WriteJsonDoubleArray(output, pointLightStencilDrawSamples);
+	output << ",\n      \"pointLightLightingVolumeDraws\": ";
+	WriteJsonDoubleArray(output, pointLightLightingVolumeDrawSamples);
+	output << ",\n      \"pointLightScreenDraws\": ";
+	WriteJsonDoubleArray(output, pointLightScreenDrawSamples);
+	output << ",\n      \"pointLightRectPixelArea\": ";
+	WriteJsonDoubleArray(output, pointLightRectPixelAreaSamples);
+	output << ",\n      \"pointLightStencilClearPixelArea\": ";
+	WriteJsonDoubleArray(output, pointLightStencilClearPixelAreaSamples);
 	output << ",\n      \"cpuZones\": ";
 	WriteJsonZoneSamples(output, profilerSamples.cpuZoneMs);
 	output << ",\n      \"gpuZones\": ";
@@ -2719,6 +3568,104 @@ FloatCaptureStats CaptureFramebufferPfm(
 	stats.width = width;
 	stats.height = height;
 	stats.channels = outputChannels;
+	stats.finiteValueCount = finiteCount;
+	stats.nonFiniteValueCount = nonFiniteCount;
+	stats.minimum = finiteCount > 0 ? minimum : 0.0;
+	stats.maximum = finiteCount > 0 ? maximum : 0.0;
+	stats.mean = finiteCount > 0
+		? sum / static_cast<double>(finiteCount)
+		: 0.0;
+	return stats;
+}
+
+FloatCaptureStats CaptureFramebufferDepthPfm(
+	const FBO* fbo,
+	unsigned int readFramebuffer,
+	const std::string& outputPath)
+{
+	FloatCaptureStats stats;
+	if (!fbo ||
+		readFramebuffer == 0 ||
+		fbo->width <= 0 ||
+		fbo->height <= 0 ||
+		outputPath.empty()) {
+		return stats;
+	}
+
+	const int width = fbo->width;
+	const int height = fbo->height;
+	const std::size_t pixelCount =
+		static_cast<std::size_t>(width) *
+		static_cast<std::size_t>(height);
+	std::vector<float> pixels(pixelCount);
+	for (GLenum error = glGetError();
+		error != GL_NO_ERROR;
+		error = glGetError()) {
+	}
+	GLState::BindFramebuffer(GL_READ_FRAMEBUFFER, readFramebuffer);
+	glPixelStorei(GL_PACK_ALIGNMENT, 1);
+	glReadPixels(
+		0,
+		0,
+		width,
+		height,
+		GL_DEPTH_COMPONENT,
+		GL_FLOAT,
+		pixels.data());
+	const GLenum readError = glGetError();
+	GLState::BindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+	if (readError != GL_NO_ERROR) {
+		std::cerr
+			<< "[ClassicScene] depth PFM glReadPixels failed with error 0x"
+			<< std::hex << readError << std::dec << std::endl;
+		return stats;
+	}
+
+	std::error_code directoryError;
+	const std::filesystem::path path(outputPath);
+	if (path.has_parent_path()) {
+		std::filesystem::create_directories(
+			path.parent_path(),
+			directoryError);
+	}
+	if (directoryError) {
+		return stats;
+	}
+	std::ofstream output(path, std::ios::binary | std::ios::trunc);
+	if (!output.is_open()) {
+		return stats;
+	}
+	output << "Pf\n" << width << ' ' << height << "\n-1.0\n";
+	output.write(
+		reinterpret_cast<const char*>(pixels.data()),
+		static_cast<std::streamsize>(pixels.size() * sizeof(float)));
+	if (!output.good()) {
+		return stats;
+	}
+
+	double sum = 0.0;
+	double minimum = (std::numeric_limits<double>::max)();
+	double maximum = (std::numeric_limits<double>::lowest)();
+	std::uint64_t finiteCount = 0;
+	std::uint64_t nonFiniteCount = 0;
+	for (float value : pixels) {
+		if (!std::isfinite(value)) {
+			++nonFiniteCount;
+			continue;
+		}
+		const double converted = static_cast<double>(value);
+		minimum = (std::min)(minimum, converted);
+		maximum = (std::max)(maximum, converted);
+		sum += converted;
+		++finiteCount;
+	}
+	stats.valid =
+		finiteCount == pixels.size() &&
+		nonFiniteCount == 0 &&
+		output.good();
+	stats.width = width;
+	stats.height = height;
+	stats.channels = 1;
 	stats.finiteValueCount = finiteCount;
 	stats.nonFiniteValueCount = nonFiniteCount;
 	stats.minimum = finiteCount > 0 ? minimum : 0.0;
@@ -3032,6 +3979,33 @@ void SetUniformBuffer() {
 
 int main(int argc, char** argv) {
 	const auto applicationStart = PerformanceBenchmarkSession::Clock::now();
+	std::string gbufferPositionOptionError;
+	if (!ParseGBufferPositionMode(
+		argc,
+		argv,
+		gbufferPositionOptionError)) {
+		std::cerr << "G-Buffer position option error: "
+			<< gbufferPositionOptionError << std::endl;
+		return 4;
+	}
+	std::string pointLightStencilClearOptionError;
+	if (!ParsePointLightStencilClearMode(
+		argc,
+		argv,
+		pointLightStencilClearOptionError)) {
+		std::cerr << "Point-light stencil clear option error: "
+			<< pointLightStencilClearOptionError << std::endl;
+		return 4;
+	}
+	std::string pointLightRenderOptionError;
+	if (!ParsePointLightRenderMode(
+		argc,
+		argv,
+		pointLightRenderOptionError)) {
+		std::cerr << "Point-light render option error: "
+			<< pointLightRenderOptionError << std::endl;
+		return 4;
+	}
 	bool resourceSmokeTest = false;
 	bool pbrSmokeTest = false;
 	bool pbrSmokeFailed = false;
@@ -3065,6 +4039,97 @@ int main(int argc, char** argv) {
 		std::cerr << "Submission stress option error: "
 			<< submissionStressOptionError << std::endl;
 		return 4;
+	}
+	PointLightStressOptions pointLightStressOptions;
+	std::string pointLightStressOptionError;
+	if (!ParsePointLightStressOptions(
+		argc,
+		argv,
+		pointLightStressOptions,
+		pointLightStressOptionError)) {
+		std::cerr << "Point-light stress option error: "
+			<< pointLightStressOptionError << std::endl;
+		return 4;
+	}
+	if (pointLightStressOptions.enabled) {
+		properties.POINT_LIGHT_GRID_UPDATE_MODE =
+			pointLightStressOptions.gridUpdate == "rebuild"
+				? PointLightGridUpdateProperty::RebuildEveryFrame
+				: PointLightGridUpdateProperty::Cached;
+		properties.POINT_LIGHT_GRID_UPDATE_MODE_EXPLICIT =
+			pointLightStressOptions.gridUpdateExplicit;
+		properties.POINT_LIGHT_GRID_SLICE_COUNT =
+			pointLightStressOptions.gridSliceCount;
+		properties.POINT_LIGHT_GRID_SLICE_COUNT_EXPLICIT =
+			pointLightStressOptions.gridSliceCountExplicit;
+		properties.POINT_LIGHT_GRID_TELEMETRY = {};
+		if (pointLightStressOptions.gridSliceCountExplicit &&
+			!PointLightRenderProperty::UsesGrid(
+				properties.POINT_LIGHT_RENDER_MODE)) {
+			std::cerr
+				<< "--point-light-grid-slices requires tile16 or cluster16"
+				<< std::endl;
+			return 4;
+		}
+		if (properties.POINT_LIGHT_RENDER_MODE !=
+				PointLightRenderProperty::CoalescedVolume &&
+			properties.POINT_LIGHT_STENCIL_CLEAR_MODE !=
+				PointLightStencilClearProperty::CoalescedNPlusOne) {
+			std::cerr
+				<< "candidate point-light render modes require coalesced-n-plus-one"
+				<< std::endl;
+			return 4;
+		}
+		if (properties.POINT_LIGHT_OFFSCREEN_CULLING &&
+			!PointLightRenderProperty::RequiresBounds(
+				properties.POINT_LIGHT_RENDER_MODE)) {
+			std::cerr
+				<< "offscreen culling requires a bounds-enabled render mode"
+				<< std::endl;
+			return 4;
+		}
+		properties.POINT_LIGHT_STENCIL_LIFECYCLE_CHECK =
+			pointLightStressOptions.stencilLifecycleCheck;
+		properties.POINT_LIGHT_STENCIL_LIFECYCLE_CHECK_EXECUTED = false;
+		properties.POINT_LIGHT_STENCIL_NONZERO_PIXELS = 0;
+		properties.POINT_LIGHT_BOUNDS_TELEMETRY_EXECUTED = false;
+		properties.POINT_LIGHT_BOUNDS_TELEMETRY.clear();
+		if (classicSceneOptions.enabled) {
+			std::cerr
+				<< "--point-light-stress owns its fixed Sponza scene and cannot be combined with --classic-scene-test"
+				<< std::endl;
+			return 4;
+		}
+		if (properties.GBUFFER_POSITION_MODE !=
+			GBufferPositionProperty::Explicit) {
+			std::cerr
+				<< "--point-light-stress fixes --gbuffer-position explicit"
+				<< std::endl;
+			return 4;
+		}
+		classicSceneOptions.enabled = true;
+		classicSceneOptions.modelPath = "classic-scenes/sponza/sponza.obj";
+		classicSceneOptions.sceneName = "sponza-point-light-heavy";
+		classicSceneOptions.capturePath = pointLightStressOptions.capturePath;
+		classicSceneOptions.resultPath = pointLightStressOptions.resultPath;
+		classicSceneOptions.renderPath = "phong-deferred-volume";
+		classicSceneOptions.cameraPosition = glm::vec3(-6.0f, -1.5f, 0.0f);
+		classicSceneOptions.cameraTarget = glm::vec3(6.0f, -0.8f, 0.0f);
+		classicSceneOptions.cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+		classicSceneOptions.normalizedRadius = 15.0f;
+		classicSceneOptions.worldScale = 1.0f;
+		classicSceneOptions.fov = 55.0f;
+		classicSceneOptions.width = pointLightStressOptions.viewportWidth;
+		classicSceneOptions.height = pointLightStressOptions.viewportHeight;
+		classicSceneOptions.warmupFrames =
+			pointLightStressOptions.warmupFrames;
+		classicSceneOptions.captureFrame =
+			pointLightStressOptions.warmupFrames +
+			pointLightStressOptions.sampleFrames;
+		classicSceneOptions.captureFinalFrame = true;
+		classicSceneOptions.shadowExperiment = false;
+		classicSceneOptions.ssaoExperiment = false;
+		classicSceneOptions.ssaoSamples = 0;
 	}
 	for (int i = 1; i < argc; ++i) {
 		if (std::string(argv[i]) == "--resource-smoke-test") {
@@ -3108,6 +4173,14 @@ int main(int argc, char** argv) {
 		resourceSmokeTest ||
 		pbrSmokeTest ||
 		classicSceneOptions.enabled;
+	if (properties.GBUFFER_POSITION_MODE ==
+		GBufferPositionProperty::ReconstructFromDepth) {
+		std::cout
+			<< "[GBufferExperiment] candidate enabled: four color MRTs plus "
+			<< "one sampleable D24S8 depth/stencil texture; forward rendering "
+			<< "is unaffected"
+			<< std::endl;
+	}
 	if (submissionStressOptions.enabled) {
 		properties.SCREEN_WIDTH = submissionStressOptions.width;
 		properties.SCREEN_HEIGHT = submissionStressOptions.height;
@@ -3318,6 +4391,7 @@ int main(int argc, char** argv) {
 			sceneStatePath);
 	}
 	SubmissionStressSceneState submissionStressState;
+	PointLightStressState pointLightStressState;
 	bool classicSceneFailed = false;
 	bool classicSceneCaptured = false;
 	double classicSceneLoadMilliseconds = 0.0;
@@ -3468,6 +4542,36 @@ int main(int argc, char** argv) {
 				spotLight.useShadowMap = enableShadows && useSpot;
 				scene.lightSource.AddSpotLight(spotLight);
 			}
+		}
+		if (pointLightStressOptions.enabled) {
+			properties.LIGHT_VOLUME_CUTOFF_SCALE = 1.0f;
+			properties.LIGHT_VOLUME_RADIUS_SCALE = 1.0f;
+			std::string pointLightStressError;
+			if (!ConfigurePointLightStressScene(
+				scene,
+				pointLightStressOptions,
+				classicSceneOptions.cameraPosition,
+				classicSceneOptions.cameraTarget,
+				classicSceneOptions.cameraUp,
+				pointLightStressState,
+				pointLightStressError)) {
+				std::cerr << "[PointLightStress] "
+					<< pointLightStressError << std::endl;
+				return 6;
+			}
+			std::cout << "[PointLightStress] coverage="
+				<< pointLightStressOptions.coverage
+				<< " count=" << pointLightStressOptions.lightCount
+				<< " seed=0x" << std::hex
+				<< pointLightStressOptions.seed << std::dec
+				<< " radius=" << pointLightStressState.volumeRadius
+				<< " sceneSignature="
+				<< FormatPointLightStressSignature(
+					pointLightStressState.sceneSignature)
+				<< " submissionSignature="
+				<< FormatPointLightStressSignature(
+					pointLightStressState.submissionSignature)
+				<< std::endl;
 		}
 		const auto loadStart = PerformanceBenchmarkSession::Clock::now();
 		if (classicSceneOptions.untextured) {
@@ -3902,6 +5006,10 @@ int main(int argc, char** argv) {
 	postprocessRenderPass->Init(properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT);
 	bool deferredPassActive = properties.DEFER_RENDERING;
 	int resourceSmokeFrames = 0;
+	const int resourceSmokeInitialWidth = properties.SCREEN_WIDTH;
+	const int resourceSmokeInitialHeight = properties.SCREEN_HEIGHT;
+	const int resourceSmokeResizeWidth = 1024;
+	const int resourceSmokeResizeHeight = 640;
 	int pbrSmokeFrames = 0;
 	int classicSceneFrames = 0;
 	int classicSceneTemporalCapturesCompleted = 0;
@@ -4477,12 +5585,16 @@ int main(int argc, char** argv) {
 		submissionStressOptions.enabled && benchmarkOptions.enabled;
 	const bool minimalSsaoBenchmarkUi =
 		classicSceneOptions.enabled && classicSceneOptions.ssaoExperiment;
+	const bool minimalPointLightStressUi = pointLightStressOptions.enabled;
 	const bool minimalAutomatedUi =
-		minimalSubmissionStressUi || minimalSsaoBenchmarkUi;
+		minimalSubmissionStressUi || minimalSsaoBenchmarkUi ||
+		minimalPointLightStressUi;
 	const char* minimalPresentZoneName =
 		minimalSubmissionStressUi
 			? "Submission Stress Present"
-			: "SSAO Benchmark Present";
+			: (minimalPointLightStressUi
+				? "Point Light Benchmark Present"
+				: "SSAO Benchmark Present");
 	std::uint64_t submissionStressFrameIndex = 0;
 	bool submissionStressCaptureCompleted = false;
 	while (!glfwWindowShouldClose(window)) {
@@ -4581,8 +5693,24 @@ int main(int argc, char** argv) {
 				properties.DEFER_RENDERING = true;
 				properties.SSAO = true;
 			}
+			else if (resourceSmokeFrames == 75) {
+				glfwSetWindowSize(
+					window,
+					resourceSmokeResizeWidth,
+					resourceSmokeResizeHeight);
+			}
 			else if (resourceSmokeFrames == 90) {
-				reportResourceState("deferred-ssao-bloom", 6);
+				reportResourceState("deferred-ssao-bloom-resized", 6);
+				if (properties.SCREEN_WIDTH != resourceSmokeResizeWidth ||
+					properties.SCREEN_HEIGHT != resourceSmokeResizeHeight) {
+					resourceSmokeFailed = true;
+					std::cerr
+						<< "[ResourceSmoke] resize callback mismatch: expected="
+						<< resourceSmokeResizeWidth << "x"
+						<< resourceSmokeResizeHeight << " actual="
+						<< properties.SCREEN_WIDTH << "x"
+						<< properties.SCREEN_HEIGHT << std::endl;
+				}
 				for (auto& light : scene.lightSource.pointLights) {
 					light.useShadowMap = true;
 				}
@@ -4593,8 +5721,24 @@ int main(int argc, char** argv) {
 					light.useShadowMap = true;
 				}
 			}
+			else if (resourceSmokeFrames == 105) {
+				glfwSetWindowSize(
+					window,
+					resourceSmokeInitialWidth,
+					resourceSmokeInitialHeight);
+			}
 			else if (resourceSmokeFrames == 120) {
-				reportResourceState("all-effects", 9);
+				reportResourceState("all-effects-restored-size", 9);
+				if (properties.SCREEN_WIDTH != resourceSmokeInitialWidth ||
+					properties.SCREEN_HEIGHT != resourceSmokeInitialHeight) {
+					resourceSmokeFailed = true;
+					std::cerr
+						<< "[ResourceSmoke] restored size mismatch: expected="
+						<< resourceSmokeInitialWidth << "x"
+						<< resourceSmokeInitialHeight << " actual="
+						<< properties.SCREEN_WIDTH << "x"
+						<< properties.SCREEN_HEIGHT << std::endl;
+				}
 				properties.BLOOM = false;
 				properties.SSAO = false;
 				properties.DEFER_RENDERING = false;
@@ -4612,6 +5756,14 @@ int main(int argc, char** argv) {
 				reportResourceState("reclaimed-default", 2);
 				glfwSetWindowShouldClose(window, true);
 			}
+		}
+
+		if (pointLightStressOptions.enabled &&
+			pointLightStressOptions.gridSliceCycle) {
+			constexpr int kGridSliceCycle[] = { 1, 2, 4, 8, 16 };
+			properties.POINT_LIGHT_GRID_SLICE_COUNT =
+				kGridSliceCycle[classicSceneFrames % 5];
+			properties.POINT_LIGHT_GRID_SLICE_COUNT_EXPLICIT = true;
 		}
 
 		//calculate FPS
@@ -4719,6 +5871,7 @@ int main(int argc, char** argv) {
 		GLState::BindFramebuffer(GL_FRAMEBUFFER, 0);
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+		PerformanceProfiler::GetInstance().RecordStencilClear();
 		if (!properties.DEBUG_MODE) {
 			if (!sceneFBO || sceneFBO->textureIDs.empty()) {
 				std::cout << "no valid color attachment, skip this frame" << std::endl;
@@ -5302,6 +6455,46 @@ int main(int argc, char** argv) {
 				zoneSampleCount(
 					profilerSamples.gpuZoneMs,
 					"Deferred Pass");
+			const std::size_t geometryCpuSamples =
+				zoneSampleCount(
+					profilerSamples.cpuZoneMs,
+					"G-Buffer Geometry");
+			const std::size_t geometryGpuSamples =
+				zoneSampleCount(
+					profilerSamples.gpuZoneMs,
+					"G-Buffer Geometry");
+			const std::size_t depthSampleCopyCpuSamples =
+				zoneSampleCount(
+					profilerSamples.cpuZoneMs,
+					"Depth Sample Copy");
+			const std::size_t depthSampleCopyGpuSamples =
+				zoneSampleCount(
+					profilerSamples.gpuZoneMs,
+					"Depth Sample Copy");
+			const std::size_t depthStencilCopyCpuSamples =
+				zoneSampleCount(
+					profilerSamples.cpuZoneMs,
+					"Depth/Stencil Copy");
+			const std::size_t depthStencilCopyGpuSamples =
+				zoneSampleCount(
+					profilerSamples.gpuZoneMs,
+					"Depth/Stencil Copy");
+			const std::size_t lightingCpuSamples =
+				zoneSampleCount(
+					profilerSamples.cpuZoneMs,
+					"Deferred Lighting");
+			const std::size_t lightingGpuSamples =
+				zoneSampleCount(
+					profilerSamples.gpuZoneMs,
+					"Deferred Lighting");
+			const std::size_t pointLightCpuSamples =
+				zoneSampleCount(
+					profilerSamples.cpuZoneMs,
+					"Deferred Point Lights");
+			const std::size_t pointLightGpuSamples =
+				zoneSampleCount(
+					profilerSamples.gpuZoneMs,
+					"Deferred Point Lights");
 			const std::size_t ssaoCpuSamples =
 				zoneSampleCount(
 					profilerSamples.cpuZoneMs,
@@ -5335,11 +6528,28 @@ int main(int argc, char** argv) {
 				classicSceneOptions.ssaoMode == "half-bilateral"
 					? expectedSamples
 					: std::size_t{ 0 };
-			const bool ssaoZoneCaptureSucceeded =
-				!classicSceneOptions.ssaoExperiment ||
+			const bool deferredExpected =
+				classicSceneOptions.renderPath.find("deferred") !=
+					std::string::npos;
+			const std::size_t expectedDepthSampleCopySamples = 0;
+			const bool deferredZoneCaptureSucceeded =
+				!deferredExpected ||
 				(gpuTimingSupported &&
 					deferredCpuSamples == expectedSamples &&
 					deferredGpuSamples == expectedSamples &&
+					geometryCpuSamples == expectedSamples &&
+					geometryGpuSamples == expectedSamples &&
+					depthSampleCopyCpuSamples ==
+						expectedDepthSampleCopySamples &&
+					depthSampleCopyGpuSamples ==
+						expectedDepthSampleCopySamples &&
+					depthStencilCopyCpuSamples == expectedSamples &&
+					depthStencilCopyGpuSamples == expectedSamples &&
+					lightingCpuSamples == expectedSamples &&
+					lightingGpuSamples == expectedSamples);
+			const bool ssaoZoneCaptureSucceeded =
+				!classicSceneOptions.ssaoExperiment ||
+				(gpuTimingSupported &&
 					ssaoCpuSamples == expectedSsaoSamples &&
 					ssaoGpuSamples == expectedSsaoSamples &&
 					ssaoGenerateCpuSamples == expectedSsaoSamples &&
@@ -5348,6 +6558,112 @@ int main(int argc, char** argv) {
 						expectedSsaoUpsampleSamples &&
 					ssaoUpsampleGpuSamples ==
 						expectedSsaoUpsampleSamples);
+			const bool pointLightZoneCaptureSucceeded =
+				!pointLightStressOptions.enabled ||
+				(gpuTimingSupported &&
+					pointLightCpuSamples == expectedSamples &&
+					pointLightGpuSamples == expectedSamples);
+			const std::uint64_t expectedPointLights =
+				static_cast<std::uint64_t>(pointLightStressOptions.lightCount);
+			const bool pointLightUsesBounds =
+				PointLightRenderProperty::RequiresBounds(
+					properties.POINT_LIGHT_RENDER_MODE);
+			const bool pointLightUsesScreen =
+				PointLightRenderProperty::UsesScreenDraw(
+					properties.POINT_LIGHT_RENDER_MODE);
+			const bool pointLightUsesGrid =
+				PointLightRenderProperty::UsesGrid(
+					properties.POINT_LIGHT_RENDER_MODE);
+			const bool pointLightUsesScissor =
+				PointLightRenderProperty::UsesScissor(
+					properties.POINT_LIGHT_RENDER_MODE);
+			const std::uint64_t pointLightViewportArea =
+				static_cast<std::uint64_t>(
+					(std::max)(1, properties.SCREEN_WIDTH)) *
+				static_cast<std::uint64_t>(
+					(std::max)(1, properties.SCREEN_HEIGHT));
+			const bool pointLightCountersValid =
+				!pointLightStressOptions.enabled ||
+				std::all_of(
+					profilerSamples.renderStats.begin(),
+					profilerSamples.renderStats.end(),
+					[&](const RenderStats& sample) {
+						const std::uint64_t submitted =
+							sample.pointLightsSubmitted;
+						const std::uint64_t expectedPointStencilClears =
+							pointLightUsesScreen
+								? 0u
+								: properties.POINT_LIGHT_STENCIL_CLEAR_MODE ==
+									PointLightStencilClearProperty::Legacy2N
+									? submitted * 2u
+									: (submitted > 0 ? submitted + 1u : 0u);
+						const std::uint64_t expectedClearPixelArea =
+							pointLightUsesScreen
+								? 0u
+								: pointLightUsesScissor && submitted > 0
+									? pointLightViewportArea +
+										sample.pointLightRectPixelArea
+									: expectedPointStencilClears *
+										pointLightViewportArea;
+						const bool boundsValid = !pointLightUsesBounds ||
+							sample.pointLightBoundsRect +
+								sample.pointLightBoundsOutside +
+								sample.pointLightBoundsFullscreenFallback ==
+								expectedPointLights;
+						const bool cullingValid =
+							sample.pointLightsSubmitted +
+								sample.pointLightsCulled == expectedPointLights &&
+							(!properties.POINT_LIGHT_OFFSCREEN_CULLING ||
+								sample.pointLightsCulled ==
+									sample.pointLightBoundsOutside) &&
+							(properties.POINT_LIGHT_OFFSCREEN_CULLING ||
+								sample.pointLightsCulled == 0u);
+						const bool pathCountsValid = pointLightUsesGrid
+							? sample.pointLightScreenCount == submitted &&
+								sample.pointLightScreenDraws ==
+									(submitted > 0u ? 1u : 0u) &&
+								sample.pointLightVolumeCount == 0u &&
+								sample.pointLightStencilDraws == 0u &&
+								sample.pointLightLightingVolumeDraws == 0u
+							: pointLightUsesScreen
+							? sample.pointLightScreenCount == submitted &&
+								sample.pointLightScreenDraws == submitted &&
+								sample.pointLightVolumeCount == 0u &&
+								sample.pointLightStencilDraws == 0u &&
+								sample.pointLightLightingVolumeDraws == 0u
+							: sample.pointLightVolumeCount == submitted &&
+								sample.pointLightStencilDraws == submitted &&
+								sample.pointLightLightingVolumeDraws == submitted &&
+								sample.pointLightScreenCount == 0u &&
+								sample.pointLightScreenDraws == 0u;
+						return sample.pointLightsTotal == expectedPointLights &&
+							sample.pointLightsActive == expectedPointLights &&
+							boundsValid && cullingValid && pathCountsValid &&
+							sample.pointLightStencilClears ==
+								expectedPointStencilClears &&
+							sample.fixedStencilClears == 3u &&
+							sample.stencilClears ==
+								expectedPointStencilClears + 3u &&
+							sample.pointLightStencilClearPixelArea ==
+								expectedClearPixelArea;
+					});
+			const bool pointLightGridValid =
+				!pointLightStressOptions.enabled || !pointLightUsesGrid ||
+				(properties.POINT_LIGHT_GRID_TELEMETRY.valid &&
+					!properties.POINT_LIGHT_GRID_TELEMETRY.overflow &&
+					properties.POINT_LIGHT_GRID_TELEMETRY.error.empty() &&
+					properties.POINT_LIGHT_GRID_TELEMETRY.lightCount ==
+						expectedPointLights);
+			const bool pointLightSignatureValid =
+				!pointLightStressOptions.enabled ||
+				(pointLightStressState.configured &&
+					ComputePointLightStressSubmissionSignature(scene) ==
+						pointLightStressState.submissionSignature);
+			const bool pointLightLifecycleValid =
+				!pointLightStressOptions.enabled ||
+				!pointLightStressOptions.stencilLifecycleCheck ||
+				(properties.POINT_LIGHT_STENCIL_LIFECYCLE_CHECK_EXECUTED &&
+					properties.POINT_LIGHT_STENCIL_NONZERO_PIXELS == 0);
 			if (!profilerCaptureSucceeded) {
 				std::cerr
 					<< "[ClassicScene] profiler capture count mismatch: "
@@ -5376,6 +6692,52 @@ int main(int argc, char** argv) {
 					<< " upsampleGpu=" << ssaoUpsampleGpuSamples
 					<< " gpuTimingSupported="
 					<< (gpuTimingSupported ? "true" : "false")
+					<< std::endl;
+			}
+			if (!deferredZoneCaptureSucceeded) {
+				std::cerr
+					<< "[GBufferExperiment] required zone count mismatch: "
+					<< "expected=" << expectedSamples
+					<< " deferredCpu=" << deferredCpuSamples
+					<< " deferredGpu=" << deferredGpuSamples
+					<< " geometryCpu=" << geometryCpuSamples
+					<< " geometryGpu=" << geometryGpuSamples
+					<< " expectedDepthSampleCopy="
+					<< expectedDepthSampleCopySamples
+					<< " depthSampleCopyCpu="
+					<< depthSampleCopyCpuSamples
+					<< " depthSampleCopyGpu="
+					<< depthSampleCopyGpuSamples
+					<< " depthStencilCopyCpu="
+					<< depthStencilCopyCpuSamples
+					<< " depthStencilCopyGpu="
+					<< depthStencilCopyGpuSamples
+					<< " lightingCpu=" << lightingCpuSamples
+					<< " lightingGpu=" << lightingGpuSamples
+					<< " gpuTimingSupported="
+					<< (gpuTimingSupported ? "true" : "false")
+					<< std::endl;
+			}
+			if (!pointLightZoneCaptureSucceeded ||
+				!pointLightCountersValid || !pointLightSignatureValid ||
+				!pointLightLifecycleValid || !pointLightGridValid) {
+				std::cerr
+					<< "[PointLightStress] validation failed: expectedSamples="
+					<< expectedSamples
+					<< " pointCpu=" << pointLightCpuSamples
+					<< " pointGpu=" << pointLightGpuSamples
+					<< " countersValid="
+					<< (pointLightCountersValid ? "true" : "false")
+					<< " signatureValid="
+					<< (pointLightSignatureValid ? "true" : "false")
+					<< " lifecycleValid="
+					<< (pointLightLifecycleValid ? "true" : "false")
+					<< " gridValid="
+					<< (pointLightGridValid ? "true" : "false")
+					<< " gridError=\""
+					<< properties.POINT_LIGHT_GRID_TELEMETRY.error << "\""
+					<< " stencilNonZeroPixels="
+					<< properties.POINT_LIGHT_STENCIL_NONZERO_PIXELS
 					<< std::endl;
 			}
 
@@ -5424,18 +6786,77 @@ int main(int argc, char** argv) {
 			}
 			FloatCaptureStats ssaoDepthCapture;
 			if (!classicSceneOptions.ssaoDepthCapturePath.empty()) {
-				ssaoDepthCapture = CaptureFramebufferPfm(
-					gbufferFBO,
-					0,
-					classicSceneOptions.ssaoDepthCapturePath,
-					FloatCaptureSource::Alpha);
+				if (deferRenderPass->UsesPositionReconstruction()) {
+					ssaoDepthCapture = CaptureFramebufferDepthPfm(
+						gbufferFBO,
+						gbufferFBO ? gbufferFBO->framebufferID : 0,
+						classicSceneOptions.ssaoDepthCapturePath);
+				}
+				else {
+					ssaoDepthCapture = CaptureFramebufferPfm(
+						gbufferFBO,
+						deferRenderPass->GetPositionAttachmentIndex(),
+						classicSceneOptions.ssaoDepthCapturePath,
+						FloatCaptureSource::Alpha);
+				}
 			}
 			FloatCaptureStats ssaoNormalCapture;
 			if (!classicSceneOptions.ssaoNormalCapturePath.empty()) {
 				ssaoNormalCapture = CaptureFramebufferPfm(
 					gbufferFBO,
-					1,
+					deferRenderPass->GetNormalAttachmentIndex(),
 					classicSceneOptions.ssaoNormalCapturePath,
+					FloatCaptureSource::RGB);
+			}
+			GBufferCaptureStats gbufferCapture;
+			if (!classicSceneOptions.gbufferPositionCapturePath.empty()) {
+				gbufferCapture.position = CaptureFramebufferPfm(
+					gbufferFBO,
+					deferRenderPass->GetPositionAttachmentIndex(),
+					classicSceneOptions.gbufferPositionCapturePath,
+					FloatCaptureSource::RGB);
+			}
+			if (!classicSceneOptions.gbufferDepthCapturePath.empty()) {
+				const unsigned int depthReadFramebuffer =
+					gbufferFBO ? gbufferFBO->framebufferID : 0;
+				gbufferCapture.depth = CaptureFramebufferDepthPfm(
+					gbufferFBO,
+					depthReadFramebuffer,
+					classicSceneOptions.gbufferDepthCapturePath);
+			}
+			if (!classicSceneOptions.gbufferNormalCapturePath.empty()) {
+				gbufferCapture.normal = CaptureFramebufferPfm(
+					gbufferFBO,
+					deferRenderPass->GetNormalAttachmentIndex(),
+					classicSceneOptions.gbufferNormalCapturePath,
+					FloatCaptureSource::RGB);
+			}
+			if (!classicSceneOptions.gbufferAlbedoCapturePath.empty()) {
+				gbufferCapture.albedo = CaptureFramebufferPfm(
+					gbufferFBO,
+					deferRenderPass->GetAlbedoAttachmentIndex(),
+					classicSceneOptions.gbufferAlbedoCapturePath,
+					FloatCaptureSource::RGB);
+			}
+			if (!classicSceneOptions.gbufferMaterialCapturePath.empty()) {
+				gbufferCapture.material = CaptureFramebufferPfm(
+					gbufferFBO,
+					deferRenderPass->GetMaterialAttachmentIndex(),
+					classicSceneOptions.gbufferMaterialCapturePath,
+					FloatCaptureSource::RGB);
+			}
+			if (!classicSceneOptions.gbufferMaterialAlphaCapturePath.empty()) {
+				gbufferCapture.materialAlpha = CaptureFramebufferPfm(
+					gbufferFBO,
+					deferRenderPass->GetMaterialAttachmentIndex(),
+					classicSceneOptions.gbufferMaterialAlphaCapturePath,
+					FloatCaptureSource::Alpha);
+			}
+			if (!classicSceneOptions.gbufferEmissiveCapturePath.empty()) {
+				gbufferCapture.emissive = CaptureFramebufferPfm(
+					gbufferFBO,
+					deferRenderPass->GetEmissiveAttachmentIndex(),
+					classicSceneOptions.gbufferEmissiveCapturePath,
 					FloatCaptureSource::RGB);
 			}
 			for (GLenum error = glGetError();
@@ -5549,9 +6970,113 @@ int main(int argc, char** argv) {
 					fullWidth,
 					fullHeight,
 					3);
+			const bool reconstructPosition =
+				deferRenderPass->UsesPositionReconstruction();
+			const bool gbufferExpected =
+				classicSceneOptions.renderPath.find("deferred") !=
+					std::string::npos;
+			const std::array<GLint, 5> expectedExplicitFormats = {
+				GL_RGBA16F,
+				GL_RGB16F,
+				GL_RGB,
+				GL_RGBA16F,
+				GL_RGB16F
+			};
+			const std::array<GLint, 4> expectedReconstructFormats = {
+				GL_RGB16F,
+				GL_RGB,
+				GL_RGBA16F,
+				GL_RGB16F
+			};
+			bool gbufferFormatsValid = !gbufferExpected ||
+				(gbufferFBO &&
+					gbufferFBO->IsComplete() &&
+					gbufferFBO->width == fullWidth &&
+					gbufferFBO->height == fullHeight);
+			if (gbufferExpected && gbufferFormatsValid) {
+				const std::size_t expectedAttachmentCount =
+					reconstructPosition
+						? expectedReconstructFormats.size()
+						: expectedExplicitFormats.size();
+				gbufferFormatsValid =
+					gbufferFBO->attr.textureAttrs.size() ==
+						expectedAttachmentCount &&
+					gbufferFBO->textureIDs.size() ==
+						expectedAttachmentCount;
+				for (std::size_t index = 0;
+					gbufferFormatsValid && index < expectedAttachmentCount;
+					++index) {
+					const GLint expectedFormat = reconstructPosition
+						? expectedReconstructFormats[index]
+						: expectedExplicitFormats[index];
+					gbufferFormatsValid =
+						gbufferFBO->attr.textureAttrs[index].internalFormat ==
+							expectedFormat;
+				}
+			}
+			const std::uint64_t expectedGBufferBytes =
+				static_cast<std::uint64_t>(fullWidth) *
+				static_cast<std::uint64_t>(fullHeight) *
+				(reconstructPosition ? 27u : 35u);
+			const bool gbufferStorageValid =
+				!gbufferExpected ||
+				(gbufferFormatsValid &&
+					gbufferFBO->GetTrackedBytes() == expectedGBufferBytes &&
+					(reconstructPosition
+						? (deferRenderPass->GetPositionAttachmentIndex() < 0 &&
+							gbufferFBO->depthTextureID != 0 &&
+							gbufferFBO->rboID == 0)
+						: (deferRenderPass->GetPositionAttachmentIndex() == 0 &&
+							gbufferFBO->depthTextureID == 0 &&
+							gbufferFBO->rboID != 0)));
+			const bool gbufferCapturesValid =
+				validRequestedFloatCapture(
+					classicSceneOptions.gbufferPositionCapturePath,
+					gbufferCapture.position,
+					fullWidth,
+					fullHeight,
+					3) &&
+				validRequestedFloatCapture(
+					classicSceneOptions.gbufferDepthCapturePath,
+					gbufferCapture.depth,
+					fullWidth,
+					fullHeight,
+					1) &&
+				validRequestedFloatCapture(
+					classicSceneOptions.gbufferNormalCapturePath,
+					gbufferCapture.normal,
+					fullWidth,
+					fullHeight,
+					3) &&
+				validRequestedFloatCapture(
+					classicSceneOptions.gbufferAlbedoCapturePath,
+					gbufferCapture.albedo,
+					fullWidth,
+					fullHeight,
+					3) &&
+				validRequestedFloatCapture(
+					classicSceneOptions.gbufferMaterialCapturePath,
+					gbufferCapture.material,
+					fullWidth,
+					fullHeight,
+					3) &&
+				validRequestedFloatCapture(
+					classicSceneOptions.gbufferMaterialAlphaCapturePath,
+					gbufferCapture.materialAlpha,
+					fullWidth,
+					fullHeight,
+					1) &&
+				validRequestedFloatCapture(
+					classicSceneOptions.gbufferEmissiveCapturePath,
+					gbufferCapture.emissive,
+					fullWidth,
+					fullHeight,
+					3);
 			if (!ssaoOutputValid ||
 				!ssaoCaptureValid ||
 				!ssaoFloatCapturesValid ||
+				!gbufferStorageValid ||
+				!gbufferCapturesValid ||
 				!renderGlErrorFree) {
 				std::cerr
 					<< "[SSAO] output/capture validation failed: "
@@ -5574,6 +7099,10 @@ int main(int argc, char** argv) {
 					<< (ssaoCapture.valid ? "true" : "false")
 					<< " floatCapturesValid="
 					<< (ssaoFloatCapturesValid ? "true" : "false")
+					<< " gbufferStorageValid="
+					<< (gbufferStorageValid ? "true" : "false")
+					<< " gbufferCapturesValid="
+					<< (gbufferCapturesValid ? "true" : "false")
 					<< " glErrorFree="
 					<< (renderGlErrorFree ? "true" : "false")
 					<< std::endl;
@@ -5597,16 +7126,33 @@ int main(int argc, char** argv) {
 				classicSceneOptions.ssaoTemporalCaptureDirectory.empty() ||
 				(classicSceneTemporalCaptureSucceeded &&
 					classicSceneTemporalCapturesCompleted ==
-						classicSceneOptions
+					classicSceneOptions
 							.ssaoTemporalCaptureFrameCount);
+			// Local-radius factorial cases can be intentionally dim even with
+			// nonzero lights. For point-light benchmarks, successful framebuffer
+			// readback plus the profiler/GL/signature checks below is the validity
+			// contract; the generic luminance heuristic is not a correctness test.
+			const bool pointLightCapturePresenceSufficient =
+				pointLightStressOptions.enabled &&
+				classicSceneOptions.captureFinalFrame &&
+				!capture.pixels.empty();
 			const bool captureSucceeded =
 				(!classicSceneOptions.captureFinalFrame ||
-					capture.valid) &&
+					capture.valid ||
+					pointLightCapturePresenceSufficient) &&
 				profilerCaptureSucceeded &&
+				deferredZoneCaptureSucceeded &&
+				pointLightZoneCaptureSucceeded &&
+				pointLightCountersValid &&
+				pointLightSignatureValid &&
+				pointLightLifecycleValid &&
+				pointLightGridValid &&
 				ssaoZoneCaptureSucceeded &&
 				ssaoOutputValid &&
 				ssaoCaptureValid &&
 				ssaoFloatCapturesValid &&
+				gbufferStorageValid &&
+				gbufferCapturesValid &&
 				renderGlErrorFree &&
 				timelineCaptureSucceeded &&
 				temporalCaptureSucceeded &&
@@ -5650,6 +7196,8 @@ int main(int argc, char** argv) {
 			}
 			if (!WriteClassicSceneResult(
 				classicSceneOptions,
+				pointLightStressOptions,
+				pointLightStressState,
 				scene,
 				captureSucceeded,
 				classicSceneLoadMilliseconds,
@@ -5666,6 +7214,8 @@ int main(int argc, char** argv) {
 				ssaoRawFloatCapture,
 				ssaoDepthCapture,
 				ssaoNormalCapture,
+				gbufferCapture,
+				gbufferFBO,
 				ssaoFBO,
 				ssaoGenerationFBO,
 				pointShadowCubeEvidence,
@@ -5760,6 +7310,30 @@ int main(int argc, char** argv) {
 	skybox.Release();
 	DestroyTextureCache();
 	FramebuffersManager::GetInstance().Shutdown();
+	if (resourceSmokeTest) {
+		const auto& memory = PerformanceProfiler::GetInstance().GetMemoryStats();
+		auto currentBytes = [&](MemoryResourceType type) {
+			return memory.categories[static_cast<size_t>(type)].currentBytes;
+		};
+		const std::uint64_t textureBytes =
+			currentBytes(MemoryResourceType::Texture);
+		const std::uint64_t meshCpuBytes =
+			currentBytes(MemoryResourceType::MeshCpu);
+		const std::uint64_t meshGpuBytes =
+			currentBytes(MemoryResourceType::MeshGpu);
+		const std::uint64_t renderTargetBytes =
+			currentBytes(MemoryResourceType::RenderTarget);
+		std::cout << "[ResourceSmoke] released textureBytes=" << textureBytes
+			<< " meshCpuBytes=" << meshCpuBytes
+			<< " meshGpuBytes=" << meshGpuBytes
+			<< " renderTargetBytes=" << renderTargetBytes << std::endl;
+		if (textureBytes != 0 ||
+			meshCpuBytes != 0 ||
+			meshGpuBytes != 0 ||
+			renderTargetBytes != 0) {
+			resourceSmokeFailed = true;
+		}
+	}
 	if (pbrSmokeTest) {
 		const auto& memory = PerformanceProfiler::GetInstance().GetMemoryStats();
 		auto currentBytes = [&](MemoryResourceType type) {

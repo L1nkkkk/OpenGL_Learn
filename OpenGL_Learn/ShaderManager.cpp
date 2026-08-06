@@ -55,11 +55,24 @@ void ShaderManager::Init() {
 void ShaderManager::LoadShader(std::string name) {
 	auto it = m_shaderMap.find(name);
 	if (it == m_shaderMap.end()) {
-		m_shaderMap[name] = std::make_shared<Shader>(name);
+		if (name == "deferProcessReconstruct") {
+			m_shaderMap[name] = std::make_shared<Shader>(
+				"shaders/deferProcessVertex.glsl",
+				"shaders/deferProcessReconstructFragment.glsl");
+		}
+		else {
+			m_shaderMap[name] = std::make_shared<Shader>(name);
+		}
 	}
 	else {
 		it->second->shaderName = name;
-		it->second->SetSourcePaths("shaders/" + name + "Vertex.glsl", "shaders/" + name + "Fragment.glsl");
+		const std::string vertexName =
+			name == "deferProcessReconstruct"
+				? "deferProcess"
+				: name;
+		it->second->SetSourcePaths(
+			"shaders/" + vertexName + "Vertex.glsl",
+			"shaders/" + name + "Fragment.glsl");
 		it->second->Reload(true);
 	}
 	m_shaderMap[name]->shaderName = name;

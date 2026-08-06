@@ -344,6 +344,18 @@ public:
 
 	//old api
 	void DrawPointLights();
+	void SetDrawPointLightMarkers(bool enabled) {
+		m_drawPointLightMarkers = enabled;
+	}
+	bool GetDrawPointLightMarkers() const {
+		return m_drawPointLightMarkers;
+	}
+	void SetPointLightRenderDocMarkers(bool enabled) {
+		m_pointLightRenderDocMarkers = enabled;
+	}
+	bool GetPointLightRenderDocMarkers() const {
+		return m_pointLightRenderDocMarkers;
+	}
 	void DrawOpaqueModels();
 	void DrawTransparentModels();
 	void Draw();
@@ -516,6 +528,8 @@ private:
 	std::vector<MeshDrawItem> m_collectionProbeTransparentItems;
 	OpaqueSortMode m_opaqueSortMode = OpaqueSortMode::KeyIndex;
 	ImageBasedLighting* m_imageBasedLighting = nullptr;
+	bool m_drawPointLightMarkers = true;
+	bool m_pointLightRenderDocMarkers = false;
 	bool m_shadowCacheValid = false;
 	std::size_t m_shadowCacheSignature = 0;
 	bool m_shadowCacheStrategyInitialized = false;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <glad/glad.h>
+#include <array>
 
 namespace GLState {
 	void Initialize();
@@ -28,6 +29,8 @@ namespace GLState {
 	void StencilOp(GLenum stencilFail, GLenum depthFail, GLenum depthPass);
 	void StencilOpSeparate(GLenum face, GLenum stencilFail, GLenum depthFail, GLenum depthPass);
 	void ColorMask(bool red, bool green, bool blue, bool alpha);
+	void Scissor(GLint x, GLint y, GLsizei width, GLsizei height);
+	std::array<GLint, 4> GetScissorBox();
 
 	void ActiveTexture(GLenum textureUnit);
 	unsigned int GetMaxFragmentTextureUnits();

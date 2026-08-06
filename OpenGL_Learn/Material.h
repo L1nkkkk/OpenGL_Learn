@@ -381,7 +381,10 @@ public:
 			GLState::CullFace(GL_BACK); // keep default culling behavior
 		}
 
-		SetMaterialParamsToShader(*overrideShader, overrideShader->shaderName == "deferProcess");
+		const bool deferredGeometryShader =
+			overrideShader->shaderName == "deferProcess" ||
+			overrideShader->shaderName == "deferProcessReconstruct";
+		SetMaterialParamsToShader(*overrideShader, deferredGeometryShader);
 	}
 
 	// ��ȡ���ʶ�Ӧ��Shader����

@@ -4,11 +4,15 @@ layout (location = 1) out vec4 BrightColor;
 in vec2 TexCoords;
 
 uniform sampler2D gPosition;
+uniform sampler2D gDepth;
 uniform sampler2D gNormal;
 uniform sampler2D gAlbedoSpec;
 uniform sampler2D gMaterial;
 uniform sampler2D ssaoMap;
 uniform bool useSSAO;
+uniform bool reconstructPosition;
+uniform mat4 inverseProjection;
+uniform mat4 inverseView;
 
 vec3 albedoSpec;
 vec4 material;
@@ -50,6 +54,7 @@ layout(std140) uniform SystemProperties {
 };
 
 #include "shadowSampling.glsl"
+#include "positionReconstruction.glsl"
 
 const int MAX_DIR_LIGHTS = 16;
 
@@ -93,11 +98,16 @@ vec3 CalcDirLight(
 
 void main()
 {
+	vec3 fragPos;
+	if (!LoadWorldPosition(TexCoords, fragPos)) {
+		FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+		BrightColor = vec4(0.0, 0.0, 0.0, 1.0);
+		return;
+	}
 	albedoSpec = texture(gAlbedoSpec, TexCoords).rgb;
 	material = texture(gMaterial, TexCoords);
 	gAO = useSSAO ? texture(ssaoMap, TexCoords).r : 1.0;
 	vec3 normal = normalize(texture(gNormal, TexCoords).rgb);
-	vec3 fragPos = texture(gPosition, TexCoords).rgb;
 	vec3 viewDir = normalize(viewPos - fragPos);
 	vec3 result = vec3(0.0);
 

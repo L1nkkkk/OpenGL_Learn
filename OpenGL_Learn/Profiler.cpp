@@ -408,6 +408,63 @@ void PerformanceProfiler::RecordDraw(unsigned int primitiveMode, std::uint64_t v
 	m_currentRenderStats.submittedTriangles += CountTriangles(primitiveMode, vertexCount) * instanceCount;
 }
 
+void PerformanceProfiler::SetDeferredPointLightStats(
+	std::uint64_t total,
+	std::uint64_t active,
+	std::uint64_t submitted,
+	std::uint64_t culled)
+{
+	if (!IsCollecting()) return;
+	m_currentRenderStats.pointLightsTotal = total;
+	m_currentRenderStats.pointLightsActive = active;
+	m_currentRenderStats.pointLightsSubmitted = submitted;
+	m_currentRenderStats.pointLightsCulled = culled;
+}
+
+void PerformanceProfiler::SetDeferredPointLightPathStats(
+	std::uint64_t boundsRect,
+	std::uint64_t boundsOutside,
+	std::uint64_t boundsFullscreenFallback,
+	std::uint64_t fallbackCameraInside,
+	std::uint64_t fallbackNearPlane,
+	std::uint64_t fallbackInvalid,
+	std::uint64_t volumeCount,
+	std::uint64_t screenCount,
+	std::uint64_t stencilDraws,
+	std::uint64_t lightingVolumeDraws,
+	std::uint64_t screenDraws,
+	std::uint64_t rectPixelArea,
+	std::uint64_t stencilClearPixelArea)
+{
+	if (!IsCollecting()) return;
+	auto& stats = m_currentRenderStats;
+	stats.pointLightBoundsRect = boundsRect;
+	stats.pointLightBoundsOutside = boundsOutside;
+	stats.pointLightBoundsFullscreenFallback = boundsFullscreenFallback;
+	stats.pointLightFallbackCameraInside = fallbackCameraInside;
+	stats.pointLightFallbackNearPlane = fallbackNearPlane;
+	stats.pointLightFallbackInvalid = fallbackInvalid;
+	stats.pointLightVolumeCount = volumeCount;
+	stats.pointLightScreenCount = screenCount;
+	stats.pointLightStencilDraws = stencilDraws;
+	stats.pointLightLightingVolumeDraws = lightingVolumeDraws;
+	stats.pointLightScreenDraws = screenDraws;
+	stats.pointLightRectPixelArea = rectPixelArea;
+	stats.pointLightStencilClearPixelArea = stencilClearPixelArea;
+}
+
+void PerformanceProfiler::RecordStencilClear(bool pointLightPhase)
+{
+	if (!IsCollecting()) return;
+	++m_currentRenderStats.stencilClears;
+	if (pointLightPhase) {
+		++m_currentRenderStats.pointLightStencilClears;
+	}
+	else {
+		++m_currentRenderStats.fixedStencilClears;
+	}
+}
+
 void PerformanceProfiler::RecordShaderBind()
 {
 	if (IsCollecting()) {

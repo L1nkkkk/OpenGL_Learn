@@ -621,7 +621,9 @@ void Mesh::Draw(Shader* shader, bool forcePbrMaterial)
 
 	// XML materials are refreshed once while preparing the scene render data.
 	auto materialGaurd = MaterialGaurd(*material_ptr, shader);
-	if (forcePbrMaterial && shader && shader->shaderName == "deferProcess") {
+	if (forcePbrMaterial && shader &&
+		(shader->shaderName == "deferProcess" ||
+			shader->shaderName == "deferProcessReconstruct")) {
 		shader->setBool("material.usePBR", true);
 	}
 	GLState::ActiveTexture(GL_TEXTURE0);

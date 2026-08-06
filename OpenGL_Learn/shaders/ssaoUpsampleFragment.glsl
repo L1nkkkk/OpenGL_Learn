@@ -6,7 +6,10 @@ in vec2 TexCoords;
 
 uniform sampler2D halfAO;
 uniform sampler2D gPosition;
+uniform sampler2D gDepth;
 uniform sampler2D gNormal;
+uniform bool reconstructPosition;
+uniform mat4 inverseProjection;
 
 // Standard deviation for the relative linear-depth difference:
 // abs(sampleDepth - centerDepth) / centerDepth.
@@ -18,17 +21,58 @@ vec3 SafeNormalize(vec3 value)
 	return value * inversesqrt(max(dot(value, value), 1e-12));
 }
 
+float LoadViewDepth(vec2 uv)
+{
+	if (!reconstructPosition) {
+		return texture(gPosition, uv).a;
+	}
+
+	// Match the control's GL_LINEAR gPosition.a guide. Device depth is
+	// nonlinear, so reconstruct each texel's view depth before interpolation.
+	ivec2 size = textureSize(gDepth, 0);
+	vec2 texelPosition = uv * vec2(size) - vec2(0.5);
+	ivec2 base = ivec2(floor(texelPosition));
+	vec2 blend = fract(texelPosition);
+	float reconstructed[4];
+	for (int index = 0; index < 4; ++index) {
+		ivec2 offset = ivec2(index & 1, index >> 1);
+		ivec2 coordinate = clamp(base + offset, ivec2(0), size - ivec2(1));
+		float deviceDepth = texelFetch(gDepth, coordinate, 0).r;
+		if (deviceDepth >= 1.0) {
+			reconstructed[index] = 0.0;
+			continue;
+		}
+		vec2 texelUv = (vec2(coordinate) + vec2(0.5)) / vec2(size);
+		vec4 clip = vec4(
+			texelUv * 2.0 - 1.0,
+			deviceDepth * 2.0 - 1.0,
+			1.0);
+		vec4 positionVS = inverseProjection * clip;
+		reconstructed[index] = -(positionVS.z / positionVS.w);
+	}
+	return mix(
+		mix(reconstructed[0], reconstructed[1], blend.x),
+		mix(reconstructed[2], reconstructed[3], blend.x),
+		blend.y);
+}
+
 void main()
 {
-	ivec2 fullSize = textureSize(gPosition, 0);
+	ivec2 fullSize = reconstructPosition
+		? textureSize(gDepth, 0)
+		: textureSize(gPosition, 0);
 	ivec2 halfSize = textureSize(halfAO, 0);
 	ivec2 fullCoord = clamp(
 		ivec2(gl_FragCoord.xy),
 		ivec2(0),
 		fullSize - ivec2(1));
 
-	vec4 centerPosition = texelFetch(gPosition, fullCoord, 0);
-	if (centerPosition.a <= 0.0) {
+	vec2 centerUV =
+		(vec2(fullCoord) + vec2(0.5)) / vec2(fullSize);
+	float centerDepth = reconstructPosition
+		? LoadViewDepth(centerUV)
+		: texelFetch(gPosition, fullCoord, 0).a;
+	if (centerDepth <= 0.0) {
 		FragColor = 1.0;
 		return;
 	}
@@ -57,9 +101,9 @@ void main()
 			vec2 guideUV =
 				(vec2(halfCoord) + vec2(0.5)) / vec2(halfSize);
 
-			vec4 samplePosition = texture(gPosition, guideUV);
+			float sampleDepth = LoadViewDepth(guideUV);
 			vec3 sampleNormalRaw = texture(gNormal, guideUV).xyz;
-			if (samplePosition.a <= 0.0 ||
+			if (sampleDepth <= 0.0 ||
 				dot(sampleNormalRaw, sampleNormalRaw) <= 1e-12) {
 				continue;
 			}
@@ -69,8 +113,8 @@ void main()
 			float spatialWeight = xWeight * yWeight;
 
 			float relativeDepthDelta =
-				abs(samplePosition.a - centerPosition.a) /
-				max(abs(centerPosition.a), 1e-4);
+				abs(sampleDepth - centerDepth) /
+				max(abs(centerDepth), 1e-4);
 			float normalizedDepthDelta = relativeDepthDelta / sigma;
 			float depthWeight = exp(
 				-0.5 * normalizedDepthDelta * normalizedDepthDelta);

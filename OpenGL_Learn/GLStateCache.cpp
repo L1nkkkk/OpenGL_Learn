@@ -27,6 +27,7 @@ namespace {
 		CachedValue<bool> stencilTest;
 		CachedValue<bool> blend;
 		CachedValue<bool> cullFace;
+		CachedValue<bool> scissorTest;
 		CachedValue<bool> depthWrite;
 		CachedValue<GLenum> depthFunction;
 		CachedValue<std::array<GLenum, 2>> blendFunction;
@@ -36,6 +37,7 @@ namespace {
 		CachedValue<std::array<GLenum, 3>> stencilOperationFront;
 		CachedValue<std::array<GLenum, 3>> stencilOperationBack;
 		CachedValue<std::array<GLboolean, 4>> colorWriteMask;
+		CachedValue<std::array<GLint, 4>> scissorBox;
 
 		CachedValue<unsigned int> activeTextureUnit;
 		unsigned int maxFragmentTextureUnits = 1;
@@ -83,6 +85,8 @@ namespace {
 			return &cache.blend;
 		case GL_CULL_FACE:
 			return &cache.cullFace;
+		case GL_SCISSOR_TEST:
+			return &cache.scissorTest;
 		default:
 			return nullptr;
 		}
@@ -200,6 +204,7 @@ void GLState::InvalidateRenderState()
 	cache.stencilTest.valid = false;
 	cache.blend.valid = false;
 	cache.cullFace.valid = false;
+	cache.scissorTest.valid = false;
 	cache.depthWrite.valid = false;
 	cache.depthFunction.valid = false;
 	cache.blendFunction.valid = false;
@@ -209,6 +214,7 @@ void GLState::InvalidateRenderState()
 	cache.stencilOperationFront.valid = false;
 	cache.stencilOperationBack.valid = false;
 	cache.colorWriteMask.valid = false;
+	cache.scissorBox.valid = false;
 }
 
 void GLState::InvalidateTextureState()
@@ -472,6 +478,39 @@ void GLState::ColorMask(bool red, bool green, bool blue, bool alpha)
 	cached.value = value;
 	cached.valid = true;
 	RecordRenderState(false);
+}
+
+void GLState::Scissor(GLint x, GLint y, GLsizei width, GLsizei height)
+{
+	EnsureInitialized();
+	auto& cached = Cache().scissorBox;
+	const std::array<GLint, 4> value = {
+		x,
+		y,
+		static_cast<GLint>(width),
+		static_cast<GLint>(height)
+	};
+	if (cached.valid && cached.value == value) {
+		RecordRenderState(true);
+		return;
+	}
+
+	glScissor(x, y, width, height);
+	cached.value = value;
+	cached.valid = true;
+	RecordRenderState(false);
+}
+
+std::array<GLint, 4> GLState::GetScissorBox()
+{
+	EnsureInitialized();
+	auto& cached = Cache().scissorBox;
+	if (!cached.valid) {
+		glGetIntegerv(GL_SCISSOR_BOX, cached.value.data());
+		cached.valid = true;
+		PerformanceProfiler::GetInstance().RecordRenderStateQuery();
+	}
+	return cached.value;
 }
 
 void GLState::ActiveTexture(GLenum textureUnit)
